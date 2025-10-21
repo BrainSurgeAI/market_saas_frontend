@@ -1,0 +1,8 @@
+- name: NODE_ENV
+              value: development
+            - name: DEBUG
+              value: '*'
+            - name: NEXT_TELEMETRY_DISABLED
+              value: '1'
+            - name: NEXT_SHARP_PATH
+              value: /app/node_modules/sharp

@@ -1,0 +1,12 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+
+# Your rule content
+- 这个是前端项目,使用Next.js和Typescript开发,后端数据通过api请求获取
+- 要求代码结构组织清晰容易修改，并且要用你知道的最佳实践去实现，要充分利用组件复用
+- UI尽量使用shadcn的UI组件开发
+- 如要定义的类型请在type.ts中定义
+- 组件命名请按React惯用命名方式
