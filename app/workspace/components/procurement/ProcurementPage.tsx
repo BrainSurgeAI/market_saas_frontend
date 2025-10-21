@@ -26,6 +26,7 @@ import { SearchBar } from "./SearchBar";
 import { ProductDetailSheet } from "./ProductDetail";
 import { QuantityDialog } from "@/lib/components/QuantityDialog";
 import { Organization, User } from "@/app/models";
+import { log } from "console";
 
 interface ProcurementPageProps {
 	user: User;
