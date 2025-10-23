@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 			endpoint: finalEndpoint,
 			method: 'GET',
 			tags: ['permissions'],
-			revalidate: 60 * 10 // 10分钟缓存
+			revalidate: 0
 		});
 
 		if (!response.success) {
@@ -30,6 +30,33 @@ export async function GET(request: NextRequest) {
 		return NextResponse.json(response.data);
 	} catch (error) {
 		logger.error('获取权限列表出错:', error);
+		return NextResponse.json(
+			{ message: '服务器内部错误' },
+			{ status: 500 }
+		);
+	}
+}
+
+export async function POST(request: NextRequest) {
+	try {
+		const body = await request.json();
+
+		const response = await fetchRemoteData({
+			endpoint: '/permissions',
+			method: 'POST',
+			body: body,  // 不要在这里序列化，fetchRemoteData会处理
+		});
+
+		if (!response.success) {
+			return NextResponse.json(
+				{ message: response.error },
+				{ status: response.status }
+			);
+		}
+
+		return NextResponse.json(response.data);
+	} catch (error) {
+		logger.error('创建权限出错:', error);
 		return NextResponse.json(
 			{ message: '服务器内部错误' },
 			{ status: 500 }

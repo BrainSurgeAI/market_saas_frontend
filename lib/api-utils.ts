@@ -166,11 +166,11 @@ export async function getAnnouncementPrices(category?: number, date?: string): P
 			needToken: false
 		});
 
-		const data = response.data;
-		if (!response.success) {
-			throw new Error(response.error);
-		}
 
+		if (!response.success) {
+			throw new Error("Failed to fetch price announcements");
+		}
+		const data = response.data;
 		return data.data;
 	} catch (error) {
 		logger.error(`Fetch price announcements error: ${error instanceof Error ? error.message : 'Internal error'}`);
@@ -290,18 +290,26 @@ export async function fetchRemoteData<T>({
 			options.body = JSON.stringify(body);
 		}
 
+		logger.info(`Making ${method} request to: ${url} with body: ${body ? JSON.stringify(body) : 'no body'}`);
 		const response = await fetch(url, options);
-		const result = await response.json();
 		if (!response.ok) {
-			logger.warn(`Request failed: ${method} ${url} ${JSON.stringify(result)}`);
+			let errorText = 'Unknown error';
+			try {
+				errorText = await response.text();
+			} catch (e) {
+				// 如果无法读取错误响应，使用状态文本
+				errorText = response.statusText;
+			}
+			logger.error(`Request failed: ${method} ${url} - Status: ${response.status} - Error: ${errorText}`);
 			return {
 				success: false,
 				status: response.status,
 				data: null,
-				error: result.message
+				error: `${response.statusText}: ${errorText}`
 			};
 		}
 
+		const result = await response.json();
 		return {
 			success: true,
 			status: response.status,

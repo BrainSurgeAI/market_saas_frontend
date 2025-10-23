@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import dayjs from 'dayjs';
 import { useWorkspace } from "@/lib/WorkspaceContext";
 
 export default function ProfileCard() {

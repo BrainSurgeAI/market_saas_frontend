@@ -349,6 +349,7 @@ export const getNavData = (organization: Organization, roles: string[]) => {
     
 
     navData.navMain.forEach((menuItem: MenuItem) => {
+        console.log('Processing menu item:', organization.nameHash, menuItem.url);
         menuItem.url = menuItem.url.replace(':org_name', organization.nameHash);
 
         if (menuItem.items) {

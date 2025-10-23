@@ -16,6 +16,7 @@ export function CreditInfoCard({ organizationNameHash }: CreditInfoCardProps) {
     const isAdmin = true;
 
     const fetchCreditInfo = async () => {
+        console.log('Fetching credit info for organization:', organizationNameHash);
         if (!organizationNameHash) return;
         
         const token = localStorage.getItem('token');

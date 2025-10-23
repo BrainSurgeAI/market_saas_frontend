@@ -8,7 +8,6 @@ import { NextResponse } from 'next/server';
 
 export async function GET(_: Request) {
     try {
-
         const cookieStore = await cookies();
         const token = cookieStore.get('auth-token')?.value;
         if (!token) {
@@ -19,7 +18,7 @@ export async function GET(_: Request) {
         const decoded = jwtDecode<TokenPayload>(token);
         const username = decoded.username;
 
-        const backendUrl = `${process.env.BACKEND_API_URL}/api/v1/users/${username}/notifications`;
+        const backendUrl = `${process.env.BACKEND_API_URL}/api/v1/notifications`;
         const response = await fetch(backendUrl, {
             method: 'GET',
             headers: {

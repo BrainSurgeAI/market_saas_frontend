@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -34,9 +34,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Permission } from "@/app/types/permissionTypes";
 
 // 表单验证模式
-const permissionFormSchema = z.object({
+const editPermissionFormSchema = z.object({
   name: z.string()
     .min(3, "权限标识符至少需要3个字符")
     .max(50, "权限标识符不能超过50个字符")
@@ -58,21 +59,23 @@ const permissionFormSchema = z.object({
   selfOnly: z.boolean().default(false)
 });
 
-type PermissionFormValues = z.infer<typeof permissionFormSchema>;
+type EditPermissionFormValues = z.infer<typeof editPermissionFormSchema>;
 
-interface AddPermissionDialogProps {
+interface EditPermissionDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
   token: string;
+  permission: Permission | null;
 }
 
-export function AddPermissionDialog({
+export function EditPermissionDialog({
   isOpen,
   onClose,
   onSuccess,
-  token
-}: AddPermissionDialogProps) {
+  token,
+  permission
+}: EditPermissionDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle");
@@ -87,25 +90,38 @@ export function AddPermissionDialog({
     { value: "PATCH", label: "PATCH" },
   ];
 
-  // 表单默认值
-  const defaultValues: Partial<PermissionFormValues> = {
-    name: "",
-    cname: "",
-    description: "",
-    pathPattern: "",
-    httpMethod: "",
-    selfOnly: false
-  };
-
   // 初始化表单
-  const form = useForm<PermissionFormValues>({
-    resolver: zodResolver(permissionFormSchema),
-    defaultValues,
+  const form = useForm<EditPermissionFormValues>({
+    resolver: zodResolver(editPermissionFormSchema),
+    defaultValues: {
+      name: "",
+      cname: "",
+      description: "",
+      pathPattern: "",
+      httpMethod: "",
+      selfOnly: false
+    },
   });
+
+  // 当权限数据改变时，更新表单值
+  useEffect(() => {
+    if (permission) {
+      form.reset({
+        name: permission.name,
+        cname: permission.cname || "",
+        description: permission.description || "",
+        pathPattern: permission.pathPattern || "",
+        httpMethod: permission.httpMethod || "",
+        selfOnly: permission.selfOnly === 1
+      });
+    }
+  }, [permission, form]);
 
   
   // 表单提交处理
-  const onSubmit = async (data: PermissionFormValues) => {
+  const onSubmit = async (data: EditPermissionFormValues) => {
+    if (!permission) return;
+
     setIsSubmitting(true);
     setSubmitStatus("idle");
     setErrorMessage("");
@@ -121,8 +137,8 @@ export function AddPermissionDialog({
         self_only: data.selfOnly ? 1 : 0  // 将布尔值转换为数字
       };
 
-      const response = await fetch(`/api/admin/permissions`, {
-        method: "POST",
+      const response = await fetch(`/api/admin/permissions/${permission.id}`, {
+        method: "PUT",
         headers: {
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -138,18 +154,27 @@ export function AddPermissionDialog({
           onClose();
           if (onSuccess) onSuccess();
           toast({
-            title: "创建成功",
-            description: `权限 ${data.cname} 已成功创建`,
+            title: "修改成功",
+            description: `权限 ${data.cname} 已成功更新`,
           });
         }, 1500);
       } else {
         setSubmitStatus("error");
-        setErrorMessage(result.message || "创建权限失败");
+        const errorMessage = result.message || "修改权限失败";
+        const errorDetails = result.details ? `\n详细信息: ${JSON.stringify(result.details)}` : "";
+        setErrorMessage(errorMessage + errorDetails);
+
+        // 显示更详细的错误提示
+        toast({
+          variant: "destructive",
+          title: "修改失败",
+          description: errorMessage,
+        });
       }
     } catch (error) {
       setSubmitStatus("error");
       setErrorMessage("发生网络错误，请稍后再试");
-      console.error("创建权限出错:", error);
+      console.error("修改权限出错:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -159,20 +184,20 @@ export function AddPermissionDialog({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>添加新权限</DialogTitle>
+          <DialogTitle>编辑权限</DialogTitle>
           <DialogDescription>
-            创建一个新的系统权限。权限创建后可分配给角色使用。
+            修改权限配置信息。保存后将在所有相关角色中生效。
           </DialogDescription>
         </DialogHeader>
-        
+
         {submitStatus === "success" ? (
           <div className="flex flex-col items-center justify-center py-6 space-y-4">
             <div className="rounded-full bg-green-100 p-3">
               <CheckCircle className="h-6 w-6 text-green-600" />
             </div>
-            <h3 className="text-lg font-medium text-center">权限创建成功！</h3>
+            <h3 className="text-lg font-medium text-center">权限修改成功！</h3>
             <p className="text-sm text-gray-500 text-center">
-              新权限已成功添加到系统，可以在角色权限配置中使用。
+              权限配置已成功更新，相关角色权限也会同步更新。
             </p>
           </div>
         ) : (
@@ -181,9 +206,9 @@ export function AddPermissionDialog({
               {submitStatus === "error" && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>创建失败</AlertTitle>
+                  <AlertTitle>修改失败</AlertTitle>
                   <AlertDescription>
-                    {errorMessage || "创建权限时发生错误，请检查输入并重试。"}
+                    {errorMessage || "修改权限时发生错误，请检查输入并重试。"}
                   </AlertDescription>
                 </Alert>
               )}
@@ -320,7 +345,7 @@ export function AddPermissionDialog({
                       保存中...
                     </>
                   ) : (
-                    "创建权限"
+                    "保存修改"
                   )}
                 </Button>
               </DialogFooter>
@@ -330,4 +355,4 @@ export function AddPermissionDialog({
       </DialogContent>
     </Dialog>
   );
-} 
+}

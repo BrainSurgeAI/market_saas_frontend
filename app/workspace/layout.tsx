@@ -21,28 +21,27 @@ export async function getWorkspaceData() {
       
         const token = await getToken();
         const decoded = jwtDecode<TokenPayload>(token);
-        const username = decoded.username;
-
+        
         const [userResponse, orgResponse] = await Promise.all([
-            fetchRemoteData({endpoint: `/users/${username}`}),
-            fetchRemoteData({endpoint: `/users/${username}/tenants`}),
+            fetchRemoteData({endpoint: `/users/me`}),
+            fetchRemoteData({endpoint: `/tenants/me`}),
         ]);
 
         if (!userResponse.success) {
             logger.error(`Failed to fetch user data: ${userResponse.status} - ${userResponse.error}`);
-            redirect('/login');
+           redirect('/login');
         }
-
+       
         if (!orgResponse.success) {
             logger.error(`Failed to fetch organization data: ${orgResponse.status} - ${orgResponse.error}`);
             redirect('/login');
         }
-
+        
         const [userData, orgData] = await Promise.all([
             userResponse.data,
             orgResponse.data
         ]);
-        
+
         return { 
             user: userData.data, 
             organization: orgData.data, 

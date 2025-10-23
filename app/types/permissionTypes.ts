@@ -4,17 +4,17 @@ import { ApiResponse } from './roleTypes';
 export interface Permission {
   id: number;
   name: string;        // 权限标识符，如 CREATE_USER
-  cname: string;   // 权限显示名称，如"创建用户"
-  description: string; // 权限描述
-  resource?: string;    // 资源类型，如 USER, ROLE, ORDER等
-  action?: string;      // 操作类型，如 CREATE, READ, UPDATE, DELETE
-  module?: string;      // 所属模块
+  cname: string | null;   // 权限显示名称，如"创建用户"
+  description: string | null; // 权限描述
+  httpMethod?: string; // 关联的HTTP方法，如 GET, POST, PUT, DELETE
+  pathPattern?: string;   // 关联的HTTP路径，如 /api/users
+  selfOnly?: number;   // 是否仅限自己：1表示是，0表示否
 }
 
 // 权限组/分类
 export interface PermissionGroup {
-  module: string;     // 模块名称
-  permissions: Permission[]; // 该模块下的权限列表
+  category: string;     // 分类名称（如HTTP方法）
+  permissions: Permission[]; // 该分类下的权限列表
 }
 
 // 角色-权限关联
@@ -31,9 +31,9 @@ export interface PermissionPagination {
   pageSize: number;
 }
 
-// 返回的权限列表（按模块分组）
+// 返回的权限列表（按分类分组）
 export interface GroupedPermissions {
-  [module: string]: Permission[];
+  [category: string]: Permission[];
 }
 
 // API响应类型

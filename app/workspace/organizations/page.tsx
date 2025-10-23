@@ -14,6 +14,7 @@ export default function OrganizationPage() {
     const [isEditMode, setIsEditMode] = useState(false);
 
     const renderContent = () => {
+        console.log('Rendering content for organization:', org?.nameHash);
         return (
             <div>
                 <OrganizationCard
