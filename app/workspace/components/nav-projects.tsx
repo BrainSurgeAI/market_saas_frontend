@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import {
   Folder,
   Forward,
@@ -7,6 +8,7 @@ import {
   Trash2,
   type LucideIcon,
 } from "lucide-react"
+import { getIcon } from "@/lib/iconMap"
 
 import {
   DropdownMenu,
@@ -31,10 +33,20 @@ export function NavProjects({
   projects: {
     name: string
     url: string
-    icon: LucideIcon
+    icon: LucideIcon | { name: string }
   }[]
 }) {
   const { isMobile } = useSidebar()
+
+  // 处理图标：如果是图标名称则转换为组件，否则直接使用
+  const getItemIcon = (item: typeof projects[0]) => {
+    if (typeof item.icon === 'function') {
+      return item.icon
+    } else if (item.icon && typeof item.icon === 'object' && item.icon.name) {
+      return getIcon(item.icon.name)
+    }
+    return getIcon('Folder') // 默认图标
+  }
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
@@ -44,7 +56,7 @@ export function NavProjects({
           <SidebarMenuItem key={item.name}>
             <SidebarMenuButton asChild>
               <a href={item.url}>
-                <item.icon />
+                {React.createElement(getItemIcon(item))}
                 <span>{item.name}</span>
               </a>
             </SidebarMenuButton>

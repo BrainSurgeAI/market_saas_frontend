@@ -9,6 +9,7 @@ import {
 import { redirect } from "next/navigation";
 import { jwtDecode } from "jwt-decode";
 import { WorkspaceProvider } from "@/lib/WorkspaceContext";
+import { UserMenuProvider } from "@/lib/UserMenuContext";
 import { logger } from "@/lib/logger";
 import { TokenPayload } from "../models";
 import { DynamicBreadcrumb } from "./components/DynamicBreadcrumb";
@@ -62,21 +63,23 @@ export default async function Page({ children }: { children: React.ReactNode }) 
     
     return (
         <WorkspaceProvider initialData={{ organization: organization, user: user }}>
-            <SidebarProvider>
-                <AppSidebar userRole={roles} />
-                <SidebarInset>
-                    <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
-                        <div className="flex items-center gap-2 px-4">
-                            <SidebarTrigger className="-ml-1" />
-                            <Separator orientation="vertical" className="mr-2 h-4" />
-                            <DynamicBreadcrumb />
+            <UserMenuProvider>
+                <SidebarProvider>
+                    <AppSidebar userRole={roles} />
+                    <SidebarInset>
+                        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
+                            <div className="flex items-center gap-2 px-4">
+                                <SidebarTrigger className="-ml-1" />
+                                <Separator orientation="vertical" className="mr-2 h-4" />
+                                <DynamicBreadcrumb />
+                            </div>
+                        </header>
+                        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+                            {children}
                         </div>
-                    </header>
-                    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-                        {children}
-                    </div>
-                </SidebarInset>
-            </SidebarProvider>
+                    </SidebarInset>
+                </SidebarProvider>
+            </UserMenuProvider>
         </WorkspaceProvider>
     )
 }

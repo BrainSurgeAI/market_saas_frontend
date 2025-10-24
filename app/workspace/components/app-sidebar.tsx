@@ -11,28 +11,64 @@ import {
     SidebarHeader,
     SidebarRail,
 } from "@/components/ui/sidebar"
+import { Skeleton } from "@/components/ui/skeleton"
 
-import { getNavData } from "@/lib/menu"
+import { getNavDataSync } from "@/lib/menu"
 import { useWorkspace } from "@/lib/WorkspaceContext"
+import { useUserMenu } from "@/lib/UserMenuContext"
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-    userRole: string[];
+    userRole?: string[]; // 保持向后兼容，但现在可选
 }
 
-export function AppSidebar({userRole, ...props }: AppSidebarProps) {
-    
-    const {user, organization} = useWorkspace();
-    const roles = Array.isArray(userRole) ? userRole : [userRole];
-    const data = getNavData(organization, roles);
-   
+function SidebarSkeleton() {
+    return (
+        <Sidebar collapsible="icon">
+            <SidebarHeader>
+                <Skeleton className="h-8 w-8 rounded-md" />
+            </SidebarHeader>
+            <SidebarContent>
+                <div className="space-y-2 p-2">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                        <Skeleton key={i} className="h-8 w-full" />
+                    ))}
+                </div>
+            </SidebarContent>
+            <SidebarFooter>
+                <Skeleton className="h-8 w-8 rounded-md" />
+            </SidebarFooter>
+            <SidebarRail />
+        </Sidebar>
+    )
+}
+
+export function AppSidebar({ userRole, ...props}: AppSidebarProps) {
+    const { user } = useWorkspace();
+    const { navData, isLoading, error, userRoles, primaryRole } = useUserMenu();
+
+    // 开发模式下显示调试信息
+    if (process.env.NODE_ENV === 'development') {
+        console.log('AppSidebar - 用户角色:', userRoles);
+        console.log('AppSidebar - 主角色:', primaryRole);
+        console.log('AppSidebar - 菜单数据:', navData);
+    }
+
+    if (isLoading || !navData) {
+        return <SidebarSkeleton />;
+    }
+
+    if (error) {
+        console.warn('菜单加载错误:', error);
+    }
+
     return (
         <Sidebar collapsible="icon" {...props}>
             <SidebarHeader>
-                <TeamSwitcher teams={data.teams} />
+                <TeamSwitcher teams={navData.teams} />
             </SidebarHeader>
             <SidebarContent>
-                <NavMain items={data.navMain} />
-                {/* <NavProjects projects={data.projects} />  */}
+                <NavMain items={navData.navMain} />
+                {/* <NavProjects projects={navData.projects} />  */}
             </SidebarContent>
             <SidebarFooter>
                 <NavUser user={user} />
