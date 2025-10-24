@@ -9,7 +9,7 @@ export default async function PriceManagePage() {
   const { username, roles } = decoded;
 
   const response = await fetchRemoteData({
-    endpoint: `/users/${username}/product_price_status_stats`,
+    endpoint: `/product_price_status_stats`,
     method: 'GET',
     tags: ['product_price_status_stats'],
     revalidate: 0,

@@ -7,7 +7,7 @@ export default async function PriceEntryRoute() {
   const { username, roles } = userRoles;
   
   const response = await fetchRemoteData({
-    endpoint: `/users/${username}/product_prices`,
+    endpoint: `/product_prices`,
     method: 'GET',
     tags: ['product_prices'],
     revalidate: 0,
