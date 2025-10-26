@@ -46,7 +46,18 @@ export function AppSidebar({ userRole, ...props}: AppSidebarProps) {
     const { user } = useWorkspace();
     const { navData, isLoading, error, userRoles, primaryRole } = useUserMenu();
 
+    console.log('🎛️ AppSidebar 渲染状态:', {
+        isLoading,
+        hasNavData: !!navData,
+        navDataLength: navData?.navMain?.length || 0,
+        error,
+        userRoles,
+        primaryRole,
+        user
+    });
+
     if (isLoading || !navData) {
+        console.log('⏳ 显示加载骨架屏');
         return <SidebarSkeleton />;
     }
 

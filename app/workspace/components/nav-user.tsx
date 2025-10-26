@@ -32,6 +32,7 @@ import { useEffect, useState } from "react"
 import { toast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { ChangePasswordDialog } from "./change-password-dialog"
+import { clearAllMenuCache } from "@/lib/menuCache"
 
 export function NavUser({ user }: { user: User }) {
 
@@ -67,6 +68,16 @@ export function NavUser({ user }: { user: User }) {
 
       if (!response.ok) {
         throw new Error('登出失败');
+      }
+
+      // 清理本地缓存数据
+      try {
+        clearAllMenuCache();
+        localStorage.removeItem('user-roles');
+        localStorage.removeItem('current-organization');
+        console.log('已清理所有本地缓存数据');
+      } catch (error) {
+        console.error('清理本地缓存失败:', error);
       }
 
       toast({

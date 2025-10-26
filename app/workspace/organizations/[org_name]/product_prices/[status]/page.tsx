@@ -2,7 +2,6 @@ import {  UserRole } from "@/app/context/permission-context";
 import { logger } from "@/lib/logger";
 import { fetchRemoteData, getUserRoles } from "@/lib/api-utils";
 
-
 // 状态映射，将URL参数映射到API状态值
 const STATUS_MAP: Record<string, string> = {
   'pending': 'PENDING',
@@ -22,24 +21,27 @@ const STATUS_DISPLAY: Record<string, string> = {
 // 修改组件签名，使用明确的类型
 export default async function ProductsByStatusPage({
   params,
+  searchParams,
 }: {
-  params: Promise<{ org_name: string; status: string }>
+  params: Promise<{ org_name: string; status: string }>;
+  searchParams: Promise<{ page?: string; page_size?: string }>;
 }) {
   // 从params直接获取数据
   const { org_name, status } = await params;
-  
+  const { page = '1', page_size = '10' } = await searchParams;
+
   // 获取用户信息
   const decoded = await getUserRoles();
   const { username, roles } = decoded;
-  
+
   // 获取API状态值
   const apiStatus = STATUS_MAP[status] || 'PENDING';
-  
+
   let data;
   try {
     const response = await fetchRemoteData({
-      endpoint: `/product_prices?status=${apiStatus}`, 
-      method: 'GET', 
+      endpoint: `/product_prices/status?status=${apiStatus}&page=${page}&page_size=${page_size}`,
+      method: 'GET',
       tags: [`product_prices_${apiStatus.toLowerCase()}`]
     });
 
@@ -47,11 +49,22 @@ export default async function ProductsByStatusPage({
       throw new Error('No data returned from API');
     }
 
-    data = response.data;
-    console.log(JSON.stringify(data));
+    const apiData = response.data;
+    console.log(`${apiStatus} API Data:`, apiData);
+
+    // 根据实际API响应结构提取数据
+    // 产品数组在 apiData.data.data 中
+    if (apiData?.data?.data && Array.isArray(apiData.data.data)) {
+      data = apiData.data; // 包含 data、total、page、page_size 等信息
+    } else if (Array.isArray(apiData?.data)) {
+      data = apiData; // 直接使用 apiData
+    } else {
+      console.warn(`Unexpected data structure for ${apiStatus}:`, apiData);
+      data = { data: [], total: 0, page: 1, page_size: 10 };
+    }
   } catch (error) {
     logger.error(`Failed to fetch ${apiStatus} products: ${error}`);
-    data = { data: [] };
+    data = { data: [], total: 0, page: 1, page_size: 10 };
   }
 
   const primaryRole = roles && roles.length > 0 ? roles[0] : 'Guest';
@@ -63,15 +76,22 @@ export default async function ProductsByStatusPage({
           {STATUS_DISPLAY[status] || '产品列表'}
         </h2>
         <p className="text-sm text-gray-500 mt-1">
-          当前显示: {data.data.length} 个产品
+          当前显示: {Array.isArray(data?.data) ? data.data.length : 0} 个产品，
+          共 {data?.total || 0} 个
         </p>
       </div>
-      
-      <ProductStatusWrapper 
-        products={data.data} 
-        status={apiStatus} 
+
+      <ProductStatusWrapper
+        products={data.data}
+        status={apiStatus}
         orgName={org_name}
         userRole={primaryRole as UserRole}
+        pagination={{
+          total: data?.total || 0,
+          page: data?.page || 1,
+          page_size: data?.page_size || 10
+        }}
+        baseUrl={`/workspace/organizations/${org_name}/product_prices/${status}`}
       />
     </div>
   );

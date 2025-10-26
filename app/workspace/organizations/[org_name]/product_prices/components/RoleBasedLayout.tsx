@@ -16,13 +16,24 @@ function ReviewerDashboard({ productPrices }: { productPrices: PriceStatus[] }) 
   // 获取当前组织名称
   const params = useParams();
   const orgName = params.org_name as string;
-  
+
+  console.log('🔍 ReviewerDashboard 渲染:', {
+    productPrices,
+    productPricesLength: Array.isArray(productPrices) ? productPrices.length : 'not array',
+    orgName,
+    calculatedStats: {
+      pending: productPrices.reduce((acc, curr) => acc + curr.products_pending, 0),
+      published: productPrices.reduce((acc, curr) => acc + curr.products_published, 0),
+      rejected: productPrices.reduce((acc, curr) => acc + curr.products_rejected, 0)
+    }
+  });
+
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="mb-6">
         <h2 className="text-lg font-bold text-gray-900">产品价格审核</h2>
       </div>
-      
+
       {/* 审核统计信息 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <StatCard
@@ -30,7 +41,7 @@ function ReviewerDashboard({ productPrices }: { productPrices: PriceStatus[] }) 
             value={productPrices.reduce((acc, curr) => acc + curr.products_pending, 0)}
             icon={<ClipboardList className="h-5 w-5 text-primary" />}
             linkTo={`/workspace/organizations/${orgName}/product_prices/entry`}
-          //trend={5} 
+          //trend={5}
           />
           <StatCard
             title="审核通过"
@@ -74,12 +85,23 @@ function PricerDashboardWrapper({ productPrices }: { productPrices: PriceStatus[
 
 export default function RoleBasedLayout({ pricesStatus: productPrices }: RoleBasedLayoutProps) {
   const { userRole, hasPermission } = usePermission()
-  
+
+  console.log('🎭 RoleBasedLayout 渲染:', {
+    userRole,
+    hasPRICER: hasPermission('PRICER'),
+    hasAUDITOR: hasPermission('AUDITOR'),
+    productPrices,
+    productPricesLength: Array.isArray(productPrices) ? productPrices.length : 'not array',
+    firstProductPrice: productPrices[0]
+  });
+
   if (hasPermission('PRICER')) {
+    console.log('✅ 显示 PRICER 仪表板');
     return <PricerDashboardWrapper productPrices={productPrices} />
   }
-  
+
   if (hasPermission('AUDITOR')) {
+    console.log('✅ 显示 AUDITOR 仪表板');
     return <ReviewerDashboard productPrices={productPrices} />
   }
   

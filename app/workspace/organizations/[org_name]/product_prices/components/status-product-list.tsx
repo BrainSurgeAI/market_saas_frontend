@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { usePermission } from "@/app/context/permission-context";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,15 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { format } from 'date-fns';
 import { Card } from '@/components/ui/card';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 // 状态文本和样式映射
 const STATUS_BADGES = {
@@ -31,6 +41,12 @@ const STATUS_BADGES = {
   'PUBLISHED': { label: '已发布', variant: 'success' as const, icon: <CheckCircle className="h-4 w-4 mr-1" /> },
   'REJECTED': { label: '已拒绝', variant: 'destructive' as const, icon: <XCircle className="h-4 w-4 mr-1" /> },
 };
+
+interface PaginationData {
+  total: number;
+  page: number;
+  page_size: number;
+}
 
 interface Product {
     id: number;
@@ -53,11 +69,24 @@ interface StatusProductListProps {
   products: Product[];
   status: string;
   orgName: string;
+  pagination?: PaginationData;
+  baseUrl?: string;
 }
 
-export default function StatusProductList({ products, status, orgName }: StatusProductListProps) {
+export default function StatusProductList({ products, status, orgName, pagination, baseUrl }: StatusProductListProps) {
   const router = useRouter();
+  const { userRole, hasPermission } = usePermission();
   const [searchTerm, setSearchTerm] = useState('');
+
+  console.log('StatusProductList initialized:', {
+    products,
+    productsLength: Array.isArray(products) ? products.length : 'not array',
+    status,
+    orgName
+  });
+
+  // 只有 AUDITOR 角色才能看到操作列
+  const shouldShowActions = userRole === 'AUDITOR';
   const [sortConfig, setSortConfig] = useState<{
     key: keyof Product | null;
     direction: 'ascending' | 'descending' | null;
@@ -82,10 +111,14 @@ export default function StatusProductList({ products, status, orgName }: StatusP
   };
   
   // 应用搜索和排序
-  const filteredProducts = products
-    .filter(product => 
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.category.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredProducts = (Array.isArray(products) ? products : [])
+    .filter(product =>
+      product &&
+      typeof product === 'object' &&
+      product.name &&
+      product.category &&
+      (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+       product.category.toLowerCase().includes(searchTerm.toLowerCase()))
     )
     .sort((a, b) => {
       if (!sortConfig.key || !sortConfig.direction) return 0;
@@ -171,12 +204,12 @@ export default function StatusProductList({ products, status, orgName }: StatusP
         </div>
         
         <div className="flex gap-2 w-full sm:w-auto justify-end">
-          {status === 'PENDING' && (
+          {/* {status === 'PENDING' && (
             <Button variant="outline" size="sm" onClick={handleExport}>
               <Download className="h-4 w-4 mr-1" />
               导出
             </Button>
-          )}
+          )} */}
         </div>
       </div>
 
@@ -280,26 +313,31 @@ export default function StatusProductList({ products, status, orgName }: StatusP
                   拒绝原因
                 </TableHead>
               )}
-              <TableHead className="text-center">操作</TableHead>
+              {shouldShowActions && <TableHead className="text-center">操作</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredProducts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={status === 'REJECTED' ? 7 : 6} className="text-center py-8 text-muted-foreground">
+                <TableCell
+                  colSpan={
+                    (status === 'REJECTED' ? 7 : 6) + (shouldShowActions ? 1 : 0)
+                  }
+                  className="text-center py-8 text-muted-foreground"
+                >
                   暂无{STATUS_BADGES[status as keyof typeof STATUS_BADGES]?.label || ''}产品
                 </TableCell>
               </TableRow>
             ) : (
               filteredProducts.map((product) => (
                 <TableRow key={product.id}>
-                  <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell>{product.category}</TableCell>
-                  <TableCell className="text-right">¥{product.maxPrice}</TableCell>
-                  <TableCell className="text-right">¥{product.avgPrice}</TableCell>
-                  <TableCell className="text-right">¥{product.minPrice}</TableCell>
-                  <TableCell>{product.publishDate || '-'}</TableCell>
-                  <TableCell>
+                  <TableCell className="font-sm">{product.name}</TableCell>
+                  <TableCell className='font-sm'>{product.category}</TableCell>
+                  <TableCell className="text-right font-mono">{product.maxPrice}</TableCell>
+                  <TableCell className="text-right font-mono">{product.avgPrice}</TableCell>
+                  <TableCell className="text-right font-mono">{product.minPrice}</TableCell>
+                  <TableCell className='text-left font-mono'>{product.publishDate || '-'}</TableCell>
+                  <TableCell className='text-left font-mono'>
                     {product.publishDate 
                       ? format(new Date(product.publishDate), 'yyyy-MM-dd HH:mm') 
                       : '-'}
@@ -309,48 +347,148 @@ export default function StatusProductList({ products, status, orgName }: StatusP
                         <span className="text-sm text-red-500">{product.priceSource || '无'}</span>
                     </TableCell>
                   )}
-                  <TableCell>
-                    <div className="flex justify-center space-x-2">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleViewProduct(product.id)}
-                        title="查看详情"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      
-                      {status === 'PENDING' && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <ChevronDown className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleApprove(product.id)}>
-                              <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
-                              审核通过
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleReject(product.id)}>
-                              <XCircle className="h-4 w-4 mr-2 text-red-500" />
-                              拒绝
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </div>
-                  </TableCell>
+                  {shouldShowActions && (
+                    <TableCell>
+                      <div className="flex justify-center space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleViewProduct(product.id)}
+                          title="查看详情"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+
+                        {status === 'PENDING' && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <ChevronDown className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleApprove(product.id)}>
+                                <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                                审核通过
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleReject(product.id)}>
+                                <XCircle className="h-4 w-4 mr-2 text-red-500" />
+                                拒绝
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
       </div>
-      
+
+      {/* 分页组件 */}
+      {pagination && pagination.total > pagination.page_size && (
+        <div className="p-4 border-t">
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => {
+                    if (pagination.page > 1 && baseUrl) {
+                      router.push(`${baseUrl}?page=${pagination.page - 1}`);
+                    }
+                  }}
+                  className={pagination.page === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+
+              {/* 生成页码 */}
+              {(() => {
+                const totalPages = Math.ceil(pagination.total / pagination.page_size);
+                const pageNumbers = [];
+                const maxPagesToShow = 5;
+
+                if (totalPages <= maxPagesToShow) {
+                  for (let i = 1; i <= totalPages; i++) {
+                    pageNumbers.push(i);
+                  }
+                } else {
+                  if (pagination.page <= 3) {
+                    for (let i = 1; i <= 4; i++) {
+                      pageNumbers.push(i);
+                    }
+                    pageNumbers.push('ellipsis');
+                    pageNumbers.push(totalPages);
+                  } else if (pagination.page >= totalPages - 2) {
+                    pageNumbers.push(1);
+                    pageNumbers.push('ellipsis');
+                    for (let i = totalPages - 3; i <= totalPages; i++) {
+                      pageNumbers.push(i);
+                    }
+                  } else {
+                    pageNumbers.push(1);
+                    pageNumbers.push('ellipsis');
+                    for (let i = pagination.page - 1; i <= pagination.page + 1; i++) {
+                      pageNumbers.push(i);
+                    }
+                    pageNumbers.push('ellipsis');
+                    pageNumbers.push(totalPages);
+                  }
+                }
+
+                return pageNumbers.map((page, index) => {
+                  if (page === 'ellipsis') {
+                    return (
+                      <PaginationItem key={`ellipsis-${index}`}>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    );
+                  }
+
+                  return (
+                    <PaginationItem key={`page-${page}`}>
+                      <PaginationLink
+                        onClick={() => {
+                          if (baseUrl) {
+                            router.push(`${baseUrl}?page=${page}`);
+                          }
+                        }}
+                        isActive={pagination.page === page}
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                });
+              })()}
+
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => {
+                    const totalPages = Math.ceil(pagination.total / pagination.page_size);
+                    if (pagination.page < totalPages && baseUrl) {
+                      router.push(`${baseUrl}?page=${pagination.page + 1}`);
+                    }
+                  }}
+                  className={pagination.page === Math.ceil(pagination.total / pagination.page_size) ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+
+          {/* 分页信息 */}
+          <div className="text-xs text-gray-500 mt-2 text-center">
+            显示第 {(pagination.page - 1) * pagination.page_size + 1} 至 {Math.min(pagination.page * pagination.page_size, pagination.total)} 条，共 {pagination.total} 条
+          </div>
+        </div>
+      )}
+
       <div className="p-4 border-t">
         <p className="text-sm text-muted-foreground">
-          共 {filteredProducts.length} 条记录
+          当前页显示 {filteredProducts.length} 条记录
+          {pagination && `，总共 ${pagination.total} 条`}
         </p>
       </div>
     </Card>

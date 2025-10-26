@@ -62,6 +62,12 @@ interface Product {
     publishDate: string;
 }
 
+interface PaginationData {
+    total: number;
+    page: number;
+    page_size: number;
+}
+
 type PriceData = {
     minPrice: number | string;
     maxPrice: number | string;
@@ -83,23 +89,40 @@ const formatPrice = (price: any): string => {
     }
 };
 
-export function PriceEntryPage({ products: initialProducts, userRoles }: { products: Product[], userRoles: string[] }) {
+export function PriceEntryPage({
+    products: initialProducts,
+    pagination: initialPagination,
+    userRoles
+}: {
+    products: Product[],
+    pagination: PaginationData,
+    userRoles: string[]
+}) {
     const router = useRouter();
     const { org_name } = useParams();
 
-    const [loading, setLoading] = useState(true);
+    console.log('PriceEntryPage initialized with:', {
+        initialProducts,
+        initialPagination,
+        userRoles,
+        org_name
+    });
+
+    const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [priceInputs, setPriceInputs] = useState<Record<number, PriceData>>({});
     const [saveStatus, setSaveStatus] = useState<Record<number, string>>({});
     const [draftStatus, setDraftStatus] = useState<Record<number, boolean>>({});
-    const [products, setProducts] = useState<Product[]>(initialProducts);
+    const [products, setProducts] = useState<Product[]>(Array.isArray(initialProducts) ? initialProducts : []);
+    const [pagination, setPagination] = useState<PaginationData>(initialPagination || { total: 0, page: 1, page_size: 10 });
     const [isSaving, setIsSaving] = useState(false);
+    const [dataLoading, setDataLoading] = useState(false);
 
     const [showSubmitDialog, setShowSubmitDialog] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [submitMessage, setSubmitMessage] = useState('');
-    const [currentPage, setCurrentPage] = useState(1);
+    const [currentPage, setCurrentPage] = useState(pagination?.page || 1);
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [confirmAction, setConfirmAction] = useState<() => void>(() => {});
     const [confirmTitle, setConfirmTitle] = useState("确认提交");
@@ -110,12 +133,74 @@ export function PriceEntryPage({ products: initialProducts, userRoles }: { produ
 
     const [userRole, setUserRole] = useState<string>(userRoles[0]);
 
-    const itemsPerPage = 15;
+    const itemsPerPage = pagination?.page_size || 10;
+
+    // 获取指定页面的数据
+    const fetchPageData = async (page: number, pageSize?: number, search?: string, category?: string) => {
+        try {
+            setDataLoading(true);
+            const params = new URLSearchParams({
+                page: page.toString(),
+                page_size: (pageSize || itemsPerPage).toString(),
+            });
+
+            if (search && search.trim()) {
+                params.append('search', search.trim());
+            }
+
+            if (category && category !== 'all') {
+                params.append('category', category);
+            }
+
+            const response = await fetch(
+                `/api/organizations/${org_name}/product_prices?${params.toString()}`,
+                {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch page data: ${response.status}`);
+            }
+
+            const result = await response.json();
+
+            if (result.success && result.data) {
+                setProducts(result.data.data || []);
+                setPagination({
+                    total: result.data.total || 0,
+                    page: result.data.page || 1,
+                    page_size: result.data.page_size || itemsPerPage
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching page data:', error);
+            toast({
+                title: "加载数据失败",
+                description: "无法加载指定页面的数据，请稍后重试",
+                variant: "destructive",
+            });
+        } finally {
+            setDataLoading(false);
+        }
+    };
+
+    // 搜索函数
+    const handleSearch = () => {
+        setCurrentPage(1); // 重置到第一页
+        fetchPageData(1, itemsPerPage, searchTerm, selectedCategory);
+    };
 
     const categories = useMemo(() => {
+        if (!Array.isArray(products)) {
+            return [];
+        }
         const uniqueCategories = new Set<string>();
         products.forEach(product => {
-            if (product.category) {
+            if (product && product.category) {
                 uniqueCategories.add(product.category);
             }
         });
@@ -666,20 +751,16 @@ export function PriceEntryPage({ products: initialProducts, userRoles }: { produ
         }
     };
 
-    const filteredProducts = products.filter(product => {
-        const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesCategory = selectedCategory === "all" || product.category === selectedCategory;
-        return matchesSearch && matchesCategory;
-    });
-
-    const paginatedProducts = useMemo(() => {
-        const startIndex = (currentPage - 1) * itemsPerPage;
-        return filteredProducts.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredProducts, currentPage, itemsPerPage]);
+    // 使用服务端过滤和分页，products 就是过滤和分页后的结果
+    const filteredProducts = products;
+    const paginatedProducts = products;
 
     const handlePageChange = (page: number) => {
-        setCurrentPage(page);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (page !== currentPage) {
+            setCurrentPage(page);
+            fetchPageData(page, itemsPerPage, searchTerm, selectedCategory);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
     };
 
     const getPriceVariance = (product: Product) => {
@@ -1104,6 +1185,8 @@ export function PriceEntryPage({ products: initialProducts, userRoles }: { produ
                 selectedCategory={selectedCategory}
                 setSelectedCategory={setSelectedCategory}
                 categories={categories}
+                onSearch={handleSearch}
+                loading={dataLoading}
             />
 
             {/* 批量操作按钮 - 仅在审核员角色且有选中项时显示 */}
@@ -1172,7 +1255,16 @@ export function PriceEntryPage({ products: initialProducts, userRoles }: { produ
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredProducts.length === 0 ? (
+                        {dataLoading ? (
+                            <TableRow>
+                                <TableCell colSpan={userRole === 'AUDITOR' ? 11 : 10} className="text-center py-10">
+                                    <div className="flex items-center justify-center">
+                                        <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                        加载中...
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        ) : filteredProducts.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={userRole === 'AUDITOR' ? 11 : 10} className="text-center py-10">
                                     没有找到匹配的产品
@@ -1302,23 +1394,23 @@ export function PriceEntryPage({ products: initialProducts, userRoles }: { produ
                     </TableBody>
                 </Table>
                 {/* 分页组件 */}
-                {filteredProducts.length > 0 && (
+                {pagination?.total > 0 && (
                     <div className="py-4 px-6 border-t">
                         <Pagination>
                             <PaginationContent>
                                 <PaginationItem>
-                                    <PaginationPrevious 
+                                    <PaginationPrevious
                                         onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                                        className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                        className={currentPage === 1 || dataLoading ? "pointer-events-none opacity-50" : "cursor-pointer"}
                                     />
                                 </PaginationItem>
-                                
+
                                 {/* 生成页码 */}
                                 {(() => {
-                                    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+                                    const totalPages = Math.ceil((pagination?.total || 0) / itemsPerPage);
                                     const pageNumbers = [];
                                     const maxPagesToShow = 5;
-                                    
+
                                     if (totalPages <= maxPagesToShow) {
                                         // 如果总页数小于等于最大显示页数，显示所有页码
                                         for (let i = 1; i <= totalPages; i++) {
@@ -1351,7 +1443,7 @@ export function PriceEntryPage({ products: initialProducts, userRoles }: { produ
                                             pageNumbers.push(totalPages);
                                         }
                                     }
-                                    
+
                                     return pageNumbers.map((page, index) => {
                                         if (page === 'ellipsis') {
                                             return (
@@ -1360,12 +1452,13 @@ export function PriceEntryPage({ products: initialProducts, userRoles }: { produ
                                                 </PaginationItem>
                                             );
                                         }
-                                        
+
                                         return (
                                             <PaginationItem key={`page-${page}`}>
                                                 <PaginationLink
                                                     onClick={() => handlePageChange(page as number)}
                                                     isActive={currentPage === page}
+                                                    className={dataLoading ? "pointer-events-none" : "cursor-pointer"}
                                                 >
                                                     {page}
                                                 </PaginationLink>
@@ -1373,19 +1466,19 @@ export function PriceEntryPage({ products: initialProducts, userRoles }: { produ
                                         );
                                     });
                                 })()}
-                                
+
                                 <PaginationItem>
-                                    <PaginationNext 
-                                        onClick={() => handlePageChange(Math.min(Math.ceil(filteredProducts.length / itemsPerPage), currentPage + 1))}
-                                        className={currentPage === Math.ceil(filteredProducts.length / itemsPerPage) ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                    <PaginationNext
+                                        onClick={() => handlePageChange(Math.min(Math.ceil(pagination.total / itemsPerPage), currentPage + 1))}
+                                        className={currentPage === Math.ceil(pagination.total / itemsPerPage) || dataLoading ? "pointer-events-none opacity-50" : "cursor-pointer"}
                                     />
                                 </PaginationItem>
                             </PaginationContent>
                         </Pagination>
-                        
+
                         {/* 分页信息 */}
                         <div className="text-xs text-gray-500 mt-2 text-center">
-                            显示第 {(currentPage - 1) * itemsPerPage + 1} 至 {Math.min(currentPage * itemsPerPage, filteredProducts.length)} 条，共 {filteredProducts.length} 条
+                            显示第 {(currentPage - 1) * itemsPerPage + 1} 至 {Math.min(currentPage * itemsPerPage, pagination?.total || 0)} 条，共 {pagination?.total || 0} 条
                         </div>
                     </div>
                 )}
@@ -1394,7 +1487,7 @@ export function PriceEntryPage({ products: initialProducts, userRoles }: { produ
             <div className="mt-6 flex justify-between items-center">
                 <div>
                     <span className="text-muted-foreground text-xs">
-                        共 {filteredProducts.length} 个产品，已填写 {Object.keys(priceInputs).length} 个价格
+                        共 {pagination?.total || 0} 个产品，当前页显示 {products.length} 个，已填写 {Object.keys(priceInputs).length} 个价格
                     </span>
                 </div>
                 <div className="flex gap-2">

@@ -3,14 +3,20 @@ import { cookies } from 'next/headers';
 
 export async function POST() {
   try {
-    
     const cookieStore = await cookies();
     cookieStore.delete('auth-token');
-    
-    // 可选：调用后端 API 使 token 失效
-    // 如果你的后端有登出 API，可以在这里调用
-    
-    return NextResponse.json({ success: true });
+
+    // 清理菜单缓存和其他本地存储数据
+    // 注意：服务端无法直接访问 localStorage，所以返回指令让客户端清理
+    const response = NextResponse.json({
+      success: true,
+      clearCache: true
+    });
+
+    // 设置响应头，通知客户端清理缓存
+    response.headers.set('X-Clear-Cache', 'true');
+
+    return response;
   } catch (error) {
     console.error('Logout error:', error);
     return NextResponse.json(

@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Organization } from '@/app/models';
 import { MenuItem } from '@/lib/menu';
 import { getNavData, getUserMenuConfig } from '@/lib/menu';
+import { useWorkspace } from '@/lib/WorkspaceContext';
 
 interface UserMenuContextType {
     navData: {
@@ -21,6 +22,7 @@ interface UserMenuContextType {
 const UserMenuContext = createContext<UserMenuContextType | undefined>(undefined);
 
 export function UserMenuProvider({ children }: { children: React.ReactNode }) {
+    const { user, organization: workspaceOrg } = useWorkspace(); // 获取 workspace 中的用户和组织信息
     const [navData, setNavData] = useState<UserMenuContextType['navData']>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -28,6 +30,8 @@ export function UserMenuProvider({ children }: { children: React.ReactNode }) {
     const [primaryRole, setPrimaryRole] = useState<string>('');
     const [organization, setOrganization] = useState<Organization | null>(null);
     const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    console.log('🏢 UserMenuProvider 初始化:', { user, workspaceOrg });
 
     // 防抖的菜单刷新函数
     const refreshMenu = useCallback(async () => {
@@ -89,31 +93,71 @@ export function UserMenuProvider({ children }: { children: React.ReactNode }) {
         }
     }, [organization, userRoles]); // 依赖项
 
+    // 注册全局刷新函数（用于调试）
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            window.refreshUserMenu = () => {
+                console.log('通过全局函数刷新菜单');
+                refreshMenu();
+            };
+        }
+
+        return () => {
+            if (typeof window !== 'undefined') {
+                delete window.refreshUserMenu;
+            }
+        };
+    }, [refreshMenu]);
+
     useEffect(() => {
         // 监听组织信息变化
         const handleOrganizationChange = () => {
-            const storedOrg = localStorage.getItem('current-organization');
-            if (storedOrg) {
-                try {
-                    const org = JSON.parse(storedOrg);
-                    setOrganization(org);
-                } catch (error) {
-                    console.error('解析组织信息失败:', error);
+            let org = null;
+
+            // 优先使用 workspace 中的组织信息
+            if (workspaceOrg) {
+                org = workspaceOrg;
+                console.log('🏢 使用 workspace 中的组织信息:', org);
+            } else {
+                // 回退到 localStorage
+                const storedOrg = localStorage.getItem('current-organization');
+                if (storedOrg) {
+                    try {
+                        org = JSON.parse(storedOrg);
+                        console.log('💾 使用 localStorage 中的组织信息:', org);
+                    } catch (error) {
+                        console.error('解析组织信息失败:', error);
+                    }
                 }
             }
+
+            setOrganization(org);
         };
 
         // 监听用户角色变化
         const handleRolesChange = () => {
-            const storedRoles = localStorage.getItem('user-roles');
-            if (storedRoles) {
-                try {
-                    const roles = JSON.parse(storedRoles);
-                    setUserRoles(roles);
-                } catch (error) {
-                    console.error('解析用户角色失败:', error);
+            let roles = [];
+
+            // 优先使用 workspace 中的用户角色信息
+            if (user && user.role) {
+                roles = [user.role];
+                console.log('👤 使用 workspace 中的用户角色:', roles);
+                // 同时更新 localStorage
+                localStorage.setItem('user-roles', JSON.stringify(roles));
+            } else {
+                // 回退到 localStorage
+                const storedRoles = localStorage.getItem('user-roles');
+                if (storedRoles) {
+                    try {
+                        roles = JSON.parse(storedRoles);
+                        console.log('💾 使用 localStorage 中的用户角色:', roles);
+                    } catch (error) {
+                        console.error('解析用户角色失败:', error);
+                    }
                 }
             }
+
+            setUserRoles(roles);
         };
 
         // 初始化
@@ -134,7 +178,7 @@ export function UserMenuProvider({ children }: { children: React.ReactNode }) {
         return () => {
             window.removeEventListener('storage', handleStorageChange);
         };
-    }, []); // 空依赖数组，只在组件挂载时运行一次
+    }, [user, workspaceOrg]); // 依赖用户和workspace组织信息
 
     useEffect(() => {
         if (organization && userRoles.length > 0) {

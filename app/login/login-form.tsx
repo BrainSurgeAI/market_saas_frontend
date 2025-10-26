@@ -18,6 +18,9 @@ import {
     FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { cacheMenuAfterLogin } from "@/lib/menuCache";
+import { jwtDecode } from 'jwt-decode';
+import { TokenPayload } from '@/app/models';
 
 
 const formSchema = z.object({
@@ -64,6 +67,55 @@ export function LoginForm() {
                     duration: 2000,
                 });
                 return;
+            }
+
+            const loginData = await response.json();
+
+            // 解析用户信息
+            let userRoles: string[] = [];
+            let primaryRole: string = '';
+
+            try {
+                const decoded = jwtDecode<TokenPayload>(loginData.data);
+                userRoles = decoded.roles || [];
+                primaryRole = userRoles[0] || ''; // 使用第一个角色作为主角色
+
+                // 存储用户角色到 localStorage
+                localStorage.setItem('user-roles', JSON.stringify(userRoles));
+                console.log('用户角色已存储到 localStorage:', userRoles);
+
+            } catch (error) {
+                console.error('解析用户信息失败:', error);
+            }
+
+            // 在后台缓存菜单数据
+            if (primaryRole && userRoles.length > 0) {
+                cacheMenuAfterLogin(
+                    primaryRole,
+                    userRoles,
+                    async () => {
+                        // 获取菜单数据的函数
+                        const menuResponse = await fetch('/api/user/menu', {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                        });
+
+                        if (!menuResponse.ok) {
+                            throw new Error('Failed to fetch menu');
+                        }
+
+                        const menuResult = await menuResponse.json();
+                        if (menuResult.code === 200 && menuResult.data) {
+                            return menuResult.data;
+                        }
+                        return null;
+                    }
+                ).catch(error => {
+                    console.error('缓存菜单失败:', error);
+                    // 不影响登录流程，继续跳转
+                });
             }
 
             toast({
