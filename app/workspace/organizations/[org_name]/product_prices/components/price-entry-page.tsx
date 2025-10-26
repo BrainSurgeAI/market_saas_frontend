@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useWorkspace } from "@/lib/WorkspaceContext";
 import {
     ArrowLeft,
     // Save,
@@ -32,6 +33,38 @@ import {
 import { formatDate } from "../helpers";
 import { toast } from "@/hooks/use-toast";
 import { loadFromIndexedDB, openDatabase, saveToIndexedDB, STORE_NAME } from "@/lib/indexedDB";
+
+// 获取认证令牌
+function getAuthToken(): string {
+    if (typeof window !== 'undefined') {
+        const cookies = document.cookie.split(';');
+        for (const cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'auth-token') {
+                return value;
+            }
+        }
+    }
+    return '';
+}
+
+// 从token中提取用户名
+function getUsernameFromToken(): string {
+    const token = getAuthToken();
+    if (!token) return '';
+
+    try {
+        // JWT token的payload部分是中间的部分，用.分割
+        const payload = token.split('.')[1];
+        if (payload) {
+            const decoded = JSON.parse(atob(payload));
+            return decoded.username || decoded.sub || '';
+        }
+    } catch (error) {
+        console.error('Error extracting username from token:', error);
+    }
+    return '';
+}
 import SearchBar from "./SearchBar";
 import StatusCell from "./Table/StatusBar";
 import PriceInputCell from "./Table/PriceInputCell";
@@ -92,21 +125,38 @@ const formatPrice = (price: any): string => {
 export function PriceEntryPage({
     products: initialProducts,
     pagination: initialPagination,
-    userRoles
+    userRoles,
+    orgName
 }: {
     products: Product[],
     pagination: PaginationData,
-    userRoles: string[]
+    userRoles: string[],
+    orgName?: string // orgName现在是可选的
 }) {
     const router = useRouter();
     const { org_name } = useParams();
+    const { organization } = useWorkspace();
 
-    console.log('PriceEntryPage initialized with:', {
-        initialProducts,
-        initialPagination,
-        userRoles,
-        org_name
-    });
+    // 优先使用WorkspaceContext中的组织信息，然后是URL参数，最后是props
+    const currentOrgName = organization?.nameHash || org_name || orgName;
+
+    console.log('PriceEntryPage - organization from context:', organization?.nameHash);
+    console.log('PriceEntryPage - org_name from params:', org_name);
+    console.log('PriceEntryPage - orgName from props:', orgName);
+    console.log('PriceEntryPage - currentOrgName:', currentOrgName);
+
+    // 如果没有org_name，显示错误
+    if (!currentOrgName) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="text-center">
+                    <h2 className="text-xl font-bold text-red-600 mb-2">错误</h2>
+                    <p className="text-gray-600">无法获取组织信息，请重新访问页面</p>
+                    <p className="text-sm text-gray-400 mt-2">Context: {JSON.stringify(organization?.nameHash)}</p>
+                </div>
+            </div>
+        );
+    }
 
     const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
@@ -122,7 +172,7 @@ export function PriceEntryPage({
     const [showSubmitDialog, setShowSubmitDialog] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [submitMessage, setSubmitMessage] = useState('');
-    const [currentPage, setCurrentPage] = useState(pagination?.page || 1);
+    const [currentPage, setCurrentPage] = useState(initialPagination?.page || 1);
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [confirmAction, setConfirmAction] = useState<() => void>(() => {});
     const [confirmTitle, setConfirmTitle] = useState("确认提交");
@@ -138,6 +188,7 @@ export function PriceEntryPage({
     // 获取指定页面的数据
     const fetchPageData = async (page: number, pageSize?: number, search?: string, category?: string) => {
         try {
+            console.log('fetchPageData called:', { page, pageSize, search, category });
             setDataLoading(true);
             const params = new URLSearchParams({
                 page: page.toString(),
@@ -152,12 +203,15 @@ export function PriceEntryPage({
                 params.append('category', category);
             }
 
+            console.log('API Request URL:', `/api/product-prices?${params.toString()}`);
+
             const response = await fetch(
-                `/api/organizations/${org_name}/product_prices?${params.toString()}`,
+                `/api/product-prices?${params.toString()}`,
                 {
                     method: 'GET',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${getAuthToken()}`
                     }
                 }
             );
@@ -167,15 +221,40 @@ export function PriceEntryPage({
             }
 
             const result = await response.json();
+            console.log('API Response:', result); // Debug log
 
-            if (result.success && result.data) {
-                setProducts(result.data.data || []);
-                setPagination({
+            // 处理后端API的响应结构
+            // fetchRemoteData 返回的是后端的原始数据
+            let products = [];
+            let paginationData = { total: 0, page: page, page_size: pageSize || itemsPerPage };
+
+            console.log('Raw API result:', result); // Debug log
+
+            // 后端API的实际格式：{ code: 200, message: 'success', data: { data: [...], total: 219, page: 2, page_size: 10 } }
+            if (result.data && result.data.data) {
+                products = Array.isArray(result.data.data) ? result.data.data : [];
+                paginationData = {
                     total: result.data.total || 0,
-                    page: result.data.page || 1,
-                    page_size: result.data.page_size || itemsPerPage
-                });
+                    page: result.data.page || page,
+                    page_size: result.data.page_size || (pageSize || itemsPerPage)
+                };
+            } else if (Array.isArray(result.data)) {
+                // 如果data直接是数组
+                products = result.data;
+                paginationData = {
+                    total: result.total || 0,
+                    page: result.page || page,
+                    page_size: result.page_size || (pageSize || itemsPerPage)
+                };
+            } else if (Array.isArray(result)) {
+                // 如果结果直接是数组
+                products = result;
             }
+
+            console.log('Processed data:', { products, paginationData }); // Debug log
+            setProducts(products);
+            setPagination(paginationData);
+            setCurrentPage(paginationData.page); // 更新当前页码
         } catch (error) {
             console.error('Error fetching page data:', error);
             toast({
@@ -235,7 +314,7 @@ export function PriceEntryPage({
     useEffect(() => {
         const loadSavedData = async () => {
             try {
-                const loadedData = await loadFromIndexedDB(org_name as string);
+                const loadedData = await loadFromIndexedDB(currentOrgName as string);
                 if (loadedData) {
                     setPriceInputs(loadedData);
 
@@ -252,7 +331,7 @@ export function PriceEntryPage({
         };
 
         loadSavedData();
-    }, [org_name]);
+    }, [currentOrgName]);
 
     // Loading data from remote server
     useEffect(() => {
@@ -354,7 +433,7 @@ export function PriceEntryPage({
             setSubmitMessage('正在提交价格数据，请勿关闭浏览器...');
 
             // 从 IndexedDB 读取数据
-            const priceData = await loadFromIndexedDB(org_name as string);
+            const priceData = await loadFromIndexedDB(currentOrgName as string);
             if (!priceData || Object.keys(priceData).length === 0) {
                 setSubmitStatus('error');
                 setSubmitMessage('没有可提交的价格数据，请在提交前保存');
@@ -418,10 +497,12 @@ export function PriceEntryPage({
             });
 
             // 发送到服务器
-            const response = await fetch(`/api/organizations/${org_name}/prices`, {
+            const username = getUsernameFromToken();
+            const response = await fetch(`/api/organizations/${currentOrgName}/prices`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${getAuthToken()}`
                 },
                 body: JSON.stringify({ prices: formattedData })
             });
@@ -471,13 +552,13 @@ export function PriceEntryPage({
 
             // 清理 IndexedDB 中的数据
             if (Object.keys(incompleteEntries).length > 0) {
-                await saveToIndexedDB(org_name as string, incompleteEntries);
+                await saveToIndexedDB(currentOrgName as string, incompleteEntries);
             } else {
                 // 如果没有不完整的记录，清除所有数据
                 const db = await openDatabase();
                 const transaction = db.transaction([STORE_NAME], 'readwrite');
                 const store = transaction.objectStore(STORE_NAME);
-                store.delete(org_name as string);
+                store.delete(currentOrgName as string);
             }
 
             // 更新暂存状态，移除已提交的产品
@@ -605,7 +686,7 @@ export function PriceEntryPage({
             }
 
             // 获取当前保存的数据
-            const currentData = await loadFromIndexedDB(org_name as string) || {};
+            const currentData = await loadFromIndexedDB(currentOrgName as string) || {};
 
             // 更新单个产品的数据
             const updatedData = {
@@ -614,7 +695,7 @@ export function PriceEntryPage({
             };
 
             // 保存到IndexedDB
-            const saveResult = await saveToIndexedDB(org_name as string, updatedData);
+            const saveResult = await saveToIndexedDB(currentOrgName as string, updatedData);
 
             if (saveResult) {
                 // 更新产品的暂存状态
@@ -701,7 +782,7 @@ export function PriceEntryPage({
                     };
                     
                     // 保存到IndexedDB
-                    const saveResult = await saveToIndexedDB(org_name as string, enhancedData);
+                    const saveResult = await saveToIndexedDB(currentOrgName as string, enhancedData);
                     
                     if (saveResult) {
                         // 更新产品的暂存状态
@@ -752,10 +833,19 @@ export function PriceEntryPage({
     };
 
     // 使用服务端过滤和分页，products 就是过滤和分页后的结果
-    const filteredProducts = products;
-    const paginatedProducts = products;
+    const filteredProducts = Array.isArray(products) ? products : [];
+    const paginatedProducts = Array.isArray(products) ? products : [];
+
+    // Debug log
+    console.log('Product states:', {
+        products,
+        filteredProducts,
+        paginatedProducts,
+        isArray: Array.isArray(paginatedProducts)
+    });
 
     const handlePageChange = (page: number) => {
+        console.log('handlePageChange called:', { page, currentPage, itemsPerPage, searchTerm, selectedCategory });
         if (page !== currentPage) {
             setCurrentPage(page);
             fetchPageData(page, itemsPerPage, searchTerm, selectedCategory);
@@ -896,13 +986,14 @@ export function PriceEntryPage({
             const method = 'PATCH';
             
             // 构建API URL
-            const apiUrl = `/api/organizations/${org_name}/product_prices/${productId}/${action}`;
+            const apiUrl = `/api/tenants/${currentOrgName}/prices/aprox-price`;
             
             // 调用远程API
             const response = await fetch(apiUrl, {
                 method,
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${getAuthToken()}`
                 },
                 body: JSON.stringify({
                     products: [productId],
@@ -1008,13 +1099,14 @@ export function PriceEntryPage({
             const action = batchAuditDialog.action;
             
             // 构建API URL
-            const apiUrl = `/api/organizations/${org_name}/product_prices/0/${action}`;
+            const apiUrl = `/api/tenants/${currentOrgName}/prices/aprox-price`;
             
             // 调用远程API
             const response = await fetch(apiUrl, {
                 method: 'PATCH',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${getAuthToken()}`
                 },
                 body: JSON.stringify({ products: selectedProducts, status: action === 'approve' ? 'PUBLISHED' : 'REJECTED' })
             });
@@ -1264,14 +1356,14 @@ export function PriceEntryPage({
                                     </div>
                                 </TableCell>
                             </TableRow>
-                        ) : filteredProducts.length === 0 ? (
+                        ) : !Array.isArray(filteredProducts) || filteredProducts.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={userRole === 'AUDITOR' ? 11 : 10} className="text-center py-10">
                                     没有找到匹配的产品
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            paginatedProducts.map((product) => {
+                            (Array.isArray(paginatedProducts) ? paginatedProducts : []).map((product) => {
                                 const variance = getPriceVariance(product);
                                 const varianceColor = getPriceVarianceColor(variance);
                                 const productPrices = priceInputs[product.id] || {};

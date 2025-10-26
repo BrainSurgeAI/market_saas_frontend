@@ -1,58 +1,47 @@
-import { TokenPayload } from '@/app/models';
-import { logger } from '@/lib/logger';
-import { jwtDecode } from 'jwt-decode';
+import { NextRequest, NextResponse } from 'next/server';
+import { fetchRemoteData } from '@/lib/api-utils';
 
-
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
-import { NextResponse } from 'next/server';
-
-export async function POST(request: Request) {
-  
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ org_name: string }> }
+) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('auth-token')?.value;
-    if (!token) {
-        logger.error('No token found redirect to login');
-        redirect('/login');
-    }
-
-    const decoded = jwtDecode<TokenPayload>(token);
-    const username = decoded.username;
+    const { org_name } = await params;
     const body = await request.json();
     const { prices } = body;
-    logger.debug(`prices: ${JSON.stringify(prices)}`);
 
-    const backendUrl = `${process.env.BACKEND_API_URL}/api/v1/product_prices`;
-    const response = await fetch(backendUrl, {
+    console.log(`Bulk price update for organization ${org_name}:`, JSON.stringify(prices));
+
+    // 构建后端API端点
+    const endpoint = `/product_prices`;
+
+    // 使用fetchRemoteData调用远程API
+    const response = await fetchRemoteData({
+      endpoint,
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify(prices),
+      body: prices,
+      needToken: true,
+      tags: ['bulk-price-update'],
+      revalidate: 0
     });
 
-    
+    console.log('Bulk price update response:', response);
 
-    if (!response.ok) {
-      logger.error(`Batch update prices error:, ${response.status}`);
+    if (!response.success) {
+      console.error('Bulk price update failed:', response.error);
       return NextResponse.json(
-        { error: response.statusText },
-        { status: response.status }
+        { error: response.error || '批量更新价格失败' },
+        { status: response.status || 500 }
       );
     }
 
-    const data = await response.json();
-
-    return NextResponse.json(data);
+    return NextResponse.json(response.data);
 
   } catch (error) {
-    logger.error(`Batch update prices error:, ${error}`);
+    console.error('Bulk price update error:', error);
     return NextResponse.json(
       { error: '服务器错误，请稍后再试' },
       { status: 500 }
     );
   }
-
 }

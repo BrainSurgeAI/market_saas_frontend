@@ -42,26 +42,16 @@ export default async function ProductsByStatusPage({
     const response = await fetchRemoteData({
       endpoint: `/product_prices/status?status=${apiStatus}&page=${page}&page_size=${page_size}`,
       method: 'GET',
-      tags: [`product_prices_${apiStatus.toLowerCase()}`]
+      tags: [`product_prices_${apiStatus.toLowerCase()}`],
+      revalidate: 0
     });
 
     if (!response.success) {
       throw new Error('No data returned from API');
     }
 
-    const apiData = response.data;
-    console.log(`${apiStatus} API Data:`, apiData);
+    data = response.data.data;
 
-    // 根据实际API响应结构提取数据
-    // 产品数组在 apiData.data.data 中
-    if (apiData?.data?.data && Array.isArray(apiData.data.data)) {
-      data = apiData.data; // 包含 data、total、page、page_size 等信息
-    } else if (Array.isArray(apiData?.data)) {
-      data = apiData; // 直接使用 apiData
-    } else {
-      console.warn(`Unexpected data structure for ${apiStatus}:`, apiData);
-      data = { data: [], total: 0, page: 1, page_size: 10 };
-    }
   } catch (error) {
     logger.error(`Failed to fetch ${apiStatus} products: ${error}`);
     data = { data: [], total: 0, page: 1, page_size: 10 };

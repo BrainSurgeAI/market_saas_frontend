@@ -44,6 +44,7 @@ export async function getWorkspaceData() {
             orgResponse.data
         ]);
 
+        console.log(orgData.data)
         return { 
             user: userData.data, 
             organization: orgData.data, 

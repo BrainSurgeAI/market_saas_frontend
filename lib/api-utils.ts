@@ -310,6 +310,7 @@ export async function fetchRemoteData<T>({
 		}
 
 		const result = await response.json();
+		logger.debug(`Request ${url} - response ${JSON.stringify(result)}`);
 		return {
 			success: true,
 			status: response.status,

@@ -8,7 +8,7 @@ export default async function Workspace() {
   const { user, organization, roles } = await getWorkspaceData();
   
   if (roles.includes('PRICER')) {
-    return <PriceManagePage />;
+    return <PriceManagePage organization={organization} />;
   } else if (roles.includes('ORDER_CREATOR')) {
     return <ProcurementPage user={user} organization={organization} userRole={roles} />;
   }

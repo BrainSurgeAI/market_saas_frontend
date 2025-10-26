@@ -28,12 +28,30 @@ export function PricerDashboard({ productPrices: priceStatus, isAuditor: isAudit
   const router = useRouter();
   const { organization } = useWorkspace();
 
+  // 安全地获取组织名称或hash
+  const orgIdentifier = organization?.nameHash || organization?.id?.toString() || 'unknown';
+
+  console.log('PricerDashboard - organization:', organization);
+  console.log('PricerDashboard - orgIdentifier:', orgIdentifier);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <span className="ml-2 text-lg">加载中...</span>
+      </div>
+    );
+  }
+
+  // 如果没有组织信息，显示错误
+  if (!organization) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">组织信息加载失败</h3>
+          <p className="text-gray-600">请刷新页面重试或联系管理员</p>
+        </div>
       </div>
     );
   }
@@ -52,21 +70,21 @@ export function PricerDashboard({ productPrices: priceStatus, isAuditor: isAudit
             title="今日待报价"
             value={priceStatus.reduce((acc, curr) => acc + curr.products_without_price, 0)}
             icon={<ClipboardList className="h-5 w-5 text-primary" />}
-            linkTo={`/workspace/organizations/${organization.nameHash}/product_prices/entry`}
-          //trend={5} 
+            linkTo={`/workspace/organizations/${orgIdentifier}/product_prices/entry`}
+          //trend={5}
           />
           <StatCard
             title="今日待审核"
             value={priceStatus.reduce((acc, curr) => acc + curr.products_pending, 0)}
             icon={<AlertTriangle className="h-5 w-5 text-primary" />}
-            linkTo={`/workspace/organizations/${organization.nameHash}/product_prices/pending`}
+            linkTo={`/workspace/organizations/${orgIdentifier}/product_prices/pending`}
           //trend={-2}
           />
           <StatCard
             title="今日已发布"
             value={priceStatus.reduce((acc, curr) => acc + curr.products_published, 0)}
             icon={<CheckCircle className="h-5 w-5 text-primary" />}
-            linkTo={`/workspace/organizations/${organization.nameHash}/product_prices/published`}
+            linkTo={`/workspace/organizations/${orgIdentifier}/product_prices/published`}
           //trend={15}
           />
            <StatCard
@@ -82,14 +100,14 @@ export function PricerDashboard({ productPrices: priceStatus, isAuditor: isAudit
 
       <div className="flex flex-wrap gap-3 mb-6">
         {isAuditor && (
-          <Button onClick={() => router.push(`/workspace/organizations/${organization.nameHash}/product_prices/entry`)}>
+          <Button onClick={() => router.push(`/workspace/organizations/${orgIdentifier}/product_prices/entry`)}>
              审核
           </Button>
         )}
 
         {!isAuditor && (
           <>
-            <Button size="sm"  onClick={() => router.push(`/workspace/organizations/${organization.nameHash}/product_prices/entry`)}>
+            <Button size="sm"  onClick={() => router.push(`/workspace/organizations/${orgIdentifier}/product_prices/entry`)}>
              去报价
             </Button>
           </>
