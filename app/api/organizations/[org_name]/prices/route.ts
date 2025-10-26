@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const { prices } = body;
     logger.debug(`prices: ${JSON.stringify(prices)}`);
 
-    const backendUrl = `${process.env.BACKEND_API_URL}/api/v1/users/${username}/product_prices`;
+    const backendUrl = `${process.env.BACKEND_API_URL}/api/v1/product_prices`;
     const response = await fetch(backendUrl, {
       method: 'POST',
       headers: {
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     
 
     if (!response.ok) {
-      logger.error('Login error:', response.statusText);
+      logger.error(`Batch update prices error:, ${response.status}`);
       return NextResponse.json(
         { error: response.statusText },
         { status: response.status }
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     return NextResponse.json(data);
 
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error(`Batch update prices error:, ${error}`);
     return NextResponse.json(
       { error: '服务器错误，请稍后再试' },
       { status: 500 }

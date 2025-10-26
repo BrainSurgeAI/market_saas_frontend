@@ -338,7 +338,8 @@ async function getClientIp(): Promise<string | undefined> {
 			return undefined;
 		}
 
-		const ip = headersList.get('x-forwarded-for')?.split(',')[0].trim() ||
+		const ip =
+			headersList.get('x-forwarded-for')?.split(',')[0].trim() ||
 			headersList.get('x-real-ip') ||
 			headersList.get('cf-connecting-ip');
 

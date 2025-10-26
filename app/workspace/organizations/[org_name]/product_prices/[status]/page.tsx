@@ -38,7 +38,7 @@ export default async function ProductsByStatusPage({
   let data;
   try {
     const response = await fetchRemoteData({
-      endpoint: `/users/${username}/product_prices?status=${apiStatus}`, 
+      endpoint: `/product_prices?status=${apiStatus}`, 
       method: 'GET', 
       tags: [`product_prices_${apiStatus.toLowerCase()}`]
     });

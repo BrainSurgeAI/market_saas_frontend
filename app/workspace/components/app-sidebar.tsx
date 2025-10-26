@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"
 
-import { getNavDataSync } from "@/lib/menu"
+//import { getNavDataSync } from "@/lib/menu"
 import { useWorkspace } from "@/lib/WorkspaceContext"
 import { useUserMenu } from "@/lib/UserMenuContext"
 
@@ -45,13 +45,6 @@ function SidebarSkeleton() {
 export function AppSidebar({ userRole, ...props}: AppSidebarProps) {
     const { user } = useWorkspace();
     const { navData, isLoading, error, userRoles, primaryRole } = useUserMenu();
-
-    // 开发模式下显示调试信息
-    if (process.env.NODE_ENV === 'development') {
-        console.log('AppSidebar - 用户角色:', userRoles);
-        console.log('AppSidebar - 主角色:', primaryRole);
-        console.log('AppSidebar - 菜单数据:', navData);
-    }
 
     if (isLoading || !navData) {
         return <SidebarSkeleton />;

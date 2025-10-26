@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 				);
 			default:
 				return NextResponse.json(
-					{ error: response.error },
+					{ error: "服务器内部错误" },
 					{ status: response.status }
 				);
 		}

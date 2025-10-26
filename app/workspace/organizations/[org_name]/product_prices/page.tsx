@@ -16,7 +16,7 @@ export default async function PriceManagePage() {
   });
 
   if (!response.success) {
-    logger.error(`Failed to fetch product price status stats: ${response.error}`);
+    logger.error(`User ${username} failed to fetch product price status stats: ${response.error}`);
     return <div>Failed to fetch product price status stats</div>;
   }
 
