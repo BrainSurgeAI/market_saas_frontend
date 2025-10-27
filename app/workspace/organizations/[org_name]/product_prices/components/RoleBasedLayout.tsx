@@ -35,9 +35,9 @@ function ReviewerDashboard({ productPrices }: { productPrices: PriceStatus[] }) 
         />
         <StatCard
           title="审核通过"
-          value={productPrices.reduce((acc, curr) => acc + curr.products_published, 0)}
+          value={productPrices.reduce((acc, curr) => acc + curr.products_approved, 0)}
           icon={<CheckCircle className="h-5 w-5 text-green-600" />}
-          linkTo={`/workspace/organizations/${orgName}/product_prices/published`}
+          linkTo={`/workspace/organizations/${orgName}/product_prices/approved`}
         />
         <StatCard
           title="今日拒绝"
@@ -45,12 +45,12 @@ function ReviewerDashboard({ productPrices }: { productPrices: PriceStatus[] }) 
           icon={<ClipboardX className="h-5 w-5 text-red-600" />}
           linkTo={`/workspace/organizations/${orgName}/product_prices/rejected`}
         />
-        <StatCard
+        {/* <StatCard
           title="待录入"
           value={productPrices.reduce((acc, curr) => acc + curr.products_without_price, 0)}
           icon={<AlertCircle className="h-5 w-5 text-blue-600" />}
           linkTo={`/workspace/organizations/${orgName}/product_prices/missing`}
-        />
+        /> */}
       </div>
 
       {/* 快速操作 */}
@@ -96,7 +96,7 @@ function ReviewerDashboard({ productPrices }: { productPrices: PriceStatus[] }) 
       </div>
 
       {/* 审核概览 */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+      {/* <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 border-b border-gray-100">
           <h3 className="font-semibold text-gray-900">各分类价格状态概览</h3>
         </div>
@@ -157,7 +157,7 @@ function ReviewerDashboard({ productPrices }: { productPrices: PriceStatus[] }) 
             </table>
           </div>
         </div>
-      </div>
+      </div> */}
     </div>
   )
 }
@@ -258,16 +258,6 @@ function PricerDashboardWrapper({ productPrices, organization }: { productPrices
 
 export default function RoleBasedLayout({ pricesStatus: productPrices, organization }: RoleBasedLayoutProps) {
   const { userRole, hasPermission } = usePermission()
-
-  console.log('🎭 RoleBasedLayout 渲染:', {
-    userRole,
-    hasPRICER: hasPermission('PRICER'),
-    hasAUDITOR: hasPermission('AUDITOR'),
-    productPrices,
-    productPricesLength: Array.isArray(productPrices) ? productPrices.length : 'not array',
-    firstProductPrice: productPrices[0],
-    organization: organization?.nameHash
-  });
 
   if (hasPermission('PRICER')) {
     return <PricerDashboardWrapper productPrices={productPrices} organization={organization} />
