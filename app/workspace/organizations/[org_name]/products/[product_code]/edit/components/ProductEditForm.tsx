@@ -499,7 +499,7 @@ export default function ProductEditForm({
                   )}
                 />
 
-                <FormField
+                {/* <FormField
                   control={form.control}
                   name="isDisabled"
                   render={({ field }) => (
@@ -519,7 +519,7 @@ export default function ProductEditForm({
                       </div>
                     </FormItem>
                   )}
-                />
+                /> */}
               </div>
             </CardContent>
           </Card>
