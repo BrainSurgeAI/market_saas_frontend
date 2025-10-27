@@ -27,31 +27,31 @@ function ReviewerDashboard({ productPrices }: { productPrices: PriceStatus[] }) 
 
       {/* 审核统计信息 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <StatCard
-            title="待审核"
-            value={productPrices.reduce((acc, curr) => acc + curr.products_pending, 0)}
-            icon={<ClipboardList className="h-5 w-5 text-orange-600" />}
-            linkTo={`/workspace/organizations/${orgName}/product_prices/pending`}
-          />
-          <StatCard
-            title="审核通过"
-            value={productPrices.reduce((acc, curr) => acc + curr.products_published, 0)}
-            icon={<CheckCircle className="h-5 w-5 text-green-600" />}
-            linkTo={`/workspace/organizations/${orgName}/product_prices/published`}
-          />
-          <StatCard
-            title="今日拒绝"
-            value={productPrices.reduce((acc, curr) => acc + curr.products_rejected, 0)}
-            icon={<ClipboardX className="h-5 w-5 text-red-600" />}
-            linkTo={`/workspace/organizations/${orgName}/product_prices/rejected`}
-          />
-          <StatCard
-            title="待录入"
-            value={productPrices.reduce((acc, curr) => acc + curr.products_without_price, 0)}
-            icon={<AlertCircle className="h-5 w-5 text-blue-600" />}
-            linkTo={`/workspace/organizations/${orgName}/product_prices/missing`}
-          />
-        </div>
+        <StatCard
+          title="待审核"
+          value={productPrices.reduce((acc, curr) => acc + curr.products_pending, 0)}
+          icon={<ClipboardList className="h-5 w-5 text-orange-600" />}
+          linkTo={`/workspace/organizations/${orgName}/product_prices/pending`}
+        />
+        <StatCard
+          title="审核通过"
+          value={productPrices.reduce((acc, curr) => acc + curr.products_published, 0)}
+          icon={<CheckCircle className="h-5 w-5 text-green-600" />}
+          linkTo={`/workspace/organizations/${orgName}/product_prices/published`}
+        />
+        <StatCard
+          title="今日拒绝"
+          value={productPrices.reduce((acc, curr) => acc + curr.products_rejected, 0)}
+          icon={<ClipboardX className="h-5 w-5 text-red-600" />}
+          linkTo={`/workspace/organizations/${orgName}/product_prices/rejected`}
+        />
+        <StatCard
+          title="待录入"
+          value={productPrices.reduce((acc, curr) => acc + curr.products_without_price, 0)}
+          icon={<AlertCircle className="h-5 w-5 text-blue-600" />}
+          linkTo={`/workspace/organizations/${orgName}/product_prices/missing`}
+        />
+      </div>
 
       {/* 快速操作 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -177,34 +177,34 @@ function PricerDashboardWrapper({ productPrices, organization }: { productPrices
 
       {/* 录入统计信息 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <StatCard
-            title="待录入"
-            value={productPrices.reduce((acc, curr) => acc + curr.products_without_price, 0)}
-            icon={<AlertCircle className="h-5 w-5 text-blue-600" />}
-            linkTo={`/workspace/organizations/${orgName}/product_prices/entry`}
-          />
-          <StatCard
-            title="已录入"
-            value={productPrices.reduce((acc, curr) => acc + curr.products_published, 0)}
-            icon={<CheckCircle className="h-5 w-5 text-green-600" />}
-            linkTo={`/workspace/organizations/${orgName}/product_prices/published`}
-          />
-          <StatCard
-            title="待审核"
-            value={productPrices.reduce((acc, curr) => acc + curr.products_pending, 0)}
-            icon={<ClipboardList className="h-5 w-5 text-orange-600" />}
-            linkTo={`/workspace/organizations/${orgName}/product_prices/pending`}
-          />
-          <StatCard
-            title="已拒绝"
-            value={productPrices.reduce((acc, curr) => acc + curr.products_rejected, 0)}
-            icon={<ClipboardX className="h-5 w-5 text-red-600" />}
-            linkTo={`/workspace/organizations/${orgName}/product_prices/rejected`}
-          />
-        </div>
+        <StatCard
+          title="待录入"
+          value={productPrices.reduce((acc, curr) => acc + curr.products_without_price, 0)}
+          icon={<AlertCircle className="h-5 w-5 text-blue-600" />}
+          linkTo={`/workspace/organizations/${orgName}/product_prices/entry`}
+        />
+        <StatCard
+          title="已发布"
+          value={productPrices.reduce((acc, curr) => acc + curr.products_published, 0)}
+          icon={<CheckCircle className="h-5 w-5 text-green-600" />}
+          linkTo={`/workspace/organizations/${orgName}/product_prices/published`}
+        />
+        <StatCard
+          title="待审核"
+          value={productPrices.reduce((acc, curr) => acc + curr.products_pending, 0)}
+          icon={<ClipboardList className="h-5 w-5 text-orange-600" />}
+          linkTo={`/workspace/organizations/${orgName}/product_prices/pending`}
+        />
+        <StatCard
+          title="已拒绝"
+          value={productPrices.reduce((acc, curr) => acc + curr.products_rejected, 0)}
+          icon={<ClipboardX className="h-5 w-5 text-red-600" />}
+          linkTo={`/workspace/organizations/${orgName}/product_prices/rejected`}
+        />
+      </div>
 
       {/* 快速操作 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div
           className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => router.push(`/workspace/organizations/${orgName}/product_prices/entry`)}
@@ -243,14 +243,14 @@ function PricerDashboardWrapper({ productPrices, organization }: { productPrices
             </div>
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* 价格录入界面 */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-4 border-b border-gray-100">
+        {/* <div className="p-4 border-b border-gray-100">
           <h3 className="font-semibold text-gray-900">产品价格录入</h3>
         </div>
-        <PricerDashboard productPrices={productPrices} isAuditor={false} />
+        <PricerDashboard productPrices={productPrices} isAuditor={false} /> */}
       </div>
     </div>
   );
@@ -270,15 +270,13 @@ export default function RoleBasedLayout({ pricesStatus: productPrices, organizat
   });
 
   if (hasPermission('PRICER')) {
-    console.log('✅ 显示 PRICER 仪表板');
     return <PricerDashboardWrapper productPrices={productPrices} organization={organization} />
   }
 
   if (hasPermission('AUDITOR')) {
-    console.log('✅ 显示 AUDITOR 仪表板');
     return <ReviewerDashboard productPrices={productPrices} />
   }
-  
+
   return (
     <div className="flex items-center justify-center h-screen">
       <div className="text-center">
