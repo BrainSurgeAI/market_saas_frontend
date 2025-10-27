@@ -3,10 +3,10 @@ import { fetchRemoteData } from '@/src/lib/api/api-utils';
 
 export async function PATCH(
     request: NextRequest,
-    { params }: { params: { org_name: string } }
+    { params }: { params: Promise<{ org_name: string }> }
 ) {
     try {
-        const { org_name } = params;
+        const { org_name } = await params;
 
         // Get request body
         const body = await request.json();

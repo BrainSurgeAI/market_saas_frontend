@@ -1,7 +1,7 @@
 'use client'
 
 import { usePermission } from "@/app/context/permission-context"
-import { PricerDashboard } from "./pricer-dashboard"
+//import { PricerDashboard } from "./pricer-dashboard"
 import { PriceStatus, Organization } from "@/app/models"
 import { StatCard } from "./stat-card"
 import { CheckCircle, ClipboardList, ClipboardX, AlertCircle } from "lucide-react"

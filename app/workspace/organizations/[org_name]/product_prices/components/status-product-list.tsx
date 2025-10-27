@@ -6,25 +6,40 @@ import { usePermission } from "@/app/context/permission-context";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
-  CheckCircle, 
-  XCircle, 
-  Search, 
-  Clock, 
-  ChevronDown, 
+import {
+  CheckCircle,
+  XCircle,
+  Search,
+  Clock,
+  ChevronDown,
   ChevronUp,
   Download,
-  Eye 
+  Eye,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 
-import { 
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
+import { fetchRemoteData } from '@/lib/api-utils';
 import { format } from 'date-fns';
 import { Card } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Pagination,
   PaginationContent,
@@ -77,6 +92,19 @@ export default function StatusProductList({ products, status, orgName, paginatio
   const router = useRouter();
   const { userRole, hasPermission } = usePermission();
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+
+  // 单个产品审核状态
+  const [singleRejectDialogOpen, setSingleRejectDialogOpen] = useState(false);
+  const [singleRejectReason, setSingleRejectReason] = useState('');
+  const [currentProductId, setCurrentProductId] = useState<number | null>(null);
+
+  // 拒绝原因字符限制
+  const MAX_REJECT_REASON_LENGTH = 32;
+  const MIN_REJECT_REASON_LENGTH = 4;
 
   console.log('StatusProductList initialized:', {
     products,
@@ -85,8 +113,9 @@ export default function StatusProductList({ products, status, orgName, paginatio
     orgName
   });
 
-  // 只有 AUDITOR 角色才能看到操作列
+  // 只有 AUDITOR 角色才能看到操作列和批量选择
   const shouldShowActions = userRole === 'AUDITOR';
+  const canBatchSelect = shouldShowActions && status === 'PENDING';
   const [sortConfig, setSortConfig] = useState<{
     key: keyof Product | null;
     direction: 'ascending' | 'descending' | null;
@@ -173,21 +202,277 @@ export default function StatusProductList({ products, status, orgName, paginatio
   };
 
   // 审核通过
-  const handleApprove = (productId: number) => {
-    // TODO: 实现审核通过逻辑
-    console.log(`Approve product ${productId}`);
+  const handleApprove = async (productId: number) => {
+    if (isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const response = await fetchRemoteData({
+        endpoint: `/tenants/${orgName}/prices/approve-price`,
+        method: 'PATCH',
+        body: {
+          status: 'approved',
+          products: [productId], // 将单个产品ID放入数组
+          remark: '审核通过'
+        },
+        needToken: true
+      });
+
+      if (response.success) {
+        console.log(`产品 ${productId} 审核通过成功:`, response.data);
+        // 刷新页面数据
+        window.location.reload();
+      } else {
+        console.error(`产品 ${productId} 审核通过失败:`, response.error);
+      }
+    } catch (error) {
+      console.error(`产品 ${productId} 审核通过出错:`, error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  // 审核拒绝
+  // 审核拒绝 - 打开单个产品拒绝对话框
   const handleReject = (productId: number) => {
-    // TODO: 实现审核拒绝逻辑
-    console.log(`Reject product ${productId}`);
+    if (isProcessing) return;
+
+    setCurrentProductId(productId);
+    setSingleRejectDialogOpen(true);
   };
 
   // 导出数据
   const handleExport = () => {
     // TODO: 实现导出逻辑
     console.log('Export data');
+  };
+
+  // 处理产品选择
+  const handleProductSelect = (productId: number, checked: boolean) => {
+    if (checked) {
+      setSelectedProducts(prev => [...prev, productId]);
+    } else {
+      setSelectedProducts(prev => prev.filter(id => id !== productId));
+    }
+  };
+
+  // 处理全选/取消全选
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedProducts(filteredProducts.map(product => product.id));
+    } else {
+      setSelectedProducts([]);
+    }
+  };
+
+  // 批量审核通过
+  const handleBatchApprove = async () => {
+    if (selectedProducts.length === 0) {
+      console.log('No products selected for approval');
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const response = await fetchRemoteData({
+        endpoint: `/tenants/${orgName}/prices/approve-price`,
+        method: 'PATCH',
+        body: {
+          status: 'approved',
+          products: selectedProducts,
+          remark: '批量审核通过'
+        },
+        needToken: true
+      });
+
+      if (response.success) {
+        console.log('批量审核通过成功:', response.data);
+        setSelectedProducts([]);
+        // 刷新页面数据
+        window.location.reload();
+      } else {
+        console.error('批量审核通过失败:', response.error);
+      }
+    } catch (error) {
+      console.error('批量审核通过出错:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 批量审核拒绝
+  const handleBatchReject = async () => {
+    if (selectedProducts.length === 0) {
+      console.log('No products selected for rejection');
+      return;
+    }
+
+    // 打开拒绝原因对话框
+    setRejectDialogOpen(true);
+  };
+
+  // 执行批量拒绝
+  const executeBatchReject = async () => {
+    const trimmedReason = rejectReason.trim();
+
+    if (!trimmedReason) {
+      return;
+    }
+
+    if (trimmedReason.length < MIN_REJECT_REASON_LENGTH) {
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const response = await fetchRemoteData({
+        endpoint: `/tenants/${orgName}/prices/approve-price`,
+        method: 'PATCH',
+        body: {
+          status: 'rejected',
+          products: selectedProducts,
+          remark: trimmedReason
+        },
+        needToken: true
+      });
+
+      if (response.success) {
+        console.log('批量审核拒绝成功:', response.data);
+        setSelectedProducts([]);
+        setRejectReason('');
+        setRejectDialogOpen(false);
+        // 刷新页面数据
+        window.location.reload();
+      } else {
+        console.error('批量审核拒绝失败:', response.error);
+      }
+    } catch (error) {
+      console.error('批量审核拒绝出错:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 处理拒绝原因输入变化
+  const handleRejectReasonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    if (value.length <= MAX_REJECT_REASON_LENGTH) {
+      setRejectReason(value);
+    }
+  };
+
+  // 检查拒绝原因是否有效
+  const isRejectReasonValid = () => {
+    const trimmedReason = rejectReason.trim();
+    return trimmedReason.length >= MIN_REJECT_REASON_LENGTH &&
+           trimmedReason.length <= MAX_REJECT_REASON_LENGTH;
+  };
+
+  // 获取字符计数显示文本
+  const getCharacterCountText = () => {
+    const currentLength = rejectReason.trim().length;
+    return `${currentLength}/${MAX_REJECT_REASON_LENGTH} 字`;
+  };
+
+  // 获取字符计数样式
+  const getCharacterCountClassName = () => {
+    const currentLength = rejectReason.trim().length;
+    if (currentLength < MIN_REJECT_REASON_LENGTH) {
+      return 'text-xs text-red-500 text-right';
+    } else if (currentLength >= MAX_REJECT_REASON_LENGTH) {
+      return 'text-xs text-orange-500 text-right';
+    }
+    return 'text-xs text-muted-foreground text-right';
+  };
+
+  // 关闭批量拒绝对话框
+  const handleRejectDialogClose = () => {
+    setRejectDialogOpen(false);
+    setRejectReason('');
+  };
+
+  // 执行单个产品拒绝
+  const executeSingleReject = async () => {
+    const trimmedReason = singleRejectReason.trim();
+
+    if (!trimmedReason) {
+      return;
+    }
+
+    if (trimmedReason.length < MIN_REJECT_REASON_LENGTH) {
+      return;
+    }
+
+    if (currentProductId === null) {
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const response = await fetchRemoteData({
+        endpoint: `/tenants/${orgName}/prices/approve-price`,
+        method: 'PATCH',
+        body: {
+          status: 'rejected',
+          products: [currentProductId], // 将单个产品ID放入数组
+          remark: trimmedReason
+        },
+        needToken: true
+      });
+
+      if (response.success) {
+        console.log(`产品 ${currentProductId} 审核拒绝成功:`, response.data);
+        setSingleRejectReason('');
+        setSingleRejectDialogOpen(false);
+        setCurrentProductId(null);
+        // 刷新页面数据
+        window.location.reload();
+      } else {
+        console.error(`产品 ${currentProductId} 审核拒绝失败:`, response.error);
+      }
+    } catch (error) {
+      console.error(`产品 ${currentProductId} 审核拒绝出错:`, error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 处理单个产品拒绝原因输入变化
+  const handleSingleRejectReasonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    if (value.length <= MAX_REJECT_REASON_LENGTH) {
+      setSingleRejectReason(value);
+    }
+  };
+
+  // 检查单个产品拒绝原因是否有效
+  const isSingleRejectReasonValid = () => {
+    const trimmedReason = singleRejectReason.trim();
+    return trimmedReason.length >= MIN_REJECT_REASON_LENGTH &&
+           trimmedReason.length <= MAX_REJECT_REASON_LENGTH;
+  };
+
+  // 获取单个产品字符计数显示文本
+  const getSingleCharacterCountText = () => {
+    const currentLength = singleRejectReason.trim().length;
+    return `${currentLength}/${MAX_REJECT_REASON_LENGTH} 字`;
+  };
+
+  // 获取单个产品字符计数样式
+  const getSingleCharacterCountClassName = () => {
+    const currentLength = singleRejectReason.trim().length;
+    if (currentLength < MIN_REJECT_REASON_LENGTH) {
+      return 'text-xs text-red-500 text-right';
+    } else if (currentLength >= MAX_REJECT_REASON_LENGTH) {
+      return 'text-xs text-orange-500 text-right';
+    }
+    return 'text-xs text-muted-foreground text-right';
+  };
+
+  // 关闭单个产品拒绝对话框
+  const handleSingleRejectDialogClose = () => {
+    setSingleRejectDialogOpen(false);
+    setSingleRejectReason('');
+    setCurrentProductId(null);
   };
 
   return (
@@ -204,6 +489,28 @@ export default function StatusProductList({ products, status, orgName, paginatio
         </div>
         
         <div className="flex gap-2 w-full sm:w-auto justify-end">
+          {canBatchSelect && selectedProducts.length > 0 && (
+            <>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleBatchApprove}
+                disabled={isProcessing}
+              >
+                <CheckCircle className="h-4 w-4 mr-1" />
+                批量通过 ({selectedProducts.length})
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleBatchReject}
+                disabled={isProcessing}
+              >
+                <XCircle className="h-4 w-4 mr-1" />
+                批量拒绝 ({selectedProducts.length})
+              </Button>
+            </>
+          )}
           {/* {status === 'PENDING' && (
             <Button variant="outline" size="sm" onClick={handleExport}>
               <Download className="h-4 w-4 mr-1" />
@@ -217,15 +524,24 @@ export default function StatusProductList({ products, status, orgName, paginatio
         <Table>
           <TableHeader>
             <TableRow>
+              {canBatchSelect && (
+                <TableHead className="w-[50px]">
+                  <Checkbox
+                    checked={selectedProducts.length === filteredProducts.length && filteredProducts.length > 0}
+                    onCheckedChange={handleSelectAll}
+                    aria-label="全选"
+                  />
+                </TableHead>
+              )}
               <TableHead className="w-[250px]">
-                <div 
+                <div
                   className="flex items-center cursor-pointer"
                   onClick={() => handleSort('name')}
                 >
                   产品名称
                   {sortConfig.key === 'name' && (
-                    sortConfig.direction === 'ascending' ? 
-                      <ChevronUp className="ml-1 h-4 w-4" /> : 
+                    sortConfig.direction === 'ascending' ?
+                      <ChevronUp className="ml-1 h-4 w-4" /> :
                       <ChevronDown className="ml-1 h-4 w-4" />
                   )}
                 </div>
@@ -321,7 +637,7 @@ export default function StatusProductList({ products, status, orgName, paginatio
               <TableRow>
                 <TableCell
                   colSpan={
-                    (status === 'REJECTED' ? 7 : 6) + (shouldShowActions ? 1 : 0)
+                    (status === 'REJECTED' ? 7 : 6) + (shouldShowActions ? 1 : 0) + (canBatchSelect ? 1 : 0)
                   }
                   className="text-center py-8 text-muted-foreground"
                 >
@@ -331,6 +647,15 @@ export default function StatusProductList({ products, status, orgName, paginatio
             ) : (
               filteredProducts.map((product) => (
                 <TableRow key={product.id}>
+                  {canBatchSelect && (
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedProducts.includes(product.id)}
+                        onCheckedChange={(checked) => handleProductSelect(product.id, checked as boolean)}
+                        aria-label={`选择产品 ${product.name}`}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell className="font-sm">{product.name}</TableCell>
                   <TableCell className='font-sm'>{product.category}</TableCell>
                   <TableCell className="text-right font-mono">{product.maxPrice}</TableCell>
@@ -491,6 +816,120 @@ export default function StatusProductList({ products, status, orgName, paginatio
           {pagination && `，总共 ${pagination.total} 条`}
         </p>
       </div>
+
+      {/* 拒绝原因对话框 */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>批量审核拒绝</DialogTitle>
+            <DialogDescription>
+              您选择了 {selectedProducts.length} 个产品进行拒绝操作。请输入拒绝原因（{MIN_REJECT_REASON_LENGTH}-{MAX_REJECT_REASON_LENGTH}字）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-start gap-4">
+              <Label htmlFor="rejectReason" className="text-right mt-2">
+                拒绝原因
+              </Label>
+              <div className="col-span-3 space-y-2">
+                <Textarea
+                  id="rejectReason"
+                  placeholder="请输入拒绝原因..."
+                  value={rejectReason}
+                  onChange={handleRejectReasonChange}
+                  className="min-h-[100px] resize-none"
+                  disabled={isProcessing}
+                  maxLength={MAX_REJECT_REASON_LENGTH}
+                />
+                <div className={getCharacterCountClassName()}>
+                  {getCharacterCountText()}
+                  {rejectReason.trim().length < MIN_REJECT_REASON_LENGTH && (
+                    <span className="ml-1">（最少{MIN_REJECT_REASON_LENGTH}字）</span>
+                  )}
+                </div>
+                {rejectReason.trim().length > 0 && rejectReason.trim().length < MIN_REJECT_REASON_LENGTH && (
+                  <div className="text-xs text-red-500">
+                    拒绝原因至少需要{MIN_REJECT_REASON_LENGTH}个字
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={handleRejectDialogClose}
+              disabled={isProcessing}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={executeBatchReject}
+              disabled={!isRejectReasonValid() || isProcessing}
+            >
+              {isProcessing ? '处理中...' : '确认拒绝'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 单个产品拒绝原因对话框 */}
+      <Dialog open={singleRejectDialogOpen} onOpenChange={setSingleRejectDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>审核拒绝</DialogTitle>
+            <DialogDescription>
+              请输入拒绝原因（{MIN_REJECT_REASON_LENGTH}-{MAX_REJECT_REASON_LENGTH}字）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-start gap-4">
+              <Label htmlFor="singleRejectReason" className="text-right mt-2">
+                拒绝原因
+              </Label>
+              <div className="col-span-3 space-y-2">
+                <Textarea
+                  id="singleRejectReason"
+                  placeholder="请输入拒绝原因..."
+                  value={singleRejectReason}
+                  onChange={handleSingleRejectReasonChange}
+                  className="min-h-[100px] resize-none"
+                  disabled={isProcessing}
+                  maxLength={MAX_REJECT_REASON_LENGTH}
+                />
+                <div className={getSingleCharacterCountClassName()}>
+                  {getSingleCharacterCountText()}
+                  {singleRejectReason.trim().length < MIN_REJECT_REASON_LENGTH && (
+                    <span className="ml-1">（最少{MIN_REJECT_REASON_LENGTH}字）</span>
+                  )}
+                </div>
+                {singleRejectReason.trim().length > 0 && singleRejectReason.trim().length < MIN_REJECT_REASON_LENGTH && (
+                  <div className="text-xs text-red-500">
+                    拒绝原因至少需要{MIN_REJECT_REASON_LENGTH}个字
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={handleSingleRejectDialogClose}
+              disabled={isProcessing}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={executeSingleReject}
+              disabled={!isSingleRejectReasonValid() || isProcessing}
+            >
+              {isProcessing ? '处理中...' : '确认拒绝'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 } 
