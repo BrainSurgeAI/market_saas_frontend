@@ -11,27 +11,32 @@ interface StatusBarProps {
     getStatusStyle: (status: string) => string;
     getStatusText: (status: string) => string;
     productId: number;
+    userRole?: string;
     onSave?: (productId: number) => void;
     hasChanges?: boolean;
 }
 
-export default function StatusCell({ 
-    status, 
+export default function StatusCell({
+    status,
     priceSource,
-    saveStatus, 
-    draftStatus, 
-    getStatusStyle, 
+    saveStatus,
+    draftStatus,
+    getStatusStyle,
     getStatusText,
     productId,
+    userRole,
     onSave,
     hasChanges = false
 }: StatusBarProps) {
-    // 判断是否显示保存按钮
-    // 只有在状态为 REJECTED 或者价格来源是历史或者状态为null/undefined时，才显示保存按钮
-    console.log(status);
-    const isEditable = status === 'REJECTED' || (priceSource === 'HISTORY') || status === null || status === undefined;
-    const showSaveButton = isEditable && (hasChanges || !draftStatus);
-    
+    // 只有PRICER角色才能保存REJECTED状态的价格
+    const canSaveByRole = userRole === 'PRICER';
+
+    // 基础编辑权限：状态为 REJECTED 或者价格来源是历史或者状态为null/undefined时
+    const isBasicEditable = status === 'REJECTED' || (priceSource === 'HISTORY') || status === null || status === undefined;
+
+    // 最终保存权限：基础权限 + 角色权限
+    const showSaveButton = isBasicEditable && canSaveByRole && (hasChanges || !draftStatus);
+
     // 处理保存按钮点击
     const handleSaveClick = () => {
         if (onSave) {
@@ -40,8 +45,8 @@ export default function StatusCell({
     };
 
     // 检查是否显示状态标签
-    // 当有状态且不可编辑时显示状态标签
-    const showStatusBadge = status !== null && status !== undefined && status !== '' && !isEditable;
+    // 当有状态且基础不可编辑时显示状态标签
+    const showStatusBadge = status !== null && status !== undefined && status !== '' && !isBasicEditable;
 
     return (
         <TableCell className="w-[80px] text-right text-xs">

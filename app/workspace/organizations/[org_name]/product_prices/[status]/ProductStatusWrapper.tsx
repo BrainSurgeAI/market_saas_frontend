@@ -2,6 +2,7 @@
 
 import { PermissionProvider, UserRole } from "@/app/context/permission-context";
 import StatusProductList from "../components/status-product-list";
+import RejectedProductList from "../components/rejected-product-list";
 
 interface PaginationData {
   total: number;
@@ -28,13 +29,22 @@ export default function ProductStatusWrapper({
 }: ProductStatusWrapperProps) {
   return (
     <PermissionProvider initialRole={userRole}>
-      <StatusProductList
-        products={products}
-        status={status}
-        orgName={orgName}
-        pagination={pagination}
-        baseUrl={baseUrl}
-      />
+      {status === 'REJECTED' ? (
+        <RejectedProductList
+          products={products}
+          orgName={orgName}
+          pagination={pagination}
+          baseUrl={baseUrl}
+        />
+      ) : (
+        <StatusProductList
+          products={products}
+          status={status}
+          orgName={orgName}
+          pagination={pagination}
+          baseUrl={baseUrl}
+        />
+      )}
     </PermissionProvider>
   );
 } 

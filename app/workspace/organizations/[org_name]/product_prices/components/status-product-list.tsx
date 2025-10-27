@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePermission } from "@/app/context/permission-context";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -16,7 +16,10 @@ import {
   Download,
   Eye,
   CheckSquare,
-  Square
+  Square,
+  Upload,
+  Loader2,
+  Check
 } from 'lucide-react';
 
 import {
@@ -37,9 +40,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogAction,
+  AlertDialogCancel,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import PriceEditComponent from './price-edit-component';
+import PriceInputCell from './Table/PriceInputCell';
 import {
   Pagination,
   PaginationContent,
@@ -49,6 +61,9 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { toast } from "@/hooks/use-toast";
+import { loadFromIndexedDB, openDatabase, saveToIndexedDB, STORE_NAME } from "@/lib/indexedDB";
+import { formatDate } from "../helpers";
 
 // 状态文本和样式映射
 const STATUS_BADGES = {
@@ -102,6 +117,10 @@ export default function StatusProductList({ products, status, orgName, paginatio
   const [singleRejectReason, setSingleRejectReason] = useState('');
   const [currentProductId, setCurrentProductId] = useState<number | null>(null);
 
+  // 价格编辑状态
+  const [showPriceEdit, setShowPriceEdit] = useState(false);
+  const [selectedProductForEdit, setSelectedProductForEdit] = useState<Product | null>(null);
+
   // 拒绝原因字符限制
   const MAX_REJECT_REASON_LENGTH = 32;
   const MIN_REJECT_REASON_LENGTH = 4;
@@ -113,9 +132,9 @@ export default function StatusProductList({ products, status, orgName, paginatio
     orgName
   });
 
-  // 只有 AUDITOR 角色才能看到操作列和批量选择
-  const shouldShowActions = userRole === 'AUDITOR';
-  const canBatchSelect = shouldShowActions && status === 'PENDING';
+  // 只有 AUDITOR 角色才能看到批量选择，但PRICER角色在REJECTED状态时可以看到操作
+  const shouldShowActions = userRole === 'AUDITOR' || (userRole === 'PRICER' && status === 'REJECTED');
+  const canBatchSelect = shouldShowActions && status === 'PENDING' && userRole === 'AUDITOR';
   const [sortConfig, setSortConfig] = useState<{
     key: keyof Product | null;
     direction: 'ascending' | 'descending' | null;
@@ -475,6 +494,24 @@ export default function StatusProductList({ products, status, orgName, paginatio
     setCurrentProductId(null);
   };
 
+  // 处理价格编辑
+  const handlePriceEdit = (product: Product) => {
+    setSelectedProductForEdit(product);
+    setShowPriceEdit(true);
+  };
+
+  // 关闭价格编辑
+  const handleClosePriceEdit = () => {
+    setShowPriceEdit(false);
+    setSelectedProductForEdit(null);
+  };
+
+  // 价格编辑成功后的回调
+  const handlePriceEditSuccess = () => {
+    // 刷新页面数据
+    window.location.reload();
+  };
+
   return (
     <Card className="overflow-hidden">
       <div className="p-4 bg-white border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -629,7 +666,11 @@ export default function StatusProductList({ products, status, orgName, paginatio
                   拒绝原因
                 </TableHead>
               )}
-              {shouldShowActions && <TableHead className="text-center">操作</TableHead>}
+              {shouldShowActions && (
+                <TableHead className="text-center">
+                  {userRole === 'PRICER' && status === 'REJECTED' ? '价格操作' : '操作'}
+                </TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -675,33 +716,58 @@ export default function StatusProductList({ products, status, orgName, paginatio
                   {shouldShowActions && (
                     <TableCell>
                       <div className="flex justify-center space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleViewProduct(product.id)}
-                          title="查看详情"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        {userRole === 'PRICER' && status === 'REJECTED' ? (
+                          // PRICER角色在REJECTED状态下显示编辑价格按钮
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handlePriceEdit(product)}
+                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                            >
+                              修改价格
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleViewProduct(product.id)}
+                              title="查看详情"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          // AUDITOR角色的操作按钮
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleViewProduct(product.id)}
+                              title="查看详情"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
 
-                        {status === 'PENDING' && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <ChevronDown className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleApprove(product.id)}>
-                                <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
-                                审核通过
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleReject(product.id)}>
-                                <XCircle className="h-4 w-4 mr-2 text-red-500" />
-                                拒绝
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                            {status === 'PENDING' && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon">
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleApprove(product.id)}>
+                                    <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                                    审核通过
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleReject(product.id)}>
+                                    <XCircle className="h-4 w-4 mr-2 text-red-500" />
+                                    拒绝
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </>
                         )}
                       </div>
                     </TableCell>
@@ -930,6 +996,20 @@ export default function StatusProductList({ products, status, orgName, paginatio
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 价格编辑组件 */}
+      {showPriceEdit && selectedProductForEdit && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
+            <PriceEditComponent
+              product={selectedProductForEdit}
+              orgName={orgName}
+              onClose={handleClosePriceEdit}
+              onSuccess={handlePriceEditSuccess}
+            />
+          </div>
+        </div>
+      )}
     </Card>
   );
 } 
