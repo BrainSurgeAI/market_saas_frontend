@@ -113,10 +113,11 @@ export default function ProductsTable({
       }
       
       const data = await response.json();
-      
+
       // 更新产品列表
-      setProducts(data.products || []);
-      setFilteredProducts(data.products || []);
+      const products = data.data?.products || data.products || [];
+      setProducts(products);
+      setFilteredProducts(products);
     } catch (error) {
       console.error('获取产品出错:', error);
       toast({

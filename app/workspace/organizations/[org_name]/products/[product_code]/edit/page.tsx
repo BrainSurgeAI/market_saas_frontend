@@ -21,7 +21,7 @@ async function getProductData(orgName: string, productCode: string) {
     const productData = productResponse.data.data;
 
     const processingFeesResponse = await fetchRemoteData ({
-      endpoint: '/processing_fees',
+      endpoint: '/processing-fees',
       method: 'GET',
       needToken: true,
       revalidate: 0
