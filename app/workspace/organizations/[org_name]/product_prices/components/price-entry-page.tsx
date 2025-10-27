@@ -1397,6 +1397,7 @@ export function PriceEntryPage({
                                             placeholder={`${product.lastMaxPrice}`}
                                             priceSource={product.priceSource}
                                             status={product.status}
+                                            userRole={userRole}
                                             onPriceChange={handlePriceChange}
                                         />
                                         <PriceInputCell
@@ -1406,6 +1407,7 @@ export function PriceEntryPage({
                                             placeholder={`${product.lastMinPrice}`}
                                             priceSource={product.priceSource}
                                             status={product.status}
+                                            userRole={userRole}
                                             onPriceChange={handlePriceChange}
                                         />
                                         <TableCell className="w-[48px] text-right font-medium text-xs font-mono">
@@ -1430,17 +1432,45 @@ export function PriceEntryPage({
                                                 priceSource={product.priceSource}
                                                 saveStatus={saveStatus[product.id]}
                                                 draftStatus={draftStatus[product.id]}
+                                                userRole={userRole}
                                                 getStatusStyle={getStatusStyle}
                                                 getStatusText={getStatusText}
                                                 onSave={handleSaveProduct}
                                                 hasChanges={
                                                     // 检查是否有修改过的价格数据
-                                                    productPrices.minPrice !== undefined ||
-                                                    productPrices.maxPrice !== undefined ||
-                                                    productPrices.avgPrice !== undefined ||
-                                                    product.lastMinPrice !== undefined ||
-                                                    product.lastMaxPrice !== undefined ||
-                                                    product.lastAvgPrice !== undefined
+                                                    (() => {
+                                                        const currentMinPrice = productPrices.minPrice !== undefined && productPrices.minPrice !== ''
+                                                            ? parseFloat(productPrices.minPrice.toString())
+                                                            : null;
+                                                        const currentMaxPrice = productPrices.maxPrice !== undefined && productPrices.maxPrice !== ''
+                                                            ? parseFloat(productPrices.maxPrice.toString())
+                                                            : null;
+
+                                                        // 获取原始价格
+                                                        const originalMinPrice = product.minPrice > 0 ? product.minPrice : product.lastMinPrice;
+                                                        const originalMaxPrice = product.maxPrice > 0 ? product.maxPrice : product.lastMaxPrice;
+
+                                                        // 检查是否有变化
+                                                        const minPriceChanged = currentMinPrice !== null && currentMinPrice !== originalMinPrice;
+                                                        const maxPriceChanged = currentMaxPrice !== null && currentMaxPrice !== originalMaxPrice;
+                                                        const hasChangesResult = minPriceChanged || maxPriceChanged;
+
+                                                        // 调试信息
+                                                        console.log('HasChanges Debug:', {
+                                                            productId: product.id,
+                                                            productName: product.name,
+                                                            currentMinPrice,
+                                                            currentMaxPrice,
+                                                            originalMinPrice,
+                                                            originalMaxPrice,
+                                                            minPriceChanged,
+                                                            maxPriceChanged,
+                                                            hasChangesResult,
+                                                            productPrices
+                                                        });
+
+                                                        return hasChangesResult;
+                                                    })()
                                                 }
                                             />
                                         )}

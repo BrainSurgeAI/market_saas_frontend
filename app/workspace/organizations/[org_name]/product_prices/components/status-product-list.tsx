@@ -68,6 +68,7 @@ import { formatDate } from "../helpers";
 // 状态文本和样式映射
 const STATUS_BADGES = {
   'PENDING': { label: '待审核', variant: 'warning' as const, icon: <Clock className="h-4 w-4 mr-1" /> },
+  'APPROVED': { label: '已通过', variant: 'default' as const, icon: <CheckCircle className="h-4 w-4 mr-1" /> },
   'PUBLISHED': { label: '已发布', variant: 'success' as const, icon: <CheckCircle className="h-4 w-4 mr-1" /> },
   'REJECTED': { label: '已拒绝', variant: 'destructive' as const, icon: <XCircle className="h-4 w-4 mr-1" /> },
 };

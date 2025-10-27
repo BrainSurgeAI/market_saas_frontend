@@ -6,6 +6,7 @@ import { fetchRemoteData, getUserRoles } from "@/lib/api-utils";
 const STATUS_MAP: Record<string, string> = {
   'pending': 'PENDING',
   'entry': 'PENDING',  // 'entry'也映射到待处理
+  'approved': 'APPROVED',
   'published': 'PUBLISHED',
   'rejected': 'REJECTED'
 };
@@ -14,6 +15,7 @@ const STATUS_MAP: Record<string, string> = {
 const STATUS_DISPLAY: Record<string, string> = {
   'pending': '待审核产品',
   'entry': '待录入产品',
+  'approved': '已通过产品',
   'published': '已发布产品',
   'rejected': '已拒绝产品'
 };

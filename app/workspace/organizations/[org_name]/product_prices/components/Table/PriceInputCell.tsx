@@ -23,11 +23,17 @@ export default function PriceInputCell({
   userRole,
   onPriceChange
 }: PriceInputCellProps) {
-  // 只有PRICER角色才能编辑REJECTED状态的价格
+  // 只有PRICER角色才能编辑价格
   const canEditByRole = userRole === 'PRICER';
 
-  // 基础编辑权限：状态为 REJECTED 或者价格来源是历史且没有提交的情况下
-  const isBasicEditable = status === 'REJECTED' || (priceSource === 'HISTORY') || Number(placeholder) === 0;
+  // 基础编辑权限：根据不同状态决定是否可编辑
+  // - PENDING状态：允许编辑（待审核产品可以修改价格）
+  // - REJECTED状态：允许编辑（被拒绝的产品可以重新编辑价格）
+  // - 或者价格来源是历史且没有占位符的情况下（新产品或历史价格）
+  const isBasicEditable = status === 'PENDING' ||
+                        status === 'REJECTED' ||
+                        (priceSource === 'HISTORY') ||
+                        Number(placeholder) === 0;
 
   // 最终编辑权限：基础权限 + 角色权限
   const isEditable = isBasicEditable && canEditByRole;
