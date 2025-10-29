@@ -13,9 +13,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 	const { market_id } = await params;
 
 	const response = await fetchRemoteData({
-		endpoint: `/markets/${market_id}/providers`,
+		endpoint: `/providers`,
 		method: 'GET',
-		tags: ['providers'],
+		tags: [`providers-${market_id}`],
 		needToken: true
 	});
 

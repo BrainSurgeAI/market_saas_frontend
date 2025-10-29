@@ -11,7 +11,7 @@ export async function GET(
 ): Promise<NextResponse> {
 	const { customer_id, product_code } = await params;
 	const response = await fetchRemoteData({
-		endpoint: `/tenants/${customer_id}/products/${product_code}`,
+		endpoint: `/products/${product_code}`,
 		method: 'GET',
 		needToken: true,
 		tags: [`product_detail_${product_code}`],

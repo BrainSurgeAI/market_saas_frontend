@@ -87,7 +87,7 @@ export function CreateUserDialog({
   const roleOptions = tenantType === "PROVIDER"
     ? [
         { value: "PROVIDER_ADMIN", label: "供应商管理员", adminRole: true },
-        { value: "PROVIDER", label: "用户", adminRole: false },
+        { value: "STAFF", label: "用户", adminRole: false },
       ]
     : tenantType === "CUSTOMER"
     ? [

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function TenantManagementPage({ params }: { params: Promise<{ market_id: string }> }) {
   const { market_id } = await params;
-  const response = await fetchRemoteData({ endpoint: `/markets/${market_id}/tenants`, method: 'GET', tags: ['tenants'] });
+  const response = await fetchRemoteData({ endpoint: `/tenants`, method: 'GET', tags: ['tenants'] });
   if (!response.success) {
     return <div>获取租户数据失败</div>;
   }

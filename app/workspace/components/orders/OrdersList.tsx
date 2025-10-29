@@ -82,7 +82,7 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 	const statusOptions = [
 		{ value: "ALL", label: "全部状态" },
 		{ value: "PENDING", label: "待指派" },
-		{ value: "CONFIRMED", label: "已指派" },
+		{ value: "ASSIGNED", label: "已指派" },
 		{ value: "PROCESSING", label: "备货中" },
 		{ value: "STOCKED", label: "正在交付" },
 		{ value: "COMPLETED", label: "已完成" },

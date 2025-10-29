@@ -9,7 +9,7 @@ export function cn(...inputs: ClassValue[]) {
 export function translateOrderStatus(status: string): string {
   const statusMap: Record<string, string> = {
     "PENDING": "待指派",
-    "CONFIRMED": "已指派",
+    "ASSIGNED": "已指派",
     "PROCESSING": "备货中",
     "STOCKED": "正在交付",
     "COMPLETED": "已完成",
@@ -20,7 +20,7 @@ export function translateOrderStatus(status: string): string {
   return statusMap[status] || status;
 }
 
-export function getStatusVariant(status: string): "default" | "success" | "primary" | "warning" | "outline" | "destructive" | "secondary" | "orderPending" | "orderConfirmed" | "orderProcessing" | "orderStocked" | "orderCompleted" | "orderCanceled" {
+export function getStatusVariant(status: string): "default" | "success" | "primary" | "warning" | "outline" | "destructive" | "secondary" | "orderPending" | "orderAssigned" | "orderProcessing" | "orderStocked" | "orderCompleted" | "orderCanceled" {
   switch (status) {
     case "COMPLETED":
       return "orderCompleted";
@@ -30,8 +30,8 @@ export function getStatusVariant(status: string): "default" | "success" | "prima
       return "orderPending";
     case "PROCESSING":
       return "orderProcessing";
-    case "CONFIRMED":
-      return "orderConfirmed";
+    case "ASSIGNED":
+      return "orderAssigned";
     case "REJECTED":
       return "warning";
     default:

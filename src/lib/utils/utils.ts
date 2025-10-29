@@ -20,7 +20,7 @@ export function translateOrderStatus(status: string): string {
   return statusMap[status] || status;
 }
 
-export function getStatusVariant(status: string): "default" | "success" | "primary" | "warning" | "outline" | "destructive" | "secondary" | "orderPending" | "orderConfirmed" | "orderProcessing" | "orderStocked" | "orderCompleted" | "orderCanceled" {
+export function getStatusVariant(status: string): "default" | "success" | "primary" | "warning" | "outline" | "destructive" | "secondary" | "orderPending" | "orderAssigned" | "orderProcessing" | "orderStocked" | "orderCompleted" | "orderCanceled" {
   switch (status) {
     case "COMPLETED":
       return "orderCompleted";
@@ -31,7 +31,7 @@ export function getStatusVariant(status: string): "default" | "success" | "prima
     case "PROCESSING":
       return "orderProcessing";
     case "CONFIRMED":
-      return "orderConfirmed";
+      return "orderAssigned";
     case "REJECTED":
       return "warning";
     default:

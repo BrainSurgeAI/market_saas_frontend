@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
 	const response = await fetchRemoteData({
-		endpoint: '/category_with_sub_categories',
+		endpoint: '/categories/tree',
 		method: 'GET',
 		needToken: true,
 		tags: ['category_with_sub_categories']

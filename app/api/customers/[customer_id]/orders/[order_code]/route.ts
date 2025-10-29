@@ -13,7 +13,7 @@ export async function GET(_request: NextRequest,
 ) {
 	const { customer_id, order_code } = await params;
 	const response = await fetchRemoteData({
-		endpoint: `/tenants/${customer_id}/orders/${order_code}`,
+		endpoint: `/orders/${order_code}`,
 		method: 'GET',
 		tags: [`orders-${customer_id}`]
 	});

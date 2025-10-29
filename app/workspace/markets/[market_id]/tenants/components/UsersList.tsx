@@ -60,7 +60,7 @@ export function UsersList({
   const getRoleName = (role: string): string => {
     const roleMap: Record<string, string> = {
       'PROVIDER_ADMIN': '管理员',
-      'PROVIDER': '用户',
+      'STAFF': '员工',
       'CUSTOMER_ADMIN': '管理员',
       'ORDER_CREATOR': '采购员',
     };

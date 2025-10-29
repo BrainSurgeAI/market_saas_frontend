@@ -78,7 +78,7 @@ export async function PATCH(
     const requestBody = await request.json();
 
     const response = await fetch(
-      `${process.env.BACKEND_API_URL}/api/v1/markets/${market_id}/tenants/${tenant_hash}`,
+      `${process.env.BACKEND_API_URL}/api/v1/tenants/${tenant_hash}`,
       {
         method: 'PATCH',
         headers: {

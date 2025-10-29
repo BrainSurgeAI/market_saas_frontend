@@ -14,7 +14,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
 	const body = await request.json();
 	const response = await fetchRemoteData({
-		endpoint: `/customers/${customer_id}/orders`,
+		endpoint: `/orders`,
 		method: 'POST',
 		body: body,
 		needToken: true,
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest,
 	const pageSize = searchParams.get('page_size') ?? '10';
 
 	const response = await fetchRemoteData({
-		endpoint: `/tenants/${customer_id}/orders?page=${page}&page_size=${pageSize}`,
+		endpoint: `/orders?page=${page}&page_size=${pageSize}`,
 		method: 'GET',
 		needToken: true,
 		tags: [`orders-${customer_id}`]

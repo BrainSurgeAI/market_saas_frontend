@@ -1,8 +1,6 @@
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { redirect } from 'next/navigation';
-import { z } from 'zod';
-
 // // 租户验证模式定义
 // export const tenantSchema = z.object({
 //   name: z.string().trim().min(1).max(255),
@@ -36,7 +34,7 @@ export async function GET(
     const marketId = (await params).market_id;
 
     const response = await fetch(
-      `${process.env.BACKEND_API_URL}/api/v1/markets/${marketId}/tenants`,
+      `${process.env.BACKEND_API_URL}/api/v1/tenants`,
       {
         method: 'GET',
         headers: {
