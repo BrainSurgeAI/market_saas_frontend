@@ -1612,7 +1612,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 								导出Excel
 							</Button>
 							{/* 只有当订单状态为CONFIRMED时才显示开始备货按钮，并且tenantType为provider */}
-							{orderDetail.orderStatus === "CONFIRMED" && tenantType.toLowerCase() === 'provider' && (
+							{orderDetail.orderStatus === "ASSIGNED" && tenantType.toLowerCase() === 'provider' && (
 								<AlertDialog>
 									<AlertDialogTrigger asChild>
 										<Button className="bg-blue-600 hover:bg-blue-500" size="sm">
@@ -1755,7 +1755,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 																	<div>
 																		<Input
 																			type="number"
-																			value={item.actualQuantity}
+																			value={item.actualQuantity || ''}
 																			onChange={(e) => handleActualQuantityChange && handleActualQuantityChange(item.id, e.target.value)}
 																			className={`max-w-[100px] text-center font-mono font-semibold ${itemErrors[item.id] ? 'border-red-500' : ''}`}
 																			step="0.01"
@@ -1969,7 +1969,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 								<Input
 									id="quantity"
 									type="number"
-									value={operatingQuantity}
+									value={operatingQuantity || '0'}
 									onChange={(e) => handleQuantityChange(e.target.value)}
 									className={`flex-grow font-mono ${operationType !== 'SIGN' ? 'text-red-600' : ''} ${quantityError ? 'border-red-500' : ''}`}
 									step="0.1"
@@ -2004,7 +2004,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 							</Label>
 							<Textarea
 								id="reason"
-								value={operatingReason}
+								value={operatingReason || ''}
 								onChange={(e) => handleReasonChange(e.target.value)}
 								placeholder={operationType === 'SIGN' ?
 									"请填写签收备注（可选）..." :

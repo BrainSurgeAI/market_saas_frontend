@@ -78,7 +78,10 @@ export function LoginForm() {
             try {
                 const decoded = jwtDecode<TokenPayload>(loginData.data);
                 userRoles = decoded.roles || [];
-                primaryRole = userRoles[0] || ''; // 使用第一个角色作为主角色
+                // 找到第一个非空角色作为主角色
+                primaryRole = userRoles.find(role => role && role.trim() !== '') || '';
+
+               
 
                 // 存储用户角色到 localStorage
                 localStorage.setItem('user-roles', JSON.stringify(userRoles));
@@ -88,8 +91,13 @@ export function LoginForm() {
                 console.error('解析用户信息失败:', error);
             }
 
-            // 在后台缓存菜单数据
-            if (primaryRole && userRoles.length > 0) {
+
+            // 改进的条件：对于有角色的用户，或者所有租户类型的用户，都获取菜单
+            const shouldFetchMenu = (primaryRole && userRoles.length > 0);
+            console.log('- 最终条件 (shouldFetchMenu):', shouldFetchMenu);
+
+            if (shouldFetchMenu) {
+                console.log('✅ 条件满足，开始缓存菜单数据...');
                 cacheMenuAfterLogin(
                     primaryRole,
                     userRoles,
@@ -116,6 +124,13 @@ export function LoginForm() {
                     console.error('缓存菜单失败:', error);
                     // 不影响登录流程，继续跳转
                 });
+            } else {
+                console.log('❌ 跳过菜单缓存，条件不满足');
+                console.log('- 原因: 用户没有有效角色且不是STAFF/PROVIDER类型');
+                console.log('- primaryRole:', primaryRole);
+                console.log('- userRoles:', userRoles);
+            
+                console.log('- 这是一个未配置菜单的用户类型');
             }
 
             toast({

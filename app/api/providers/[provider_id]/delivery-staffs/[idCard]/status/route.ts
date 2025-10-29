@@ -15,7 +15,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ pr
 
         const { provider_id, idCard } = await params;
 
-        const backendUrl = `${process.env.BACKEND_API_URL}/api/v1/tenants/${provider_id}/delivery_staffs/${idCard}/status`;
+        const backendUrl = `${process.env.BACKEND_API_URL}/api/v1/deliveries/${idCard}/status`;
         const response = await fetch(backendUrl, {
             method: 'PATCH',
             headers: {

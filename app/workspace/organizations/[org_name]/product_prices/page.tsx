@@ -1,15 +1,17 @@
 import { PermissionProvider, UserRole } from "@/app/context/permission-context";
 import RoleBasedLayout from "@/app/workspace/organizations/[org_name]/product_prices/components/RoleBasedLayout";
-import { Organization } from "@/app/models";
+import { Organization, User } from "@/app/models";
 
 import { logger } from "@/lib/logger";
 import { fetchRemoteData, getUserRoles } from "@/lib/api-utils";
 
 interface PriceManagePageProps {
+  user: User;
   organization: Organization;
+  userRole: string[];
 }
 
-export default async function PriceManagePage({ organization }: PriceManagePageProps) {  
+export default async function PriceManagePage({ user, organization, userRole }: PriceManagePageProps) {  
   const decoded = await getUserRoles();
   const { username, roles } = decoded;
 

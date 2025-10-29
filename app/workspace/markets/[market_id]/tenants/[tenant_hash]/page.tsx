@@ -9,7 +9,7 @@ export default async function TenantDetailsPage({
 }) {
   const { market_id, tenant_hash } = await params;
   try {
-    const response = await fetchRemoteData({endpoint: `/tenants/${tenant_hash}`, method: 'GET', tags: [], revalidate: 0});
+    const response = await fetchRemoteData({ endpoint: `/tenants/${tenant_hash}`, method: 'GET', tags: [], revalidate: 0 });
 
     // 如果没有数据，返回404
     if (!response || !response.data || response.status !== 200) {
@@ -17,7 +17,7 @@ export default async function TenantDetailsPage({
     }
 
     const tenant = response.data.data;
-    
+
     // 确保日期字段以统一格式处理
     if (tenant.createdAt && typeof tenant.createdAt === 'string') {
       tenant.createdAt = new Date(tenant.createdAt).getTime();

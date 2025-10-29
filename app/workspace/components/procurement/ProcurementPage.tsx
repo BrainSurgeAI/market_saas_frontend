@@ -34,7 +34,7 @@ interface ProcurementPageProps {
 	userRole: string[];
 }
 
-export function ProcurementPage({ user, organization }: ProcurementPageProps) {
+export function ProcurementPage({ user, organization, userRole }: ProcurementPageProps) {
 	const { toast } = useToast();
 	const router = useRouter();
 	const [searchTerm, setSearchTerm] = useState("");

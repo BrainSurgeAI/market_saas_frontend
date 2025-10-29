@@ -17,7 +17,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         const body = await request.json();
         logger.debug(`Processing order: ${JSON.stringify(body)}`);
 
-        const response = await fetch(`${process.env.BACKEND_API_URL}/api/v1/providers/${provider_id}/orders/${order_code}/processing`, {
+        const response = await fetch(`${process.env.BACKEND_API_URL}/api/v1/orders/${order_code}/preparing`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',

@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
 
         const { provider_id } = await params;
 
-        const backendUrl = `${process.env.BACKEND_API_URL}/api/v1/tenants/${provider_id}/delivery_staffs`;
+        const backendUrl = `${process.env.BACKEND_API_URL}/api/v1/deliveries`;
         const response = await fetch(backendUrl, {
             method: 'GET',
             headers: {
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
         const { provider_id } = await params;
         const body = await req.json();
 
-        const backendUrl = `${process.env.BACKEND_API_URL}/api/v1/tenants/${provider_id}/delivery_staffs`;
+        const backendUrl = `${process.env.BACKEND_API_URL}/api/v1/deliveries`;
         const response = await fetch(backendUrl, {
             method: 'POST',
             headers: {
