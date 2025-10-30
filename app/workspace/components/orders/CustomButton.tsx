@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Check, Save, SaveOff } from "lucide-react";
 
 interface ButtonProps {
     returnExchangeRecordsLength: number,
@@ -33,15 +32,20 @@ export default function CustomButton({ returnExchangeRecordsLength, tenantType, 
 }
 
 function isDisplay(tenantType: string, orderStatus: string) {
-    if (tenantType.toLowerCase() !== 'customer' || orderStatus === 'COMPLETED') {
+    // if (tenantType.toLowerCase() !== 'customer' || orderStatus === 'COMPLETED') {
+    //     return false;
+    // }
+
+    // return true;
+    if ((tenantType.toLowerCase() === 'customer' && orderStatus === 'CUSTOMER_INSPECTING') || (tenantType.toLowerCase() === 'market' && orderStatus === 'MARKET_INSPECTING')) {
+        return true;
+    } else {
         return false;
     }
-
-    return true;
 }
 
 function getStyles(orderStatus: string) {
-    if (orderStatus === 'STOCKED') {
+    if (orderStatus === 'SUPPLIER_DELIVERING') {
         return 'bg-green-700 hover:bg-green-600';
     } else if (orderStatus === 'REJECTED') {
         return 'bg-blue-700 hover:bg-blue-600';
@@ -53,7 +57,7 @@ function getStyles(orderStatus: string) {
 }
 
 function getText(orderStatus: string) {
-    if (orderStatus === 'STOCKED') {
+    if (orderStatus === 'MARKET_INSPECTING') {
         return '完成验收';
     } else if (orderStatus === 'AFTER_SALE') {
         return '拒绝供应商售后';

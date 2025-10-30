@@ -15,7 +15,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     try {
         const body = await request.json();
-            const response = await fetch(`${process.env.BACKEND_API_URL}/api/v1/providers/${provider_id}/orders/${order_code}/update-quantities`, {
+            const response = await fetch(`${process.env.BACKEND_API_URL}/api/v1/orders/${order_code}/deliver-to-market`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -25,15 +25,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         });
 
         if (!response.ok) {
-            logger.error(`Failed to assign order: ${response.statusText}`);
-            return NextResponse.json({ message: 'Failed to assign order' }, { status: response.status });
+            logger.error(`Failed to deliver order to market: ${response.statusText}`);
+            return NextResponse.json({ message: 'Failed to deliver order to market' }, { status: response.status });
         }
 
         const data = await response.json();
-        logger.debug(`Order assigned: ${JSON.stringify(data.data)}`);
+        logger.debug(`Order delivered to market: ${JSON.stringify(data.data)}`);
         return NextResponse.json(data.data);
     } catch (error) {
-        logger.error(`Failed to assign order: ${error}`);
-        return NextResponse.json({ message: 'Failed to assign order' }, { status: 500 });
+        logger.error(`Failed to deliver order to market: ${error}`);
+        return NextResponse.json({ message: 'Failed to deliver order to market' }, { status: 500 });
     }
 }

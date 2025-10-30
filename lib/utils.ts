@@ -10,8 +10,8 @@ export function translateOrderStatus(status: string): string {
   const statusMap: Record<string, string> = {
     "PENDING": "待指派",
     "ASSIGNED": "已指派",
-    "PROCESSING": "备货中",
-    "STOCKED": "正在交付",
+    "SUPPLIER_PREPARING": "备货中",
+    "SUPPLIER_DELIVERING": "正在交付",
     "COMPLETED": "已完成",
     "REJECTED": "服务中心处理中",
     "AFTER_SALE": "申请售后",
@@ -24,11 +24,11 @@ export function getStatusVariant(status: string): "default" | "success" | "prima
   switch (status) {
     case "COMPLETED":
       return "orderCompleted";
-    case "STOCKED":
+    case "SUPPLIER_DELIVERING":
       return "orderStocked";
     case "PENDING":
       return "orderPending";
-    case "PROCESSING":
+    case "SUPPLIER_PREPARING":
       return "orderProcessing";
     case "ASSIGNED":
       return "orderAssigned";

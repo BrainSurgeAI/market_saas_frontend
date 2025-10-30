@@ -119,7 +119,7 @@ interface OrderDetailProps {
 	tenantType: string;
 }
 
-type OrderStatus = "PENDING" | "CONFIRMED" | "PROCESSING" | "STOCKED" | "COMPLETED" | "AFTER_SALE" | "REJECTED";
+type OrderStatus = "PENDING" | "ASSIGNED" | "SUPPLIER_PREPARING" | "SUPPLIER_DELIVERING" | "MARKET_INSPECTING" | "COMPLETED" | "AFTER_SALE" | "REJECTED" | "CUSTOMER_INSPECTING";
 type OperationType = "RETURN" | "EXCHANGE" | "SIGN";
 
 interface ReturnExchangeItem {
@@ -282,14 +282,16 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 	// 根据租户类型和订单状态判断是否显示订单状态
 	const shouldDisplayActualQuantity = (status: OrderStatus): boolean => {
 		if (tenantType.toLowerCase() === 'provider') {
-			return !['PENDING', 'CONFIRMED'].includes(status);
+			return !['PENDING', 'ASSIGNED'].includes(status);
 		} else {
-			return ['STOCKED', 'AFTER_SALE', 'COMPLETED', 'REJECTED'].includes(status);
+			return ['MARKET_INSPECTING', 'AFTER_SALE', 'COMPLETED', 'REJECTED'].includes(status);
 		}
 	}
 
-	const shouldDisplayOrderStatus = (status: OrderStatus): boolean => {
-		return 'STOCKED' === status && tenantType.toLowerCase() === 'customer';
+	// 订单商品清单页面根据租户类型和订单状态判断是否显示订单验收操作菜单
+	const shouldOrderInspectMenu = (status: OrderStatus): boolean => {
+		return ('MARKET_INSPECTING' === status && tenantType.toLowerCase() === 'market') ||
+			(tenantType.toLowerCase() === 'customer' && 'CUSTOMER_INSPECTING' === status);
 	}
 
 	useEffect(() => {
@@ -371,8 +373,8 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 				// 设置所有操作记录
 				setReturnExchangeRecords(allReceipts);
 
-				// 如果订单状态已经是PROCESSING，则设置为编辑模式, 并且tenantType为provider
-				if (responseData.order.orderStatus === 'PROCESSING' && tenantType.toLowerCase() === 'provider') {
+				// 如果订单状态已经是SUPPLIER_PREPARING，则设置为编辑模式, 并且tenantType为provider
+				if (responseData.order.orderStatus === 'SUPPLIER_PREPARING' && tenantType.toLowerCase() === 'provider') {
 					setIsEditing(true);
 				}
 
@@ -1636,8 +1638,8 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 									</AlertDialogContent>
 								</AlertDialog>
 							)}
-							{/* 当处于编辑模式时显示保存按钮 */}
-							{isEditing && orderDetail.orderStatus === "PROCESSING" && tenantType.toLowerCase() === 'provider' && (
+							{/* 当处于供应商备货编辑模式时显示保存按钮 */}
+							{isEditing && orderDetail.orderStatus === "SUPPLIER_PREPARING" && tenantType.toLowerCase() === 'provider' && (
 								<AlertDialog>
 									<AlertDialogTrigger asChild>
 										<Button className="bg-green-600 hover:bg-green-500 flex items-center gap-1" size="sm" disabled={hasErrors() || savingChanges}>
@@ -1688,7 +1690,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 										<col />
 										<col />
 										<col />
-										{shouldDisplayOrderStatus(orderDetail.orderStatus as OrderStatus) && <col />}
+										{shouldOrderInspectMenu(orderDetail.orderStatus as OrderStatus) && <col />}
 									</colgroup>
 									<thead style={{
 										position: "sticky",
@@ -1709,7 +1711,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 											<th className="text-right p-3 border-b">折扣</th>
 											<th className="text-right p-3 border-b">实际单价</th>
 											<th className="text-right p-3 border-b">小计（折后）</th>
-											{shouldDisplayOrderStatus(orderDetail.orderStatus as OrderStatus) && (
+											{shouldOrderInspectMenu(orderDetail.orderStatus as OrderStatus) && (
 												<th className="text-right p-3 border-b">操作</th>
 											)}
 										</tr>
@@ -1784,7 +1786,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 																	? parseFloat(item.actualAmount).toFixed(2)
 																	: (parseFloat(item.actualPrice) * parseFloat(item.actualQuantity)).toFixed(2))}
 														</td>
-														{shouldDisplayOrderStatus(orderDetail.orderStatus as OrderStatus) && (
+														{shouldOrderInspectMenu(orderDetail.orderStatus as OrderStatus) && (
 															<td className="p-2 text-right border-b">
 																{hasProductOperation(item.id) ? (
 																	<Badge variant="outline" className={`rounded-full ${isProductSigned(item.id) ? "bg-green-50 text-green-600 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}>
@@ -1848,7 +1850,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 																		}
 																	</span>
 																</td>
-																{shouldDisplayOrderStatus(orderDetail.orderStatus as OrderStatus) && (
+																{shouldOrderInspectMenu(orderDetail.orderStatus as OrderStatus) && (
 																	<td className="py-1 border-b"></td>
 																)}
 															</tr>
