@@ -74,7 +74,7 @@ export async function POST(
     const requestBody = await request.json();
 
     const response = await fetch(
-      `${process.env.BACKEND_API_URL}/api/v1/markets/${marketId}/tenants`,
+      `${process.env.BACKEND_API_URL}/api/v1/tenants`,
       {
         method: 'POST',
         headers: {
