@@ -34,7 +34,7 @@ export async function PATCH(
     };
 
     const response = await fetch(
-      `${process.env.BACKEND_API_URL}/api/v1/markets/${market_id}/tenants/${tenant_hash}/status`,
+      `${process.env.BACKEND_API_URL}/api/v1/tenants/${tenant_hash}/activate-or-deactivate`,
       {
         method: 'PATCH',
         headers: {

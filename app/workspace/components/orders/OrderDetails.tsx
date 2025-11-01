@@ -278,20 +278,30 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 	const [afterSaleTimestamp, setAfterSaleTimestamp] = useState<number>(0);
 	const [showRejectConfirmDialog, setShowRejectConfirmDialog] = useState(false);
 	const [statusChangeMessage, setStatusChangeMessage] = useState<{ title: string, description: string } | null>(null);
+	const [showBeginInspectDialog, setShowBeginInspectDialog] = useState(false);
+	const [beginInspecting, setBeginInspecting] = useState(false);
 
 	// 根据租户类型和订单状态判断是否显示订单状态
 	const shouldDisplayActualQuantity = (status: OrderStatus): boolean => {
 		if (tenantType.toLowerCase() === 'provider') {
 			return !['PENDING', 'ASSIGNED'].includes(status);
 		} else {
-			return ['MARKET_INSPECTING', 'AFTER_SALE', 'COMPLETED', 'REJECTED'].includes(status);
+			return ['MARKET_INSPECTING', 'EXCHANGE_NEW_DELIVERING', 'COMPLETED', 'EXCHANGE_INSPECTING'].includes(status);
 		}
 	}
 
 	// 订单商品清单页面根据租户类型和订单状态判断是否显示订单验收操作菜单
 	const shouldOrderInspectMenu = (status: OrderStatus): boolean => {
-		return ('MARKET_INSPECTING' === status && tenantType.toLowerCase() === 'market') ||
-			(tenantType.toLowerCase() === 'customer' && 'CUSTOMER_INSPECTING' === status);
+
+		if (tenantType.toLowerCase() !== 'market' && tenantType.toLowerCase() !== 'provider') {
+			return false;
+		}
+
+		if (['MARKET_INSPECTING', 'EXCHANGE_INSPECTING', 'CUSTOMER_INSPECTING'].includes(status)) {
+			return true;
+		}
+
+		return false;
 	}
 
 	useEffect(() => {
@@ -373,8 +383,11 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 				// 设置所有操作记录
 				setReturnExchangeRecords(allReceipts);
 
-				// 如果订单状态已经是SUPPLIER_PREPARING，则设置为编辑模式, 并且tenantType为provider
-				if (responseData.order.orderStatus === 'SUPPLIER_PREPARING' && tenantType.toLowerCase() === 'provider') {
+				// 如果订单状态已经是SUPPLIER_PREPARING或EXCHANGE_IN_PROGRESS且为provider，则设置为编辑模式
+				// 或订单状态是EXCHANGE_INSPECTING且为market，也设置为编辑模式
+				if ((responseData.order.orderStatus === 'SUPPLIER_PREPARING' || responseData.order.orderStatus === 'EXCHANGE_IN_PROGRESS') && tenantType.toLowerCase() === 'provider') {
+					setIsEditing(true);
+				} else if (responseData.order.orderStatus === 'EXCHANGE_INSPECTING' && tenantType.toLowerCase() === 'market') {
 					setIsEditing(true);
 				}
 
@@ -407,10 +420,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 	}
 
 	const shouldDisplayReturnMoney = () => {
-		return (orderDetail?.orderStatus === 'STOCKED' as OrderStatus ||
-			orderDetail?.orderStatus === 'AFTER_SALE' as OrderStatus ||
-			orderDetail?.orderStatus === 'REJECTED' as OrderStatus ||
-			orderDetail?.orderStatus === 'COMPLETED' as OrderStatus) && parseFloat(returnMoney()) > 0;
+		return  parseFloat(returnMoney()) > 0;
 	}
 
 	// 合并服务器的操作记录和本地缓存的操作记录
@@ -720,11 +730,11 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 
 	const submitOperationToServer = async (operationRecord: ReturnExchangeItem) => {
 		try {
-			const apiUrl = tenantType.toLowerCase() === 'provider'
-				? `/api/providers/${params?.provider_id}/orders/${orderCode}/operations`
-				: `/api/customers/${orgId}/orders/${orderCode}/operations`;
+			// const apiUrl = tenantType.toLowerCase() === 'provider'
+			// 	? `/api/providers/${params?.provider_id}/orders/${orderCode}/operations`
+			// 	: `/api/customers/${orgId}/orders/${orderCode}/operations`;
 
-			const response = await fetch(apiUrl, {
+			const response = await fetch(`/api/orders/${orderCode}/inspect`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -759,8 +769,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 				summary[item.category] = { count: 0, total: 0 };
 			}
 
-			if (orderDetail?.orderStatus !== 'STOCKED' as OrderStatus && orderDetail?.orderStatus !== 'AFTER_SALE' as OrderStatus &&
-				orderDetail?.orderStatus !== 'ACCEPTED' as OrderStatus && orderDetail?.orderStatus !== 'COMPLETED' as OrderStatus) {
+			if (['PENDING', 'ASSIGNED'].includes(orderDetail?.orderStatus as OrderStatus)) {
 				// 使用实际数量进行计算
 				const actualQuantity = parseFloat(item.actualQuantity) > 0 ? parseFloat(item.actualQuantity) : parseFloat(item.quantity);
 				summary[item.category].total += parseFloat(item.actualPrice) * actualQuantity;
@@ -783,26 +792,34 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		}));
 	};
 
+	// 完成验收
 	const completeAcceptance = async () => {
+
 		try {
 			// 一次遍历确定订单状态
-			let hasReturnOrExchange = false;
+			let hasExchangeStatus = false;
 
 			// 检查所有商品状态
 			for (const item of orderItems) {
 				const records = getItemReturnExchangeRecords(item.id);
 
-				// 检查是否存在退换货记录
-				if (records.some(record => record.operationType === 'RETURN' || record.operationType === 'EXCHANGE')) {
-					hasReturnOrExchange = true;
+				// 检查是否存在换货记录, 退货直接退款，不影响验收完成。换货还需要后续备货，发货，验收流程
+				if (records.some(record => record.operationType === 'EXCHANGE')) {
+					hasExchangeStatus = true;
 					break;
 				}
 			}
 
-			const apiUrl = `/api/customers/${orgId}/orders/${orderCode}/operations`;
+            const status = hasExchangeStatus? 'EXCHANGE_REQUESTED' : tenantType.toLowerCase() === 'market' ? 'MARKET_ACCEPTED' : 'COMPLETED';
 
-			// From Stocked to After Sale or Completed automatically
-			const status = hasReturnOrExchange ? 'AFTER_SALE' : 'COMPLETED';
+			let apiUrl;
+			if (status === 'MARKET_ACCEPTED' || status === 'COMPLETED') {
+				apiUrl = `/api/orders/${orderCode}/accpet`;
+			}  else {
+				apiUrl = `/api/orders/${orderCode}/exchange-request`
+			}
+
+			console.log(status, apiUrl);
 
 			const response = await fetch(apiUrl, {
 				method: 'PATCH',
@@ -822,7 +839,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 			// 更新订单状态
 			if (orderDetail) {
 				// 如果状态是AFTER_SALE，则设置当前时间为afterSaleAt
-				const currentTime = hasReturnOrExchange ? new Date().toISOString() : null;
+				const currentTime = hasExchangeStatus ? new Date().toISOString() : null;
 
 				setOrderDetail({
 					...orderDetail,
@@ -831,14 +848,14 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 				});
 
 				// 如果进入售后状态，更新倒计时触发器
-				if (hasReturnOrExchange) {
+				if (hasExchangeStatus) {
 					setAfterSaleTimestamp(Date.now());
 				}
 			}
 
 			toast({
 				title: "提交成功",
-				description: `订单${orderCode}已${hasReturnOrExchange ? '进入售后处理' : '完成验收'}`,
+				description: `订单${orderCode}已${hasExchangeStatus ? '进入售后处理' : '完成验收'}`,
 				variant: "success",
 				duration: 3000,
 			});
@@ -856,7 +873,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 
 	// 处理开始备货
 	const handleStartProcessing = async () => {
-		if (!orderDetail || processing) return;
+		if (!orderDetail || processing || tenantType.toLowerCase() !== 'provider') return;
 
 		try {
 			setProcessing(true);
@@ -899,7 +916,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 				return;
 			}
 
-			// 不是供应商或者已经选择了配送人员，直接开始备货
+			// 已经选择了配送人员，直接开始备货
 			await submitStartProcessing();
 		} catch (err) {
 			toast({
@@ -935,9 +952,15 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 			}
 
 			// 更新订单状态并允许编辑实际数量
+			// 根据当前订单状态决定更新后的状态
+			let newStatus = 'SUPPLIER_PREPARING';
+			if (orderDetail?.orderStatus === 'EXCHANGE_REQUESTED') {
+				newStatus = 'EXCHANGE_IN_PROGRESS';
+			}
+
 			setOrderDetail({
 				...orderDetail!,
-				orderStatus: 'PROCESSING'
+				orderStatus: newStatus
 			});
 			setIsEditing(true);
 			setShowDeliveryStaffDialog(false);
@@ -970,12 +993,22 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 
 	// 处理实际数量变更
 	const handleActualQuantityChange = (id: number, value: string) => {
+		const item = orderItems.find(item => item.id === id);
+		if (!item) return;
+
 		const newErrors = { ...itemErrors };
 		delete newErrors[id];
 
+		// 判断该单位是否允许小数
+		const allowDecimal = isUnitAllowingDecimal(item.unit);
+
 		// 验证输入
 		const numericValue = parseFloat(value);
-		if (isNaN(numericValue)) {
+		
+		// 如果不允许小数且输入了小数点
+		if (!allowDecimal && value.includes('.')) {
+			newErrors[id] = `${item.unit}单位只能输入整数`;
+		} else if (isNaN(numericValue)) {
 			newErrors[id] = "请输入数字";
 		} else if (numericValue < 0) {
 			newErrors[id] = "不能为负数";
@@ -983,7 +1016,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 			newErrors[id] = "不能为0";
 		} else if (numericValue > 999999.99) {
 			newErrors[id] = "超出范围";
-		} else if (value.includes('.') && value.split('.')[1].length > 2) {
+		} else if (allowDecimal && value.includes('.') && value.split('.')[1].length > 2) {
 			newErrors[id] = "最多支持2位小数";
 		}
 
@@ -1013,24 +1046,70 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		updateOrderTotals(updatedItems);
 	};
 
+	// 判断单位是否允许小数
+	const isUnitAllowingDecimal = (unit: string): boolean => {
+		if (!unit) return true; // 默认允许小数
+		
+		const decimalUnits = ['kg', 'g', 'mg', 'ml', 'l', '升', '毫升', '克', '千克', '斤'];
+		const unitLower = unit.toLowerCase();
+		
+		return decimalUnits.some(decimalUnit => unitLower.includes(decimalUnit.toLowerCase()));
+	};
+
+	// 处理输入框的 keydown 事件，禁止输入小数点（针对不允许小数的单位）
+	const handleActualQuantityKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, itemId: number) => {
+		const item = orderItems.find(item => item.id === itemId);
+		if (!item) return;
+
+		const allowDecimal = isUnitAllowingDecimal(item.unit);
+		
+		// 如果不允许小数且用户试图输入小数点或 e/E（科学计数法）
+		if (!allowDecimal && (e.key === '.' || e.key === 'e' || e.key === 'E')) {
+			e.preventDefault();
+		}
+	};
+
 	const handleSaveActualQuantities = async () => {
 		if (hasErrors() || savingChanges) return;
 
 		try {
 			setSavingChanges(true);
 
-			const response = await fetch(`/api/providers/${params?.provider_id}/orders/${params?.order_code}/update-quantities`, {
-				method: 'PUT',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					stockedBy: user?.name || '',
+			// 根据租户类型选择不同的 API 端点
+			let apiUrl: string;
+			let requestBody: any;
+
+			if (tenantType.toLowerCase() === 'provider') {
+				apiUrl = `/api/providers/${params?.provider_id}/orders/${params?.order_code}/update-quantities`;
+				requestBody = {
+					operateBy: user?.name || '',
 					items: orderItems.map(item => ({
 						id: item.id,
 						actualQuantity: item.actualQuantity,
 					}))
-				}),
+				};
+			} else if (tenantType.toLowerCase() === 'market') {
+				// market 租户只需要上传 EXCHANGED 商品的数量
+				apiUrl = `/api/orders/${orderCode}/inspect`;
+				requestBody = {
+					operateBy: user?.name || '',
+					items: orderItems
+						.filter(item => item.status === 'EXCHANGED')
+						.map(item => ({
+							id: item.id,
+							actualQuantity: item.actualQuantity,
+						}))
+				};
+			} else {
+				throw new Error('不支持的租户类型');
+			}
+
+			const response = await fetch(apiUrl, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(requestBody),
 			});
 
 			if (!response.ok) {
@@ -1049,9 +1128,17 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 			setOrderItems(updatedItems);
 
 			if (orderDetail) {
+				// 根据当前订单状态和租户类型决定保存后的状态
+				let newStatus = 'SUPPLIER_DELIVERING';
+				if (orderDetail.orderStatus === 'EXCHANGE_IN_PROGRESS') {
+					newStatus = 'EXCHANGE_DELIVERING';
+				} else if (orderDetail.orderStatus === 'EXCHANGE_INSPECTING' && tenantType.toLowerCase() === 'market') {
+					newStatus = 'EXCHANGE_ACCEPTED';
+				}
+
 				setOrderDetail({
 					...orderDetail,
-					orderStatus: 'STOCKED',
+					orderStatus: newStatus,
 					actualAmount: actualTotal,
 					totalAmount: originalTotal,
 					discountAmount: discountTotal
@@ -1061,14 +1148,14 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 
 			toast({
 				title: "保存成功",
-				description: "实际发货量已更新",
+				description: tenantType.toLowerCase() === 'market' ? "换货商品已验收" : "实际发货量已更新",
 				variant: "success",
 				duration: 3000,
 			});
 		} catch (err) {
 			toast({
 				title: "保存失败",
-				description: err instanceof Error ? err.message : "保存实际发货量时出错",
+				description: err instanceof Error ? err.message : "保存实际数量时出错",
 				variant: "destructive",
 				duration: 3000,
 			});
@@ -1183,6 +1270,76 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 	const showRejectConfirmation = () => {
 		setShowRejectConfirmDialog(true);
 	}
+
+	// 处理开始验收订单
+	const handleBeginInspect = async () => {
+		if (!orderDetail) return;
+
+		if (orderDetail.orderStatus !== "SUPPLIER_DELIVERING" && orderDetail.orderStatus !== "EXCHANGE_NEW_DELIVERING") {
+			toast({
+				title: "操作失败",
+				description: "订单状态不正确，无法开始验收",
+				variant: "destructive",
+				duration: 3000,
+			});
+			return;
+		}
+
+
+		try {
+			setBeginInspecting(true);
+
+			const response = await fetch(`/api/orders/${orderCode}`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					operateBy: user?.name || '',
+					status: orderDetail.orderStatus === "SUPPLIER_DELIVERING" ? 'MARKET_INSPECTING' : 'EXCHANGE_INSPECTING',
+				}),
+			});
+
+			if (!response.ok) {
+				throw new Error(`开始验收失败: ${response.status}`);
+			}
+
+			const responseData = await response.json();
+			
+			// 获取返回的新状态（返回的 data 字段是新状态）
+			const newStatus = responseData.data;
+
+			// 更新订单状态
+			if (orderDetail) {
+				setOrderDetail({
+					...orderDetail,
+					orderStatus: newStatus
+				});
+			}
+
+			toast({
+				title: "操作成功",
+				description: `订单${orderCode}已开始验收`,
+				variant: "success",
+				duration: 3000,
+			});
+
+			// 关闭对话框
+			setShowBeginInspectDialog(false);
+
+		} catch (error) {
+			console.error('开始验收时出错:', error);
+			toast({
+				title: "操作失败",
+				description: error instanceof Error ? error.message : "开始验收时出错",
+				variant: "destructive",
+				duration: 3000,
+			});
+		} finally {
+			setBeginInspecting(false);
+		}
+	}
+
 
 	// 验证是否有错误
 	const hasErrors = () => {
@@ -1514,7 +1671,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 										</div>
 										<div>
 											<p className="text-sm text-gray-500">实付金额</p>
-											<p className="text-sm font-mono text-primary">¥{parseFloat(orderDetail.actualAmount).toFixed(2)}</p>
+											<p className="text-sm font-mono text-primary">¥{(parseFloat(orderDetail.actualAmount) - parseFloat(returnMoney())).toFixed(2)}</p>
 										</div>
 									</div>
 								</div>
@@ -1613,12 +1770,36 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 								)}
 								导出Excel
 							</Button>
-							{/* 只有当订单状态为CONFIRMED时才显示开始备货按钮，并且tenantType为provider */}
-							{orderDetail.orderStatus === "ASSIGNED" && tenantType.toLowerCase() === 'provider' && (
+							{/* 当订单状态为SUPPLIER_DELIVERING且tenantType为market时显示开始验收按钮 */}
+							{(orderDetail.orderStatus === "SUPPLIER_DELIVERING" || orderDetail.orderStatus === "EXCHANGE_NEW_DELIVERING") && tenantType.toLowerCase() === 'market' && (
+								<AlertDialog open={showBeginInspectDialog} onOpenChange={setShowBeginInspectDialog}>
+									<AlertDialogTrigger asChild>
+										<Button className="bg-blue-600 hover:bg-blue-500" size="sm">
+											开始验收
+										</Button>
+									</AlertDialogTrigger>
+									<AlertDialogContent>
+										<AlertDialogHeader>
+											<AlertDialogTitle className="text-sm">确认开始验收?</AlertDialogTitle>
+											<AlertDialogDescription className="text-xs">
+												确认后，订单状态更新为"验收中"，表示您已开始验收该订单的商品。
+											</AlertDialogDescription>
+										</AlertDialogHeader>
+										<AlertDialogFooter>
+											<AlertDialogCancel>取消</AlertDialogCancel>
+											<AlertDialogAction onClick={handleBeginInspect} disabled={beginInspecting} className="bg-blue-600 hover:bg-blue-500 text-xs">
+												{beginInspecting ? "处理中..." : "确认"}
+											</AlertDialogAction>
+										</AlertDialogFooter>
+									</AlertDialogContent>
+								</AlertDialog>
+							)}
+							{/* 只有当订单状态为 ASSIGNED 或 EXCHANGE_REQUESTED 时才显示开始备货按钮，并且tenantType为provider */}
+							{(orderDetail.orderStatus === "ASSIGNED" || orderDetail.orderStatus === "EXCHANGE_REQUESTED") && tenantType.toLowerCase() === 'provider' && (
 								<AlertDialog>
 									<AlertDialogTrigger asChild>
 										<Button className="bg-blue-600 hover:bg-blue-500" size="sm">
-											开始备货
+											{orderDetail.orderStatus === "ASSIGNED" ? "开始备货" : "开始换货"}
 										</Button>
 									</AlertDialogTrigger>
 									<AlertDialogContent>
@@ -1638,26 +1819,31 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 									</AlertDialogContent>
 								</AlertDialog>
 							)}
-							{/* 当处于供应商备货编辑模式时显示保存按钮 */}
-							{isEditing && orderDetail.orderStatus === "SUPPLIER_PREPARING" && tenantType.toLowerCase() === 'provider' && (
+							{/* 当处于供应商备货编辑模式时显示保存按钮，或 market 租户验收换货商品时也显示 */}
+							{isEditing && ((orderDetail.orderStatus === "SUPPLIER_PREPARING" || orderDetail.orderStatus === "EXCHANGE_IN_PROGRESS") && tenantType.toLowerCase() === 'provider' || (orderDetail.orderStatus === "EXCHANGE_INSPECTING" && tenantType.toLowerCase() === 'market')) && (
 								<AlertDialog>
 									<AlertDialogTrigger asChild>
 										<Button className="bg-green-600 hover:bg-green-500 flex items-center gap-1" size="sm" disabled={hasErrors() || savingChanges}>
 											<Save className="h-4 w-4" />
-											{savingChanges ? "保存中..." : "完成备货"}
+											{savingChanges ? "保存中..." : tenantType.toLowerCase() === 'market' ? "完成验收" : "完成备货"}
 										</Button>
 									</AlertDialogTrigger>
 									<AlertDialogContent>
 										<AlertDialogHeader>
-											<AlertDialogTitle className="text-sm font-semibold">确认实收金额?</AlertDialogTitle>
+											<AlertDialogTitle className="text-sm font-semibold">
+												{tenantType.toLowerCase() === 'market' ? "确认完成换货验收?" : "确认实收金额?"}
+											</AlertDialogTitle>
 											<AlertDialogDescription className="text-xs">
-												提交后，系统将更新商品的实际出货量，总金额也会相应调整。
+												{tenantType.toLowerCase() === 'market' 
+													? "提交后，换货商品验收完成，订单将进入下一流程。"
+													: "提交后，系统将更新商品的实际出货量，总金额也会相应调整。"}
 											</AlertDialogDescription>
 											<Separator />
 											<div className="mt-4 space-y-1 text-sm text-muted-foreground">
 												<p>原价: <span className="font-semibold font-mono ml-2">¥{originalTotal}</span></p>
 												<p className="text-red-600">折扣: <span className="font-semibold font-mono ml-2">-¥{discountTotal}</span></p>
-												<p>实收: <span className="font-semibold font-mono ml-2">¥{actualTotal}</span></p>
+												<p className="text-red-600">退款: <span className="font-semibold font-mono ml-2">-¥{returnMoney()}</span></p>
+												<p>实收: <span className="font-semibold font-mono ml-2">¥{(parseFloat(actualTotal) - parseFloat(returnMoney())).toFixed(2)}</span></p>
 											</div>
 											<Separator />
 										</AlertDialogHeader>
@@ -1760,9 +1946,11 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 																			value={item.actualQuantity || ''}
 																			onChange={(e) => handleActualQuantityChange && handleActualQuantityChange(item.id, e.target.value)}
 																			className={`max-w-[100px] text-center font-mono font-semibold ${itemErrors[item.id] ? 'border-red-500' : ''}`}
-																			step="0.01"
+																			step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
 																			min="0"
 																			max="999999.99"
+																			disabled={item.status !== "EXCHANGED"}
+																			onKeyDown={(e) => handleActualQuantityKeyDown(e, item.id)}
 																		/>
 																		{itemErrors[item.id] && (
 																			<p className="text-xs text-red-500 mt-1">{itemErrors[item.id]}</p>
@@ -1889,8 +2077,8 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 										<span>{isEditing ? "实际金额:" : "实付金额:"}</span>
 										<span className="font-mono font-semibold">
 											¥{isEditing
-												? orderItems.reduce((acc, item) => acc + parseFloat(item.actualPrice) * parseFloat(item.actualQuantity), 0).toFixed(2)
-												: orderDetail.actualAmount}
+												? (orderItems.reduce((acc, item) => acc + parseFloat(item.actualPrice) * parseFloat(item.actualQuantity), 0) - parseFloat(returnMoney())).toFixed(2)
+												: (parseFloat(orderDetail.actualAmount) - parseFloat(returnMoney())).toFixed(2)}
 										</span>
 									</div>
 								</div>
@@ -2180,6 +2368,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-		</div>
+	</div>
+
 	);
 } 

@@ -1,12 +1,47 @@
 ---
-description: 
-globs: 
 alwaysApply: false
 ---
-
 # Your rule content
 - 这个是前端项目,使用Next.js和Typescript开发,后端数据通过api请求获取
 - 要求代码结构组织清晰容易修改，并且要用你知道的最佳实践去实现，要充分利用组件复用
 - UI尽量使用shadcn的UI组件开发
 - 如要定义的类型请在type.ts中定义
 - 组件命名请按React惯用命名方式
+
+- 这个项目是一个多租户SaaS系统，租户类型包括 MARKET、CUSTOMER、PROVIDER，每种租户下有不同的用户角色。
+- 前端使用 **Next.js (App Router)** 和 **TypeScript** 开发，UI 组件统一使用 **shadcn/ui**。
+- 所有后端数据通过 API 获取（不直接连接数据库），应使用封装好的 `apiClient` 或 `fetcher` 函数请求。
+- 在生成页面时，应优先使用 **Server Component + Client Component 分层架构**。
+  - 交互逻辑（按钮、弹窗、事件）应放在 `components/client/` 下。
+- 要求代码结构清晰、模块化、易于维护。
+  - 共用逻辑应抽离到 hooks，如 `useOrderColumns(tenantType, role)`；
+  - 重复组件（如表格、对话框、筛选器）应放在 `components/common/`；
+  - 类型统一定义在 `type.ts` 或 `types/` 目录下。
+- 生成的代码必须符合 **React + TypeScript 最佳实践**：
+  - 组件命名使用 **PascalCase**；
+  - Hooks 命名使用 **useXxx**；
+  - Props 类型命名为 `XxxProps`；
+  - 避免使用 `any`，必要时使用 `unknown` 或 `Record<string, unknown>`。
+- 表格、弹窗、按钮等 UI 必须优先使用 **shadcn/ui** 组件：
+  - 使用 `<Card>`、`<Table>`、`<Dialog>`、`<Button>` 等；
+  - 风格简洁、现代
+- 多租户共享页面（如订单列表页）应按以下方式设计：
+  - 所有租户共用同一个 `/orders/page.tsx`；
+  - 不同租户或角色仅在表格列配置和操作按钮上区分；
+  - 使用配置映射，例如：
+    ```ts
+    const orderActions = {
+      MARKET: [...],
+      PROVIDER: [...],
+      CUSTOMER: [...]
+    }
+    ```
+  - 用 `useTenant()` 或 `useUserRole()` Hook 判断当前身份；
+  - 禁止为每个租户复制相似页面。
+- 若生成的文件包含接口调用，请确保：
+  - 所有接口都定义在 `/app/api/` 中；
+  - 函数命名为 `getXxx()`, `createXxx()`, `updateXxx()`；
+  - 使用 `try/catch` 并返回明确错误信息。
+- 若生成提交信息或文档，请遵循 **Conventional Commits** 格式：
+  - 示例：`feat(order): add tenant-based order table rendering`
+- 在编写代码时，Cursor 应自动遵守这些规则，并以专业、整洁的 Next.js 项目结构组织文件。

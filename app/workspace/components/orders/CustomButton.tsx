@@ -20,12 +20,13 @@ export default function CustomButton({ returnExchangeRecordsLength, tenantType, 
     const styles = getStyles(orderStatus);
     const text = getText(orderStatus);
 
+    console.log(orderStatus);
     return isDisplay(tenantType, orderStatus) && returnExchangeRecordsLength === orderItemsSize && (
         <Button
             variant="outline"
             size="sm"
             className={`h-8 px-2 text-xs flex items-center gap-1 text-white hover:text-white ${styles}`}
-            onClick={orderStatus === 'STOCKED' ? orderHandler : rejectOrCompleteHandler}>
+            onClick={orderStatus === 'MARKET_INSPECTING' ? orderHandler : rejectOrCompleteHandler}>
             {text}
         </Button>
     )

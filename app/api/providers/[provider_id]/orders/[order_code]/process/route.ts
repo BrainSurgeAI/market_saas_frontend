@@ -3,8 +3,8 @@ import { cookies } from 'next/headers';
 import { logger } from '@/lib/logger';
 import { redirect } from 'next/navigation';
 
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ provider_id: string, order_code: string }> }) {
-    const { provider_id, order_code } = await params;
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{  order_code: string }> }) {
+    const {  order_code } = await params;
 
     const cookieStore = await cookies();
     const token = cookieStore.get('auth-token')?.value;

@@ -83,10 +83,22 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 		{ value: "ALL", label: "全部状态" },
 		{ value: "PENDING", label: "待指派" },
 		{ value: "ASSIGNED", label: "已指派" },
-		{ value: "PROCESSING", label: "备货中" },
-		{ value: "STOCKED", label: "正在交付" },
+		{ value: "SUPPLIER_PREPARING", label: "备货中" },
+		{ value: "SUPPLIER_DELIVERING", label: "供应商正在交付" },
+		{ value: "MARKET_INSPECTING", label: "市场验收中" },
+		{ value: "CUSTOMER_INSPECTING", label: "客户验收中" },
 		{ value: "COMPLETED", label: "已完成" },
-		{ value: "AFTER_SALE", label: "申请售后" },
+		{ value: "MARKET_ACCEPTED", label: "市场已验收" },
+		{ value: "MARKET_DELIVERING", label: "市场正在交付" },
+		{ value: "EXCHANGE_REQUESTED", label: "申请换货" },
+		{ value: "CUSTOMER_DELIVERING", label: "客户正在交付" },
+		{ value: "EXCHANGE_IN_PROGRESS", label: "处理换货中" },
+		{ value: "EXCHANGE_DELIVERING", label: "换货交付中" },
+		{ value: "EXCHANGE_INSPECTING", label: "换货验收中" },
+
+		{ value: "EXCHANGE_NEW_DELIVERING", label: "新商品交付中" },
+		{ value: "CANCELLED", label: "已取消" },
+		{ value: "RETURN_REQUESTED", label: "申请退货" },
 	];
 
 	// 计算售后订单剩余处理时间（精确到秒）
@@ -432,7 +444,7 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 												{format(new Date(order.deliveryDate), "yyyy年MM月dd日")}
 											</TableCell>
 											<TableCell>
-												{order.orderStatus === "AFTER_SALE" && order.afterSaleAt ? (
+												{order.orderStatus === "EXCHANGE_REQUESTED" && order.afterSaleAt ? (
 													<TooltipProvider>
 														<Tooltip 
 															onOpenChange={(open) => {

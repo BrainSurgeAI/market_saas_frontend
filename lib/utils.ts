@@ -10,11 +10,17 @@ export function translateOrderStatus(status: string): string {
   const statusMap: Record<string, string> = {
     "PENDING": "待指派",
     "ASSIGNED": "已指派",
-    "SUPPLIER_PREPARING": "备货中",
-    "SUPPLIER_DELIVERING": "正在交付",
+    "SUPPLIER_PREPARING": "供应商备货中",
+    "SUPPLIER_DELIVERING": "供应商正在交付",
     "COMPLETED": "已完成",
     "REJECTED": "服务中心处理中",
-    "AFTER_SALE": "申请售后",
+    "EXCHANGE_REQUESTED": "申请换货",
+    "EXCHANGE_IN_PROGRESS": "处理换货中",
+    "EXCHANGE_DELIVERING": "换货交付中",
+    "EXCHANGE_INSPECTING": "换货验收中",
+    "EXCHANGE_NEW_DELIVERING": "换货商品交付中",
+    "CANCELLED": "已取消",
+    "RETURN_REQUESTED": "申请退货",
   };
 
   return statusMap[status] || status;
