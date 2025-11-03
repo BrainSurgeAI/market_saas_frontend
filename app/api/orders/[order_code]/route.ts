@@ -48,3 +48,21 @@ export async function PATCH(
 	}
 }
 
+export async function GET(_request: NextRequest,
+	{ params }: { params: Promise<{  order_code: string }> }
+) {
+	const { order_code } = await params;
+	const response = await fetchRemoteData({
+		endpoint: `/orders/${order_code}`,
+		method: 'GET',
+		tags: [`orders-${order_code}`]
+	});
+
+	if (!response.success) {
+		logger.error(`Failed to fetch order details: #${order_code}: ${response.error}`);
+		return NextResponse.json({ error: response.error }, { status: response.status });
+	}
+
+	return NextResponse.json(response.data.data);
+}
+

@@ -4,12 +4,7 @@ import { logger } from '@/lib/logger';
 
 import { fetchRemoteData } from '@/lib/api-utils';
 
-/**
- * 签收订单，包括退换货和签收
- * @param request 
- * @param param1 
- * @returns 
- */
+// 供应商开始备货，变更订单状态，保存配送人员身份证号
 export async function PATCH(
 	request: NextRequest,
 	{ params }: { params: Promise<{  order_code: string }> }
@@ -21,7 +16,7 @@ export async function PATCH(
 		logger.debug(JSON.stringify(operationData));
 
 		const response = await fetchRemoteData({
-			endpoint: `/orders/${order_code}/begin-inspect-order`,
+			endpoint: `/orders/${order_code}/preparing`,
 			method: 'PATCH',
 			body: operationData,
 			needToken: true,

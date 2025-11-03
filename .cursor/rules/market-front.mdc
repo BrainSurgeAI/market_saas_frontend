@@ -45,3 +45,4 @@ alwaysApply: false
 - 若生成提交信息或文档，请遵循 **Conventional Commits** 格式：
   - 示例：`feat(order): add tenant-based order table rendering`
 - 在编写代码时，Cursor 应自动遵守这些规则，并以专业、整洁的 Next.js 项目结构组织文件。
+- 不要生成总结

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, Fragment, useMemo } from "react";
+import { Fragment, useMemo, useState, useEffect } from "react";
+import type { ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { useWorkspace } from "@/lib/WorkspaceContext";
@@ -10,6 +11,45 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Calendar, MapPin, User, Save, ChevronDownIcon, Download, ChevronUp, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
+
+// 导入类型定义（type-only import）
+import type { 
+  OrderDetail,
+  OrderItem,
+  ReturnExchangeItem,
+  ApiResponse,
+  DeliveryPerson,
+  ExchangeReturnRecord,
+  ExchangeReturnRecordWithInput,
+} from "@/lib/types/orderStatus";
+
+// 导入枚举和值
+import { 
+  OrderStatus, 
+  OperationType, 
+  TenantType
+} from "@/lib/types/orderStatus";
+
+// 导入状态工具函数
+import {
+	shouldEnterEditMode,
+	shouldShowInspectMenu,
+	shouldDisplayActualQuantity,
+	canShowStartProcessing,
+	canShowBeginInspect,
+	canShowCompleteAcceptance,
+	canShowCompleteOrder,
+	canShowCustomerBeginInspect,
+	shouldShowCountdown,
+  canShowDeliverToCustomer,
+} from "@/lib/utils/orderStatusUtils";
+
+// 导入 Hooks
+import { useOrderDetails } from "@/app/workspace/hooks/useOrderDetails";
+import { useOrderCalculations } from "@/app/workspace/hooks/useOrderCalculations";
+import { useOrderOperations } from "@/app/workspace/hooks/useOrderOperations";
+import { useOrderEditing } from "@/app/workspace/hooks/useOrderEditing";
+import { useOrderActions } from "@/app/workspace/hooks/useOrderActions";
 
 import { getStatusVariant, translateOrderStatus } from "@/lib/utils";
 import {
@@ -47,71 +87,12 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { DeliveryPerson } from "@/app/models";
 import CustomButton from "./CustomButton";
+import ProductSignDialog from "./ProductSignDialog";
+import { Loader2 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-interface OrderItem {
-	id: number;
-	productId: string;
-	name: string;
-	categoryId: number;
-	category: string;
-	unit: string;
-	quantity: string;
-	price: string;
-	discountRate: string;
-	actualPrice: string;
-	total: string;
-	processingRequirements: string | null;
-	remark: string | null;
-	actualQuantity: string;
-	actualAmount: string;
-	status?: string;
-}
-
-interface OrderDetail {
-	id: number;
-	orderCode: string;
-	customerName: string;
-	orderStatus: string;
-	totalAmount: string;
-	discountAmount: string;
-	actualAmount: string;
-	deliveryDate: string;
-	deliveryAddress: string;
-	contactName: string;
-	contactPhone: string;
-	remark: string | null;
-	createdBy: string;
-	createdAt: string;
-	confirmBy: string | null;
-	confirmedAt: string | null;
-	cancelBy: string | null;
-	cancelledAt: string | null;
-	afterSaleAt: string | null;
-	rejectBy: string | null;
-	rejectedAt: string | null;
-	rejectReason: string | null;
-	completedBy: string | null;
-	deliveryStaffName: string | null;
-	deliveryStaffPhone: string | null;
-	providerName: string | null;
-}
-
-interface ApiResponse {
-	order: OrderDetail;
-	items: OrderItem[];
-	receipts: {
-		id: number;
-		orderId: string;
-		productId: string;
-		productName: string;
-		operationType: string;
-		quantity: number;
-		reason: string;
-		unit: string;
-	}[];
-}
 
 interface OrderDetailProps {
 	orderCode: string;
@@ -119,1253 +100,233 @@ interface OrderDetailProps {
 	tenantType: string;
 }
 
-type OrderStatus = "PENDING" | "ASSIGNED" | "SUPPLIER_PREPARING" | "SUPPLIER_DELIVERING" | "MARKET_INSPECTING" | "COMPLETED" | "AFTER_SALE" | "REJECTED" | "CUSTOMER_INSPECTING";
-type OperationType = "RETURN" | "EXCHANGE" | "SIGN";
-
-interface ReturnExchangeItem {
-	orderId: string;
+type ItemQuantityPayload = {
 	id: number;
-	productId: string;
-	productName: string;
-	operationType: OperationType;
-	quantity: number;
-	reason: string;
-	unit: string;
+	actualQuantity: string;
+};
+
+interface ProviderDeliverRequest {
+	stockedBy: string;
+	items: ItemQuantityPayload[];
 }
 
-
-// 将API返回的操作记录转换为组件内部使用的格式
-const convertApiReceiptToInternalFormat = (receipt: ApiResponse['receipts'][0]): ReturnExchangeItem => {
-	return {
-		orderId: receipt.orderId,
-		id: receipt.id,
-		productId: receipt.productId,
-		productName: receipt.productName,
-		operationType: receipt.operationType as OperationType,
-		quantity: receipt.quantity,
-		reason: receipt.reason,
-		unit: receipt.unit
-	};
-};
-
-// 添加AfterSaleCountdown组件
-const AfterSaleCountdown = ({ afterSaleAt, rejectedAt, orderStatus, forceUpdate }: {
-	afterSaleAt: string | null,
-	rejectedAt: string | null,
-	orderStatus: string,
-	forceUpdate?: number
-}) => {
-	const [timeLeft, setTimeLeft] = useState<string>("00:00:00");
-	const { toast } = useToast();
-
-	const [isTimerEnded, setIsTimerEnded] = useState(false);
-
-	// 根据订单状态确定使用哪个时间作为起点
-	const startTimeStr = useMemo(() => {
-		if (orderStatus === 'AFTER_SALE' && afterSaleAt) {
-			return afterSaleAt;
-		} else if (orderStatus === 'REJECTED' && rejectedAt) {
-			return rejectedAt;
-		}
-		return null;
-	}, [orderStatus, afterSaleAt, rejectedAt]);
-
-	// 重置计时器的逻辑
-	useEffect(() => {
-		setIsTimerEnded(false);
-	}, [forceUpdate, startTimeStr]);
-
-	// 计算倒计时
-	useEffect(() => {
-		if (!startTimeStr) return;
-
-		const startTimeMs = new Date(startTimeStr).getTime();
-		const timeLimit = 120 * 60 * 1000; // 120分钟，单位为毫秒
-		const endTime = startTimeMs + timeLimit;
-
-		const calculateTimeLeft = () => {
-			const now = new Date().getTime();
-			const difference = endTime - now;
-
-			if (difference <= 0) {
-				setTimeLeft("00:00:00");
-
-				if (!isTimerEnded) {
-					setIsTimerEnded(true);
-					// 倒计时结束，刷新页面获取最新状态
-					toast({
-						title: "售后时间已结束",
-						description: "正在刷新页面获取最新状态...",
-						variant: "default",
-						duration: 3000,
-					});
-
-					// 延迟2秒后刷新页面，让用户有时间看到提示
-					setTimeout(() => {
-						window.location.reload();
-					}, 2000);
-				}
-				return;
-			}
-
-			const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-			const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
-			const seconds = Math.floor((difference % (1000 * 60)) / 1000);
-
-			setTimeLeft(
-				`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-			);
-		};
-
-		calculateTimeLeft();
-		const timer = setInterval(calculateTimeLeft, 1000);
-
-		return () => clearInterval(timer);
-	}, [startTimeStr, isTimerEnded, toast]);
-
-	// 根据订单状态显示不同的倒计时标题
-	const countdownTitle = useMemo(() => {
-		if (orderStatus === 'AFTER_SALE') {
-			return "离供应商售后结束还有";
-		} else if (orderStatus === 'REJECTED') {
-			return "离服务中心处理完成还有";
-		}
-		return "倒计时";
-	}, [orderStatus]);
-
-	return (
-		<div className="absolute inset-0 flex items-center justify-center z-20">
-			<div className="bg-black text-white px-6 py-3 rounded-lg shadow-lg text-center">
-				<p className="text-xs mb-1">{countdownTitle}</p>
-				<p className="text-2xl font-mono">{timeLeft}</p>
-			</div>
-		</div>
-	);
-};
+type MarketInspectRequest = ItemQuantityPayload[];
 
 export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetailProps) {
 	const params = useParams();
 	const router = useRouter();
 	const { toast } = useToast();
 	const { user } = useWorkspace();
-	const [orderDetail, setOrderDetail] = useState<OrderDetail | null>(null);
-	const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
-	const [processing, setProcessing] = useState(false);
 
-	const [isEditing, setIsEditing] = useState(false);
-	const [savingChanges, setSavingChanges] = useState(false);
-	const [itemErrors, setItemErrors] = useState<Record<number, string>>({});
-	const [originalTotal, setOriginalTotal] = useState<string>("0");
-	const [discountTotal, setDiscountTotal] = useState<string>("0");
-	const [actualTotal, setActualTotal] = useState<string>("0");
-	const [operationType, setOperationType] = useState<OperationType | null>(null);
-	const [operatingProductId, setOperatingProductId] = useState<number>(0);
-	const [operatingQuantity, setOperatingQuantity] = useState<string>("0");
-	const [operatingReason, setOperatingReason] = useState<string>("");
-	const [useFullQuantity, setUseFullQuantity] = useState<boolean>(false);
-	const [showOperationDialog, setShowOperationDialog] = useState<boolean>(false);
-	const [showConfirmDialog, setShowConfirmDialog] = useState<boolean>(false);
-	const [quantityError, setQuantityError] = useState<string>("");
-	const [reasonError, setReasonError] = useState<string>("");
-	const [returnExchangeRecords, setReturnExchangeRecords] = useState<ReturnExchangeItem[]>([]);
-	const [exportingExcel, setExportingExcel] = useState(false);
-	const [showOrderInfo, setShowOrderInfo] = useState(false);
-	const [deliveryStaffs, setDeliveryStaffs] = useState<DeliveryPerson[]>([]);
-	const [selectedDeliveryStaff, setSelectedDeliveryStaff] = useState<DeliveryPerson | null>(null);
-	const [showDeliveryStaffDialog, setShowDeliveryStaffDialog] = useState(false);
-	const [afterSaleTimestamp, setAfterSaleTimestamp] = useState<number>(0);
-	const [showRejectConfirmDialog, setShowRejectConfirmDialog] = useState(false);
-	const [statusChangeMessage, setStatusChangeMessage] = useState<{ title: string, description: string } | null>(null);
-	const [showBeginInspectDialog, setShowBeginInspectDialog] = useState(false);
-	const [beginInspecting, setBeginInspecting] = useState(false);
+	// 使用提取的 Hooks
+	const orderDetailsData = useOrderDetails(orderCode, orgId, tenantType);
+	const {
+		orderDetail,
+		setOrderDetail,
+		orderItems,
+		setOrderItems,
+		returnExchangeRecords,
+		setReturnExchangeRecords,
+		loading,
+		error,
+		isEditing,
+		setIsEditing,
+	} = orderDetailsData;
 
-	// 根据租户类型和订单状态判断是否显示订单状态
-	const shouldDisplayActualQuantity = (status: OrderStatus): boolean => {
-		if (tenantType.toLowerCase() === 'provider') {
-			return !['PENDING', 'ASSIGNED'].includes(status);
-		} else {
-			return ['MARKET_INSPECTING', 'EXCHANGE_NEW_DELIVERING', 'COMPLETED', 'EXCHANGE_INSPECTING'].includes(status);
-		}
-	}
+	const calculations = useOrderCalculations(orderItems, returnExchangeRecords, isEditing);
 
-	// 订单商品清单页面根据租户类型和订单状态判断是否显示订单验收操作菜单
-	const shouldOrderInspectMenu = (status: OrderStatus): boolean => {
+	const [exchangeReturnRecords, setExchangeReturnRecords] = useState<ExchangeReturnRecordWithInput[]>([]);
+	const [loadingExchangeReturn, setLoadingExchangeReturn] = useState(false);
+	const [exchangeReturnError, setExchangeReturnError] = useState<string | null>(null);
+	const {
+		returnMoney,
+		shouldDisplayReturnMoney,
+		actualTotal,
+		originalTotal,
+		discountTotal,
+		calculateActualTotal,
+		calculateOriginalTotal,
+		calculateDiscountTotal,
+		getCategorySummary,
+	} = calculations;
 
-		if (tenantType.toLowerCase() !== 'market' && tenantType.toLowerCase() !== 'provider') {
-			return false;
-		}
+	const operations = useOrderOperations(
+		orderCode,
+		orderItems,
+		returnExchangeRecords,
+		setReturnExchangeRecords,
+		user
+	);
+	const {
+		operatingProductId,
+		setOperatingProductId,
+		operationType,
+		setOperationType,
+		operatingQuantity,
+		setOperatingQuantity,
+		operatingReason,
+		setOperatingReason,
+		useFullQuantity,
+		setUseFullQuantity,
+		quantityError,
+		setQuantityError,
+		reasonError,
+		setReasonError,
+		showOperationDialog,
+		setShowOperationDialog,
+		showConfirmDialog,
+		setShowConfirmDialog,
+		handleOperation,
+		handleQuantityChange,
+		handleReasonChange,
+		handleUseFullQuantity,
+		handleSubmitOperation,
+		handleConfirmOperation: handleConfirmOperationFromHook,
+		getItemReturnExchangeRecords,
+		isProductSigned,
+		getProductSignRecord,
+		hasProductOperation,
+		getProductActualStatus,
+		canProductBeEdited,
+	} = operations;
 
-		if (['MARKET_INSPECTING', 'EXCHANGE_INSPECTING', 'CUSTOMER_INSPECTING'].includes(status)) {
-			return true;
-		}
+	const editing = useOrderEditing(orderItems, setOrderItems);
+	const {
+		itemErrors,
+		savingChanges,
+		setSavingChanges,
+		handleActualQuantityChange,
+		handleActualQuantityKeyDown,
+		isUnitAllowingDecimal,
+		hasErrors,
+	} = editing;
 
-		return false;
-	}
-
-	useEffect(() => {
-		const fetchOrderDetail = async () => {
-			try {
-				setLoading(true);
-				setError(null);
-
-				const response = await fetch(`/api/customers/${orgId}/orders/${orderCode}`, {
-					method: 'GET',
-					headers: {
-						'Content-Type': 'application/json',
-					},
-				});
-
-				if (!response.ok) {
-					throw new Error(`请求失败: ${response.status}`);
-				}
-
-				const responseData: ApiResponse = await response.json();
-
-				setOrderDetail(responseData.order);
-				setOrderItems(responseData.items);
-
-				// 确保操作记录正确初始化
-				let allReceipts: ReturnExchangeItem[] = [];
-
-				// 处理API返回的receipts
-				if (responseData.receipts && Array.isArray(responseData.receipts)) {
-					const formattedReceipts = responseData.receipts.map(receipt => convertApiReceiptToInternalFormat(receipt));
-					allReceipts = [...allReceipts, ...formattedReceipts];
-				}
-
-				// 处理商品上的status字段，将其转换为对应的操作记录
-				if (responseData.items && Array.isArray(responseData.items)) {
-					const statusReceipts = responseData.items
-						.filter(item => item.status) // 只处理有status的商品
-						.map(item => {
-							// 根据status创建对应的操作记录
-							let operationType: OperationType;
-
-							if (item.status === 'SIGN') {
-								operationType = 'SIGN';
-							} else if (item.status === 'RETURNED') {
-								operationType = 'RETURN';
-							} else if (item.status === 'EXCHANGED') {
-								operationType = 'EXCHANGE';
-							} else {
-								return null; // 不支持的状态跳过
-							}
-
-							// 检查是否已存在此商品的操作记录，避免重复
-							const existingReceipt = allReceipts.find(
-								r => r.productId === item.productId && r.operationType === operationType
-							);
-
-							if (existingReceipt) {
-								return null; // 已存在相同商品同类型的操作记录，跳过
-							}
-
-							// 创建新的操作记录
-							return {
-								orderId: orderCode,
-								id: item.id,
-								productId: item.productId,
-								productName: item.name,
-								operationType: operationType,
-								quantity: parseFloat(item.actualQuantity), // 使用实际数量
-								reason: operationType === 'SIGN' ? '客户签收确认' : '系统自动生成的记录',
-								unit: item.unit
-							} as ReturnExchangeItem;
-						})
-						.filter(Boolean) as ReturnExchangeItem[]; // 过滤掉null
-
-					// 合并两类操作记录
-					allReceipts = [...allReceipts, ...statusReceipts];
-				}
-
-				// 设置所有操作记录
-				setReturnExchangeRecords(allReceipts);
-
-				// 如果订单状态已经是SUPPLIER_PREPARING或EXCHANGE_IN_PROGRESS且为provider，则设置为编辑模式
-				// 或订单状态是EXCHANGE_INSPECTING且为market，也设置为编辑模式
-				if ((responseData.order.orderStatus === 'SUPPLIER_PREPARING' || responseData.order.orderStatus === 'EXCHANGE_IN_PROGRESS') && tenantType.toLowerCase() === 'provider') {
-					setIsEditing(true);
-				} else if (responseData.order.orderStatus === 'EXCHANGE_INSPECTING' && tenantType.toLowerCase() === 'market') {
-					setIsEditing(true);
-				}
-
-				// 初始化订单金额
-				setOriginalTotal(responseData.order.totalAmount);
-				setDiscountTotal(responseData.order.discountAmount || "0");
-				setActualTotal(responseData.order.actualAmount);
-
-			} catch (err) {
-				setError(err instanceof Error ? err.message : "获取订单详情时出错");
-			} finally {
-				setLoading(false);
-			}
-		};
-
-		if (params?.order_code) {
-			fetchOrderDetail();
-		}
-	}, [params?.order_code, params?.provider_id]);
-
-	const returnMoney = () => {
-		const d = returnExchangeRecords
-			.filter(r => r.operationType === 'RETURN')
-			.reduce((acc, record) => {
-				const item = orderItems.find(item => item.id === record.id);
-				if (!item) return acc;
-				return acc + parseFloat(item.actualPrice) * record.quantity;
-			}, 0).toFixed(2);
-		return d;
-	}
-
-	const shouldDisplayReturnMoney = () => {
-		return  parseFloat(returnMoney()) > 0;
-	}
-
-	// 合并服务器的操作记录和本地缓存的操作记录
-	const mergeOperationRecords = () => {
-		const existingRecordsString = sessionStorage.getItem('returnExchangeItems');
-		let localRecords: ReturnExchangeItem[] = [];
-		if (existingRecordsString) {
-			try {
-				localRecords = JSON.parse(existingRecordsString);
-			} catch (e) {
-				console.error("解析sessionStorage退换货数据出错", e);
-			}
-		}
-
-		// 过滤出不属于当前订单的记录
-		const otherOrderRecords = localRecords.filter(record => record.orderId !== orderCode);
-
-		// 合并当前订单的远程记录和本地记录，优先使用本地记录（可能包含未同步的最新操作）
-		const currentOrderLocalRecords = localRecords.filter(record => record.orderId === orderCode);
-		const allRecords = [...otherOrderRecords, ...currentOrderLocalRecords];
-
-		// 更新sessionStorage
-		sessionStorage.setItem('returnExchangeItems', JSON.stringify(allRecords));
-
-		return currentOrderLocalRecords;
-	};
-
-	useEffect(() => {
-		if (returnExchangeRecords.length > 0) {
-			const localRecords = mergeOperationRecords();
-
-			if (localRecords.length === 0) {
-				const allLocalRecords = JSON.parse(sessionStorage.getItem('returnExchangeItems') || '[]');
-				sessionStorage.setItem('returnExchangeItems', JSON.stringify([...allLocalRecords, ...returnExchangeRecords]));
-			}
-		}
-	}, [returnExchangeRecords.length]);
-
-	// 获取商品的退换货记录
-	const getItemReturnExchangeRecords = (id: number) => {
-		return returnExchangeRecords.filter(record => record.id === id);
-	};
-
-	// 判断商品是否已签收
-	const isProductSigned = (id: number) => {
-		return returnExchangeRecords.some(
-			record => record.id === id && record.operationType === 'SIGN'
-		);
-	};
-
-	// 获取商品的签收记录
-	const getProductSignRecord = (id: number) => {
-		return returnExchangeRecords.find(
-			record => record.id === id && record.operationType === 'SIGN'
-		);
-	};
-
-	// 判断商品是否已经有操作记录(签收、退货或换货)
-	const hasProductOperation = (id: number) => {
-		return returnExchangeRecords.some(
-			record => record.id === id
-		);
-	};
-
-	// 处理退货/换货操作
-	const handleOperation = (id: number, type: OperationType) => {
-		// 查找对应的商品项
-		const item = orderItems.find(item => item.id === id);
-		if (!item) return;
-
-		// 初始化操作状态
-		setOperatingProductId(id);
-		setOperationType(type);
-		setOperatingQuantity("0");
-		setOperatingReason("");
-		setUseFullQuantity(false);
-		setQuantityError("");
-		setReasonError("");
-
-		// 如果是签收操作，直接显示确认对话框
-		if (type === 'SIGN') {
-			setOperatingQuantity(item.actualQuantity);
-			setTimeout(() => {
-				setShowConfirmDialog(true);
-			}, 0);
-		} else {
-			// 显示操作对话框
-			setTimeout(() => {
-				setShowOperationDialog(true);
-			}, 0);
-		}
-	};
-
-	// 验证退换货数量
-	const validateQuantity = (value: string, id: number): boolean => {
-		const numValue = parseFloat(value);
-		const item = orderItems.find(item => item.id === id);
-
-		if (!item) {
-			setQuantityError("商品不存在");
-			return false;
-		}
-
-		if (isNaN(numValue)) {
-			setQuantityError("请输入有效数字");
-			return false;
-		}
-
-		if (numValue <= 0) {
-			setQuantityError("数量必须大于0");
-			return false;
-		}
-
-		const maxQuantity = parseFloat(item.actualQuantity);
-		if (numValue > maxQuantity) {
-			setQuantityError(`数量不能超过实际数量 ${maxQuantity}`);
-			return false;
-		}
-
-		// 检查小数位数
-		if (value.includes('.') && value.split('.')[1].length > 2) {
-			setQuantityError("最多支持2位小数");
-			return false;
-		}
-
-		setQuantityError("");
-		return true;
-	};
-
-	// 处理数量变更
-	const handleQuantityChange = (value: string) => {
-		setOperatingQuantity(value);
-		validateQuantity(value, operatingProductId);
-	};
-
-	// 处理原因变更
-	const handleReasonChange = (value: string) => {
-		setOperatingReason(value);
-		validateReason(value);
-	};
-
-	// 验证原因
-	const validateReason = (value: string): boolean => {
-		// 签收操作原因是可选的
-		if (operationType === 'SIGN') {
-			setReasonError("");
-			return true;
-		}
-
-		if (value.length < 6) {
-			setReasonError("原因描述不能少于6个字符");
-			return false;
-		}
-
-		if (value.length > 255) {
-			setReasonError("原因描述不能超过255个字符");
-			return false;
-		}
-
-		setReasonError("");
-		return true;
-	};
-
-	// 处理使用全部数量
-	const handleUseFullQuantity = (checked: boolean) => {
-		setUseFullQuantity(checked);
-
-		if (checked) {
-			const item = orderItems.find(item => item.id === operatingProductId);
-			if (item) {
-				setOperatingQuantity(item.actualQuantity);
-				setQuantityError("");
-			}
-		}
-	};
-
-	// 处理提交
-	const handleSubmitOperation = () => {
-		// 验证数量和原因
-		const isQuantityValid = validateQuantity(operatingQuantity, operatingProductId);
-		// 签收操作不需要强制填写原因
-		const isReasonValid = operationType === 'SIGN' ? true : validateReason(operatingReason);
-
-		// 如果任一验证失败，或没有操作类型，则退出
-		if (!isQuantityValid || !isReasonValid || !operationType) {
-			return;
-		}
-
-		// 显示确认对话框
-		setShowConfirmDialog(true);
-	};
+	const actions = useOrderActions(
+		orderCode,
+		orgId,
+		tenantType,
+		user,
+		params,
+		orderDetail,
+		setOrderDetail,
+		returnExchangeRecords,
+		orderItems
+	);
+	const {
+		processing,
+		showDeliveryStaffDialog,
+		setShowDeliveryStaffDialog,
+		deliveryStaffs,
+		selectedDeliveryStaff,
+		setSelectedDeliveryStaff,
+		beginInspecting,
+		deliveringToCustomer,
+		afterSaleTimestamp,
+		showRejectConfirmDialog,
+		setShowRejectConfirmDialog,
+		statusChangeMessage,
+		setStatusChangeMessage,
+		handleStartProcessing,
+		submitStartProcessing,
+		handleDeliveryStaffChange,
+		completeAcceptance,
+		completeOrder,
+		deliverToCustomer,
+		handleBeginInspect,
+		handleRejectOrComplete,
+	} = actions;
 
 	// 处理确认操作
 	const handleConfirmOperation = () => {
-		// 获取商品信息
-		const item = orderItems.find(item => item.id === operatingProductId);
-		if (!item || !operationType || !orderDetail) return;
-
-		// 创建操作记录
-		const operationRecord: ReturnExchangeItem = {
-			orderId: orderCode,
-			id: item.id,
-			productId: item.productId,
-			productName: item.name,
-			operationType: operationType,
-			quantity: parseFloat(operatingQuantity),
-			reason: operatingReason || (operationType === 'SIGN' ? '客户签收确认' : ''),
-			unit: item.unit
-		};
-
-		// 从sessionStorage获取现有记录
-		const existingRecordsString = sessionStorage.getItem('returnExchangeItems');
-		let records: ReturnExchangeItem[] = [];
-		if (existingRecordsString) {
-			try {
-				records = JSON.parse(existingRecordsString);
-			} catch (e) {
-				console.error("解析sessionStorage数据出错", e);
-			}
-		}
-
-		// 移除同一商品的已有记录，然后添加新的记录
-		records = records.filter(record => !(record.orderId === orderCode && record.id === operatingProductId));
-		records.push(operationRecord);
-
-		// 保存到sessionStorage
-		sessionStorage.setItem('returnExchangeItems', JSON.stringify(records));
-
-		// 更新本地状态中的退换货记录
-		setReturnExchangeRecords(records.filter(record => record.orderId === orderCode));
-
-		// 提交到服务器
-		submitOperationToServer(operationRecord);
-
-		// 更新实付金额
-		if (operationType === 'RETURN') {
-			const returnAmount = parseFloat(item.actualPrice) * parseFloat(operatingQuantity);
-			const newActualAmount = (parseFloat(orderDetail.actualAmount) - returnAmount).toFixed(2);
-			setOrderDetail({
-				...orderDetail,
-				actualAmount: newActualAmount
-			});
-		}
-
-		// 提示用户
-		toast({
-			title: "操作成功",
-			description: operationType === 'SIGN' ? "商品签收记录已保存" :
-				records.length > 1 && records.some(r => r.orderId === orderCode && r.id === operatingProductId && r !== operationRecord)
-					? `${operationType === 'RETURN' ? '退货' : '换货'}记录已更新（覆盖之前的记录）`
-					: `${operationType === 'RETURN' ? '退货' : '换货'}记录已保存`,
-			variant: "default",
-		});
-
-		// 先关闭确认对话框
-		setShowConfirmDialog(false);
-
-		// 延迟一点关闭主对话框，避免状态更新冲突
-		setTimeout(() => {
-			setShowOperationDialog(false);
-		}, 100);
+		handleConfirmOperationFromHook(orderDetail as OrderDetail);
 	};
 
-	const completeOrder = async () => {
-		try {
-			const apiUrl = `/api/customers/${orgId}/orders/${orderCode}/operations`;
-			const response = await fetch(apiUrl, {
-				method: 'PATCH',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					operateBy: user?.name || '',
-					status: 'COMPLETED',
-				}),
-			});
-
-			if (!response.ok) {
-				throw new Error(`提交操作记录失败: ${response.status}`);
-			}
-
-			// 更新订单状态
-			if (orderDetail) {
-				setOrderDetail({
-					...orderDetail,
-					orderStatus: 'COMPLETED'
-				});
-			}
-
-			toast({
-				title: "提交成功",
-				description: `订单${orderCode}已确认完成`,
-				variant: "success",
-				duration: 3000,
-			});
-
-		} catch (error) {
-			console.error('提交操作记录到服务器时出错:', error);
-			toast({
-				title: "同步失败",
-				description: "操作记录未能同步到服务器",
-				variant: "destructive",
-				duration: 3000,
-			});
-		}
-	};
-
-	const submitOperationToServer = async (operationRecord: ReturnExchangeItem) => {
-		try {
-			// const apiUrl = tenantType.toLowerCase() === 'provider'
-			// 	? `/api/providers/${params?.provider_id}/orders/${orderCode}/operations`
-			// 	: `/api/customers/${orgId}/orders/${orderCode}/operations`;
-
-			const response = await fetch(`/api/orders/${orderCode}/inspect`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					receipt: operationRecord,
-					operateBy: user?.name || '',
-				}),
-			});
-
-			if (!response.ok) {
-				throw new Error(`提交操作记录失败: ${response.status}`);
-			}
-
-		} catch (error) {
-			console.error('提交操作记录到服务器时出错:', error);
-			toast({
-				title: "同步失败",
-				description: "操作记录已保存在本地，但未能同步到服务器",
-				variant: "destructive",
-				duration: 5000,
-			});
-		}
-	};
-
-	// 计算订单项分类汇总
-	const getCategorySummary = () => {
-		const summary: Record<string, { count: number, total: number }> = {};
-
-		orderItems.forEach(item => {
-			if (!summary[item.category]) {
-				summary[item.category] = { count: 0, total: 0 };
-			}
-
-			if (['PENDING', 'ASSIGNED'].includes(orderDetail?.orderStatus as OrderStatus)) {
-				// 使用实际数量进行计算
-				const actualQuantity = parseFloat(item.actualQuantity) > 0 ? parseFloat(item.actualQuantity) : parseFloat(item.quantity);
-				summary[item.category].total += parseFloat(item.actualPrice) * actualQuantity;
-			}
-			else {
-				// 只考虑退货类型的记录，忽略换货类型的记录
-				const returnQuantity = returnExchangeRecords
-					.filter(r => r.id === item.id && r.operationType === 'RETURN')
-					.reduce((sum, r) => sum + r.quantity, 0);
-
-				// 使用实际数量减去退货数量
-				summary[item.category].total += parseFloat(item.actualPrice) * (parseFloat(item.actualQuantity) - returnQuantity);
-			}
-		});
-
-		return Object.entries(summary).map(([category, data]) => ({
-			category,
-			count: data.count,
-			total: data.total.toFixed(2)
-		}));
-	};
-
-	// 完成验收
-	const completeAcceptance = async () => {
-
-		try {
-			// 一次遍历确定订单状态
-			let hasExchangeStatus = false;
-
-			// 检查所有商品状态
-			for (const item of orderItems) {
-				const records = getItemReturnExchangeRecords(item.id);
-
-				// 检查是否存在换货记录, 退货直接退款，不影响验收完成。换货还需要后续备货，发货，验收流程
-				if (records.some(record => record.operationType === 'EXCHANGE')) {
-					hasExchangeStatus = true;
-					break;
-				}
-			}
-
-            const status = hasExchangeStatus? 'EXCHANGE_REQUESTED' : tenantType.toLowerCase() === 'market' ? 'MARKET_ACCEPTED' : 'COMPLETED';
-
-			let apiUrl;
-			if (status === 'MARKET_ACCEPTED' || status === 'COMPLETED') {
-				apiUrl = `/api/orders/${orderCode}/accpet`;
-			}  else {
-				apiUrl = `/api/orders/${orderCode}/exchange-request`
-			}
-
-			console.log(status, apiUrl);
-
-			const response = await fetch(apiUrl, {
-				method: 'PATCH',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					operateBy: user?.name || '',
-					status: status,
-				}),
-			});
-
-			if (!response.ok) {
-				throw new Error(`提交操作记录失败: ${response.status}`);
-			}
-
-			// 更新订单状态
-			if (orderDetail) {
-				// 如果状态是AFTER_SALE，则设置当前时间为afterSaleAt
-				const currentTime = hasExchangeStatus ? new Date().toISOString() : null;
-
-				setOrderDetail({
-					...orderDetail,
-					orderStatus: status,
-					afterSaleAt: currentTime
-				});
-
-				// 如果进入售后状态，更新倒计时触发器
-				if (hasExchangeStatus) {
-					setAfterSaleTimestamp(Date.now());
-				}
-			}
-
-			toast({
-				title: "提交成功",
-				description: `订单${orderCode}已${hasExchangeStatus ? '进入售后处理' : '完成验收'}`,
-				variant: "success",
-				duration: 3000,
-			});
-
-		} catch (error) {
-			console.error('提交操作记录到服务器时出错:', error);
-			toast({
-				title: "同步失败",
-				description: "操作记录未能同步到服务器",
-				variant: "destructive",
-				duration: 3000,
-			});
-		}
-	};
-
-	// 处理开始备货
-	const handleStartProcessing = async () => {
-		if (!orderDetail || processing || tenantType.toLowerCase() !== 'provider') return;
-
-		try {
-			setProcessing(true);
-
-			// 如果是供应商角色，先获取配送人员列表
-			if (tenantType.toLowerCase() === 'provider') {
-				// 获取配送人员列表
-				const staffResponse = await fetch(`/api/providers/${params?.provider_id}/delivery-staffs`, {
-					method: 'GET',
-					headers: {
-						'Content-Type': 'application/json',
-					},
-				});
-
-				if (!staffResponse.ok) {
-					throw new Error(`获取配送人员列表失败: ${staffResponse.status}`);
-				}
-
-				const staffData = await staffResponse.json();
-				const deliveryStaffs = staffData.data || [];
-
-				// 过滤出启用状态的配送人员
-				const activeStaffs = deliveryStaffs.filter((staff: DeliveryPerson) => staff.status === 1);
-
-				if (activeStaffs.length === 0) {
-					toast({
-						title: "无可用配送人员",
-						description: "请先添加并启用至少一名配送人员",
-						variant: "destructive",
-						duration: 3000,
-					});
-					setProcessing(false);
-					return;
-				}
-
-				// 弹出选择配送人员的对话框
-				setDeliveryStaffs(activeStaffs);
-				setShowDeliveryStaffDialog(true);
-				setProcessing(false);
-				return;
-			}
-
-			// 已经选择了配送人员，直接开始备货
-			await submitStartProcessing();
-		} catch (err) {
-			toast({
-				title: "操作失败",
-				description: err instanceof Error ? err.message : "开始备货时出错",
-				variant: "destructive",
-				duration: 3000,
-			});
-		} finally {
-			setProcessing(false);
-		}
-	};
-
-	// 提交开始备货请求
-	const submitStartProcessing = async () => {
-		try {
-			setProcessing(true);
-
-			const response = await fetch(`/api/providers/${params?.provider_id}/orders/${params?.order_code}/process`, {
-				method: 'PATCH',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					status: 'PROCESSING',
-					processedBy: user?.name || '',
-					idCard: selectedDeliveryStaff?.idCard || null,
-				}),
-			});
-
-			if (!response.ok) {
-				throw new Error(`开始备货失败: ${response.status}`);
-			}
-
-			// 更新订单状态并允许编辑实际数量
-			// 根据当前订单状态决定更新后的状态
-			let newStatus = 'SUPPLIER_PREPARING';
-			if (orderDetail?.orderStatus === 'EXCHANGE_REQUESTED') {
-				newStatus = 'EXCHANGE_IN_PROGRESS';
-			}
-
-			setOrderDetail({
-				...orderDetail!,
-				orderStatus: newStatus
-			});
-			setIsEditing(true);
-			setShowDeliveryStaffDialog(false);
-
-			toast({
-				title: "操作成功",
-				description: `订单已开始备货处理${selectedDeliveryStaff ? `，配送人员：${selectedDeliveryStaff.name}` : ''}`,
-				variant: "default",
-				duration: 3000,
-			});
-		} catch (err) {
-			toast({
-				title: "操作失败",
-				description: err instanceof Error ? err.message : "开始备货时出错",
-				variant: "destructive",
-				duration: 3000,
-			});
-		} finally {
-			setProcessing(false);
-		}
-	};
-
-	// 处理配送人员选择
-	const handleDeliveryStaffChange = (idCard: string) => {
-		const staff = deliveryStaffs.find(s => s.idCard === idCard);
-		if (staff) {
-			setSelectedDeliveryStaff(staff);
-		}
-	};
-
-	// 处理实际数量变更
-	const handleActualQuantityChange = (id: number, value: string) => {
-		const item = orderItems.find(item => item.id === id);
-		if (!item) return;
-
-		const newErrors = { ...itemErrors };
-		delete newErrors[id];
-
-		// 判断该单位是否允许小数
-		const allowDecimal = isUnitAllowingDecimal(item.unit);
-
-		// 验证输入
-		const numericValue = parseFloat(value);
-		
-		// 如果不允许小数且输入了小数点
-		if (!allowDecimal && value.includes('.')) {
-			newErrors[id] = `${item.unit}单位只能输入整数`;
-		} else if (isNaN(numericValue)) {
-			newErrors[id] = "请输入数字";
-		} else if (numericValue < 0) {
-			newErrors[id] = "不能为负数";
-		} else if (numericValue === 0) {
-			newErrors[id] = "不能为0";
-		} else if (numericValue > 999999.99) {
-			newErrors[id] = "超出范围";
-		} else if (allowDecimal && value.includes('.') && value.split('.')[1].length > 2) {
-			newErrors[id] = "最多支持2位小数";
-		}
-
-		setItemErrors(newErrors);
-
-		// 更新商品项
-		const updatedItems = orderItems.map(item => {
-			if (item.id === id) {
-				const actualQuantity = value;
-				const actualPrice = parseFloat(item.actualPrice);
-
-				// 计算实际总价和原始总价
-				const actualTotal = (actualQuantity && !isNaN(parseFloat(actualQuantity)) && !isNaN(actualPrice))
-					? (parseFloat(actualQuantity) * actualPrice).toFixed(2)
-					: item.total;
-
-				return {
-					...item,
-					actualQuantity,
-					actualTotal
-				};
-			}
-			return item;
-		});
-
-		setOrderItems(updatedItems);
-		updateOrderTotals(updatedItems);
-	};
-
-	// 判断单位是否允许小数
-	const isUnitAllowingDecimal = (unit: string): boolean => {
-		if (!unit) return true; // 默认允许小数
-		
-		const decimalUnits = ['kg', 'g', 'mg', 'ml', 'l', '升', '毫升', '克', '千克', '斤'];
-		const unitLower = unit.toLowerCase();
-		
-		return decimalUnits.some(decimalUnit => unitLower.includes(decimalUnit.toLowerCase()));
-	};
-
-	// 处理输入框的 keydown 事件，禁止输入小数点（针对不允许小数的单位）
-	const handleActualQuantityKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, itemId: number) => {
-		const item = orderItems.find(item => item.id === itemId);
-		if (!item) return;
-
-		const allowDecimal = isUnitAllowingDecimal(item.unit);
-		
-		// 如果不允许小数且用户试图输入小数点或 e/E（科学计数法）
-		if (!allowDecimal && (e.key === '.' || e.key === 'e' || e.key === 'E')) {
-			e.preventDefault();
-		}
-	};
-
-	const handleSaveActualQuantities = async () => {
-		if (hasErrors() || savingChanges) return;
-
-		try {
-			setSavingChanges(true);
-
-			// 根据租户类型选择不同的 API 端点
-			let apiUrl: string;
-			let requestBody: any;
-
-			if (tenantType.toLowerCase() === 'provider') {
-				apiUrl = `/api/providers/${params?.provider_id}/orders/${params?.order_code}/update-quantities`;
-				requestBody = {
-					operateBy: user?.name || '',
-					items: orderItems.map(item => ({
-						id: item.id,
-						actualQuantity: item.actualQuantity,
-					}))
-				};
-			} else if (tenantType.toLowerCase() === 'market') {
-				// market 租户只需要上传 EXCHANGED 商品的数量
-				apiUrl = `/api/orders/${orderCode}/inspect`;
-				requestBody = {
-					operateBy: user?.name || '',
-					items: orderItems
-						.filter(item => item.status === 'EXCHANGED')
-						.map(item => ({
-							id: item.id,
-							actualQuantity: item.actualQuantity,
-						}))
-				};
-			} else {
-				throw new Error('不支持的租户类型');
-			}
-
-			const response = await fetch(apiUrl, {
-				method: 'PUT',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify(requestBody),
-			});
-
-			if (!response.ok) {
-				throw new Error(`保存实际数量失败: ${response.status}`);
-			}
-
-			// 更新订单项的实际金额，确保使用实际数量乘以实际单价
-			const updatedItems = orderItems.map(item => {
-				const actualAmount = (parseFloat(item.actualPrice) * parseFloat(item.actualQuantity)).toFixed(2);
-				return {
-					...item,
-					actualAmount
-				};
-			});
-
-			setOrderItems(updatedItems);
-
-			if (orderDetail) {
-				// 根据当前订单状态和租户类型决定保存后的状态
-				let newStatus = 'SUPPLIER_DELIVERING';
-				if (orderDetail.orderStatus === 'EXCHANGE_IN_PROGRESS') {
-					newStatus = 'EXCHANGE_DELIVERING';
-				} else if (orderDetail.orderStatus === 'EXCHANGE_INSPECTING' && tenantType.toLowerCase() === 'market') {
-					newStatus = 'EXCHANGE_ACCEPTED';
-				}
-
-				setOrderDetail({
-					...orderDetail,
-					orderStatus: newStatus,
-					actualAmount: actualTotal,
-					totalAmount: originalTotal,
-					discountAmount: discountTotal
-				});
-			}
-			setIsEditing(false);
-
-			toast({
-				title: "保存成功",
-				description: tenantType.toLowerCase() === 'market' ? "换货商品已验收" : "实际发货量已更新",
-				variant: "success",
-				duration: 3000,
-			});
-		} catch (err) {
-			toast({
-				title: "保存失败",
-				description: err instanceof Error ? err.message : "保存实际数量时出错",
-				variant: "destructive",
-				duration: 3000,
-			});
-		} finally {
-			setSavingChanges(false);
-		}
-	};
-
-	// 计算实际总额
-	const calculateActualTotal = (items: OrderItem[]) => {
-		return items.reduce((sum, item) => {
-			const actualTotal = parseFloat(item.actualPrice) * parseFloat(item.actualQuantity);
-			return isNaN(actualTotal) ? sum : sum + actualTotal;
-		}, 0).toFixed(2);
-	};
-
-	// 计算原始总额
-	const calculateOriginalTotal = (items: OrderItem[]) => {
-		return items.reduce((sum, item) => {
-			if (!item.actualQuantity || isNaN(parseFloat(item.actualQuantity))) return sum;
-
-			const quantity = parseFloat(item.actualQuantity);
-			const price = parseFloat(item.price);
-			return sum + (quantity * price);
-		}, 0).toFixed(2);
-	};
-
-	// 计算折扣总额
-	const calculateDiscountTotal = (originalTotal: number, actualTotal: number) => {
-		return Math.max(0, originalTotal - actualTotal).toFixed(2);
-	};
-
-	// 更新订单总额
-	const updateOrderTotals = (items: OrderItem[]) => {
-		const newActualTotal = calculateActualTotal(items);
-		const newOriginalTotal = calculateOriginalTotal(items);
-		const newDiscountTotal = calculateDiscountTotal(parseFloat(newOriginalTotal), parseFloat(newActualTotal));
-
-		setActualTotal(newActualTotal);
-		setOriginalTotal(newOriginalTotal);
-		setDiscountTotal(newDiscountTotal);
-	};
-
-	const handleRejectOrComplete = async () => {
-		if (!orderDetail) return;
-		const status = orderDetail.orderStatus === 'AFTER_SALE' ? 'REJECTED' : 'COMPLETED';
-		console.log(status);
-
-		try {
-			const apiUrl = `/api/customers/${orgId}/orders/${orderCode}/operations`;
-			const response = await fetch(apiUrl, {
-				method: 'PATCH',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					operateBy: user?.name || '',
-					status: status,
-				}),
-			});
-
-			if (!response.ok) {
-				throw new Error(`提交操作记录失败: ${response.status}`);
-			}
-
-			const currentTime = new Date().toISOString();
-
-			// 更新订单状态，如果是REJECTED，设置rejectedAt
-			if (orderDetail) {
-				setOrderDetail({
-					...orderDetail,
-					orderStatus: status,
-					// 如果状态是REJECTED，更新rejectedAt
-					...(status === 'REJECTED' ? { rejectedAt: currentTime } : {})
-				});
-			}
-
-			// 如果进入REJECTED状态，更新倒计时触发器
-			if (status === 'REJECTED') {
-				setAfterSaleTimestamp(Date.now());
-				// 显示状态变更提示
-				setStatusChangeMessage({
-					title: "售后处理已开始",
-					description: "服务中心已开始处理您的售后申请，请耐心等待"
-				});
-			}
-
-			toast({
-				title: "提交成功",
-				description: `订单${orderCode}已${status === 'REJECTED' ? '拒绝售后' : '完成验收'}`,
-				variant: "success",
-				duration: 3000,
-			});
-
-			// 关闭确认对话框
-			setShowRejectConfirmDialog(false);
-
-		} catch (error) {
-			console.error('提交操作记录到服务器时出错:', error);
-			toast({
-				title: "同步失败",
-				description: "操作记录未能同步到服务器",
-				variant: "destructive",
-				duration: 3000,
-			});
-			// 关闭确认对话框
-			setShowRejectConfirmDialog(false);
-		}
-	}
-
-	// 显示确认对话框的处理函数
+	// 处理显示拒绝确认对话框
 	const showRejectConfirmation = () => {
 		setShowRejectConfirmDialog(true);
-	}
+	};
 
-	// 处理开始验收订单
-	const handleBeginInspect = async () => {
-		if (!orderDetail) return;
+	// 处理显示倒计时
+	const shouldShowCountdownDisplay = useMemo(() => {
+		if (!orderDetail) {
+			return false;
+		}
+		return shouldShowCountdown(orderDetail.orderStatus as OrderStatus);
+	}, [orderDetail]);
 
-		if (orderDetail.orderStatus !== "SUPPLIER_DELIVERING" && orderDetail.orderStatus !== "EXCHANGE_NEW_DELIVERING") {
-			toast({
-				title: "操作失败",
-				description: "订单状态不正确，无法开始验收",
-				variant: "destructive",
-				duration: 3000,
-			});
+	const shouldShowActualQuantityColumn = useMemo(() => {
+		if (!orderDetail) {
+			return false;
+		}
+
+		if (tenantType.toLowerCase() === TenantType.PROVIDER) {
+			return true;
+		}
+		return ![
+			OrderStatus.PENDING,
+			OrderStatus.ASSIGNED,
+			OrderStatus.SUPPLIER_PREPARING,
+		].includes(orderDetail.orderStatus as OrderStatus);
+	}, [orderDetail, tenantType]);
+
+	useEffect(() => {
+		if (!orderDetail) {
 			return;
 		}
 
-
-		try {
-			setBeginInspecting(true);
-
-			const response = await fetch(`/api/orders/${orderCode}`, {
-				method: 'PATCH',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({
-					operateBy: user?.name || '',
-					status: orderDetail.orderStatus === "SUPPLIER_DELIVERING" ? 'MARKET_INSPECTING' : 'EXCHANGE_INSPECTING',
-				}),
-			});
-
-			if (!response.ok) {
-				throw new Error(`开始验收失败: ${response.status}`);
-			}
-
-			const responseData = await response.json();
-			
-			// 获取返回的新状态（返回的 data 字段是新状态）
-			const newStatus = responseData.data;
-
-			// 更新订单状态
-			if (orderDetail) {
-				setOrderDetail({
-					...orderDetail,
-					orderStatus: newStatus
-				});
-			}
-
-			toast({
-				title: "操作成功",
-				description: `订单${orderCode}已开始验收`,
-				variant: "success",
-				duration: 3000,
-			});
-
-			// 关闭对话框
-			setShowBeginInspectDialog(false);
-
-		} catch (error) {
-			console.error('开始验收时出错:', error);
-			toast({
-				title: "操作失败",
-				description: error instanceof Error ? error.message : "开始验收时出错",
-				variant: "destructive",
-				duration: 3000,
-			});
-		} finally {
-			setBeginInspecting(false);
-		}
-	}
-
-
-	// 验证是否有错误
-	const hasErrors = () => {
-		// 检查是否有显式的错误
-		if (Object.keys(itemErrors).length > 0) {
-			return true;
+		const enableEditing = shouldEnterEditMode(orderDetail.orderStatus as OrderStatus, tenantType);
+		if (enableEditing && !isEditing) {
+			setIsEditing(true);
 		}
 
-		// 检查是否有商品的实际数量为0或无效
-		for (const item of orderItems) {
-			const quantity = parseFloat(item.actualQuantity);
-			if (isNaN(quantity) || quantity === 0) {
-				// 自动添加错误信息
-				const newErrors = { ...itemErrors };
-				newErrors[item.id] = quantity === 0 ? "数量不能为0" : "请输入数字";
-				setItemErrors(newErrors);
-				return true;
-			}
+		if (!enableEditing && isEditing) {
+			setIsEditing(false);
+		}
+	}, [orderDetail, tenantType, isEditing, setIsEditing]);
+
+	useEffect(() => {
+		if (!orderDetail) {
+			return;
 		}
 
-		return false;
-	};
+		const fetchExchangeReturnRecords = async () => {
+			try {
+				setLoadingExchangeReturn(true);
+				setExchangeReturnError(null);
 
-	// 返回上一页
+				const response = await fetch(`/api/orders/${orderDetail.orderCode}/exchange-and-return-order-details`);
+				if (!response.ok) {
+					throw new Error(`获取退换货记录失败: ${response.status}`);
+				}
+
+				const result = await response.json();
+				setExchangeReturnRecords(
+					(result?.data ?? []).map((record: ExchangeReturnRecord) => ({
+						...record,
+						inputQuantity: record.actualQuantity ?? record.quantity ?? '0',
+						submitting: false,
+						submitError: null,
+					}))
+				);
+			} catch (err) {
+				setExchangeReturnError(err instanceof Error ? err.message : '获取退换货记录时出错');
+			} finally {
+				setLoadingExchangeReturn(false);
+			}
+		};
+
+		fetchExchangeReturnRecords();
+	}, [orderDetail]);
+
+	// 处理返回上一页
 	const handleGoBack = () => {
 		router.back();
+	};
+
+	const navigateToMarketExchangePage = () => {
+		const marketParam = params?.market_id;
+		const marketId = Array.isArray(marketParam) ? marketParam[0] : marketParam ?? orgId;
+		router.push(`/workspace/markets/${marketId}/orders/${orderCode}/exchange`);
 	};
 
 	// 添加导出Excel功能
@@ -1392,7 +353,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 				{ header: '商品名称', key: 'name', width: 30 },
 				{ header: '类别', key: 'category', width: 15 },
 				{ header: '下单数量', key: 'quantity', width: 10 },
-				{ header: '实际数量', key: 'actualQuantity', width: 10 },
+				{ header: '实际发货量', key: 'actualQuantity', width: 10 },
 				{ header: '单位', key: 'unit', width: 10 },
 				{ header: '单价(元)', key: 'price', width: 15 },
 				{ header: '折扣率', key: 'discountRate', width: 10 },
@@ -1511,6 +472,200 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		}
 	};
 
+	// 添加 showOrderInfo 和 showBeginInspectDialog 状态
+	const [showOrderInfo, setShowOrderInfo] = useState(false);
+	const [showBeginInspectDialog, setShowBeginInspectDialog] = useState(false);
+	const [exportingExcel, setExportingExcel] = useState(false);
+
+	// ReturnCountdown 组件
+	const ReturnCountdown = ({ afterSaleAt, orderStatus, forceUpdate }: {
+		afterSaleAt: string | null,
+		orderStatus: string,
+		forceUpdate?: number
+	}) => {
+		const [timeLeft, setTimeLeft] = useState<string>("00:00:00");
+		const { toast } = useToast();
+		const [isTimerEnded, setIsTimerEnded] = useState(false);
+
+		// 根据订单状态确定使用哪个时间作为起点
+		const startTimeStr = useMemo(() => {
+			if (orderStatus === OrderStatus.RETURN_REQUESTED && afterSaleAt) {
+				return afterSaleAt;
+			}
+			return null;
+		}, [orderStatus, afterSaleAt]);
+
+		// 重置计时器的逻辑
+		useEffect(() => {
+			setIsTimerEnded(false);
+		}, [forceUpdate, startTimeStr]);
+
+		// 计算倒计时
+		useEffect(() => {
+			if (!startTimeStr) return;
+
+			const startTimeMs = new Date(startTimeStr).getTime();
+			const timeLimit = 120 * 60 * 1000; // 120分钟
+			const endTime = startTimeMs + timeLimit;
+
+			const calculateTimeLeft = () => {
+				const now = new Date().getTime();
+				const difference = endTime - now;
+
+				if (difference <= 0) {
+					setTimeLeft("00:00:00");
+
+					if (!isTimerEnded) {
+						setIsTimerEnded(true);
+						toast({
+							title: "售后时间已结束",
+							description: "正在刷新页面获取最新状态...",
+							variant: "default",
+							duration: 3000,
+						});
+
+						setTimeout(() => {
+							window.location.reload();
+						}, 2000);
+					}
+					return;
+				}
+
+				const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+				const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+				const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+
+				setTimeLeft(
+					`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+				);
+			};
+
+			calculateTimeLeft();
+			const timer = setInterval(calculateTimeLeft, 1000);
+
+			return () => clearInterval(timer);
+		}, [startTimeStr, isTimerEnded, toast]);
+
+		return (
+			<div className="absolute inset-0 flex items-center justify-center z-20">
+				<div className="bg-black text-white px-6 py-3 rounded-lg shadow-lg text-center">
+					<p className="text-xs mb-1">离售后结束还有</p>
+					<p className="text-2xl font-mono">{timeLeft}</p>
+				</div>
+			</div>
+		);
+	};
+
+	// 处理保存实际数量
+	const handleSaveActualQuantities = async () => {
+		if (hasErrors() || savingChanges) return;
+
+		const tenantRaw = tenantType.toLowerCase();
+		const tenantEnum = tenantRaw as TenantType;
+		const buildPayload = (items: OrderItem[]): ItemQuantityPayload[] =>
+			items.map(item => ({
+				id: item.id,
+				actualQuantity: item.actualQuantity,
+			}));
+
+		try {
+			setSavingChanges(true);
+
+			let response: Response;
+
+			switch (tenantEnum) {
+				case TenantType.PROVIDER: {
+					const apiUrl = `/api/orders/${orderCode}/deliver-to-market`;
+					const payload: ProviderDeliverRequest = {
+						stockedBy: user?.name ?? '',
+						items: buildPayload(orderItems),
+					};
+					response = await fetch(apiUrl, {
+						method: 'PUT',
+						headers: {
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify(payload),
+					});
+					break;
+				}
+				case TenantType.MARKET: {
+					const apiUrl = orderItems.some((item: OrderItem) => item.status === 'EXCHANGED') ? `/api/orders/${orderCode}/exchange-request` : `/api/orders/${orderCode}/accept`;
+
+					console.log("apiUrl:-----------", apiUrl);
+					const targetItems = orderDetail?.orderStatus === OrderStatus.EXCHANGE_INSPECTING
+						? orderItems.filter((item: OrderItem) => item.status === 'EXCHANGED')
+						: orderItems;
+					const payload: MarketInspectRequest = buildPayload(targetItems);
+					response = await fetch(apiUrl, {
+						method: 'PATCH',
+						headers: {
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify(payload),
+					});
+					break;
+				}
+				case TenantType.CUSTOMER:
+					throw new Error('不支持的租户类型');
+				default:
+					throw new Error('不支持的租户类型');
+			}
+
+			if (!response.ok) {
+				throw new Error(`保存实际发货量失败: ${response.status}`);
+			}
+
+			const updatedItems = orderItems.map((item) => {
+				const actualAmountVal = (parseFloat(item.actualPrice) * parseFloat(item.actualQuantity)).toFixed(2);
+				return {
+					...item,
+					actualAmount: actualAmountVal,
+				};
+			});
+
+			setOrderItems(updatedItems);
+
+			if (orderDetail) {
+				let newStatus = OrderStatus.SUPPLIER_DELIVERING;
+				if (orderDetail.orderStatus === OrderStatus.EXCHANGE_IN_PROGRESS) {
+					newStatus = OrderStatus.EXCHANGE_DELIVERING;
+				} else if (orderDetail.orderStatus === OrderStatus.EXCHANGE_INSPECTING && tenantRaw === TenantType.MARKET) {
+					newStatus = OrderStatus.EXCHANGE_COMPLETED;
+				} else if (orderDetail.orderStatus === OrderStatus.MARKET_INSPECTING && tenantRaw === TenantType.MARKET) {
+					newStatus = OrderStatus.MARKET_ACCEPTED;
+				} else if (orderDetail.orderStatus === OrderStatus.CUSTOMER_INSPECTING && tenantRaw === TenantType.CUSTOMER) {
+					newStatus = OrderStatus.COMPLETED;
+				}
+
+				setOrderDetail({
+					...orderDetail,
+					orderStatus: newStatus,
+					actualAmount: actualTotal,
+					totalAmount: originalTotal,
+					discountAmount: discountTotal,
+				});
+			}
+			setIsEditing(false);
+
+			toast({
+				title: "保存成功",
+				description: tenantRaw === TenantType.MARKET ? "换货商品已验收" : "实际发货量已更新",
+				variant: "success",
+				duration: 3000,
+			});
+		} catch (err) {
+			toast({
+				title: "保存失败",
+				description: err instanceof Error ? err.message : "保存实际数量时出错",
+				variant: "destructive",
+				duration: 3000,
+			});
+		} finally {
+			setSavingChanges(false);
+		}
+	};
+
 	if (loading) {
 		return (
 			<div className="container mx-auto py-6">
@@ -1548,6 +703,406 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 			</div>
 		);
 	}
+
+	const tenantEnum = tenantType.toLowerCase() as TenantType;
+	const hasExchangedItems = orderItems.some((item) => item.status?.toUpperCase() === "EXCHANGED");
+	const shouldShowMarketExchangeConfirmation =
+		tenantEnum === TenantType.MARKET &&
+		(orderDetail.orderStatus as OrderStatus) === OrderStatus.EXCHANGE_REQUESTED &&
+		hasExchangedItems;
+
+	const renderStartProcessingButton = (): ReactNode => (
+		<AlertDialog key="start-processing">
+			<AlertDialogTrigger asChild>
+				<Button className="bg-blue-600 hover:bg-blue-500" size="sm">
+					{orderDetail.orderStatus === OrderStatus.ASSIGNED ? "开始备货" : "开始换货"}
+				</Button>
+			</AlertDialogTrigger>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle className="text-sm">确认开始备货?</AlertDialogTitle>
+					<AlertDialogDescription className="text-xs">
+						确认后，订单状态更新为"备货中"，表示您已开始准备该订单的商品。
+						您可以编辑实际发货数量。
+					</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel>取消</AlertDialogCancel>
+					<AlertDialogAction onClick={handleStartProcessing} disabled={processing} className="bg-blue-600 hover:bg-blue-500 text-xs">
+						{processing ? "处理中..." : "确认"}
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+	);
+
+	const renderExchangeProcessingButton = (): ReactNode => (
+		<Button
+			key="exchange-processing"
+			variant="outline"
+			onClick={async () => {
+				try {
+					const response = await fetch(`/api/orders/${orderCode}/begin-exchange-progress`, {
+						method: 'PATCH',
+						headers: {
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify({ operateBy: user?.name || '' }),
+					});
+
+					if (!response.ok) {
+						throw new Error(`开始换货失败: ${response.status}`);
+					}
+
+					router.push(`/workspace/providers/${params?.provider_id}/orders/${orderCode}/exchange`);
+				} catch (error) {
+					toast({
+						title: '操作失败',
+						description: error instanceof Error ? error.message : '开始换货时出错',
+						variant: 'destructive',
+					});
+				}
+			}}
+			size="sm"
+		>
+			确认换货
+		</Button>
+	);
+
+	const renderBeginInspectButton = (): ReactNode => (
+		<AlertDialog key="begin-inspect" open={showBeginInspectDialog} onOpenChange={setShowBeginInspectDialog}>
+			<AlertDialogTrigger asChild>
+				<Button className="bg-blue-600 hover:bg-blue-500" size="sm">
+					开始验收
+				</Button>
+			</AlertDialogTrigger>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle className="text-sm">确认开始验收?</AlertDialogTitle>
+					<AlertDialogDescription className="text-xs">
+						确认后，订单状态更新为"验收中"，表示您已开始验收该订单的商品。
+					</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel>取消</AlertDialogCancel>
+					<AlertDialogAction onClick={handleBeginInspect} disabled={beginInspecting} className="bg-blue-600 hover:bg-blue-500 text-xs">
+						{beginInspecting ? "处理中..." : "确认"}
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+	);
+
+	const renderCustomerBeginInspectButton = (): ReactNode => (
+		<AlertDialog key="customer-begin-inspect" open={showBeginInspectDialog} onOpenChange={setShowBeginInspectDialog}>
+			<AlertDialogTrigger asChild>
+				<Button className="bg-blue-600 hover:bg-blue-500" size="sm">
+					开始验收
+				</Button>
+			</AlertDialogTrigger>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle className="text-sm">确认开始验收?</AlertDialogTitle>
+					<AlertDialogDescription className="text-xs">
+						确认后，订单状态更新为"客户验收中"，表示您已开始验收该订单的商品。
+					</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel>取消</AlertDialogCancel>
+					<AlertDialogAction onClick={handleBeginInspect} disabled={beginInspecting} className="bg-blue-600 hover:bg-blue-500 text-xs">
+						{beginInspecting ? "处理中..." : "确认"}
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+	);
+
+	const renderDeliverToCustomerButton = (): ReactNode => (
+		<AlertDialog key="deliver-to-customer">
+			<AlertDialogTrigger asChild>
+				<Button className="bg-purple-600 hover:bg-purple-500" size="sm">
+					确认发货
+				</Button>
+			</AlertDialogTrigger>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle className="text-sm">确认开始发货?</AlertDialogTitle>
+					<AlertDialogDescription className="text-xs">
+						确认后，订单状态将更新为"配送中"，表示市场正在将商品配送给客户。
+					</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel>取消</AlertDialogCancel>
+					<AlertDialogAction onClick={deliverToCustomer} disabled={deliveringToCustomer} className="bg-purple-600 hover:bg-purple-500 text-xs">
+						{deliveringToCustomer ? "处理中..." : "确认"}
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+	);
+
+	const renderMarketConfirmExchangeButton = (): ReactNode => (
+		<AlertDialog key="market-confirm-exchange">
+			<AlertDialogTrigger asChild>
+				<Button className="bg-purple-600 hover:bg-purple-500" size="sm">
+					确认换货
+				</Button>
+			</AlertDialogTrigger>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle className="text-sm">确认进入换货流程?</AlertDialogTitle>
+					<AlertDialogDescription className="text-xs">
+						确认后将跳转至换货处理页面，请核对需要换货的商品信息并提交换货申请。
+					</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel>取消</AlertDialogCancel>
+					<AlertDialogAction onClick={navigateToMarketExchangePage} className="bg-purple-600 hover:bg-purple-500 text-xs">
+						确认
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+	);
+
+	const renderMarketExchangeInspectButton = (): ReactNode => (
+		<Button
+			key="market-exchange-inspect"
+			variant="outline"
+			onClick={() => router.push(`/workspace/markets/${params?.market_id}/orders/${orderCode}/exchange`)}
+			size="sm"
+		>
+			验收换货
+		</Button>
+	);
+
+	const renderFinalizeQuantitiesButton = (key: string, label: string, confirmTitle: string, confirmDescription: string): ReactNode => (
+		<AlertDialog key={key}>
+			<AlertDialogTrigger asChild>
+				<Button className="bg-green-600 hover:bg-green-500 flex items-center gap-1" size="sm" disabled={hasErrors() || savingChanges}>
+					<Save className="h-4 w-4" />
+					{savingChanges ? "保存中..." : label}
+				</Button>
+			</AlertDialogTrigger>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle className="text-sm font-semibold">{confirmTitle}</AlertDialogTitle>
+					<AlertDialogDescription className="text-xs">
+						{confirmDescription}
+					</AlertDialogDescription>
+					<Separator />
+					<div className="mt-4 space-y-1 text-sm text-muted-foreground">
+						<p>原价: <span className="font-semibold font-mono ml-2">¥{originalTotal}</span></p>
+						<p className="text-red-600">折扣: <span className="font-semibold font-mono ml-2">-¥{discountTotal}</span></p>
+						<p className="text-red-600">退款: <span className="font-semibold font-mono ml-2">-¥{returnMoney}</span></p>
+						<p>实收: <span className="font-semibold font-mono ml-2">¥{(parseFloat(actualTotal) - parseFloat(returnMoney)).toFixed(2)}</span></p>
+					</div>
+					<Separator />
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel>取消</AlertDialogCancel>
+					<AlertDialogAction
+						onClick={handleSaveActualQuantities}
+						disabled={hasErrors() || savingChanges}
+						className="bg-green-600 hover:bg-green-500 text-xs"
+					>
+						{savingChanges ? "保存中..." : "确认"}
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+	);
+
+	const renderItemOperationButton = (): ReactNode => (
+		<CustomButton
+			key="item-operations"
+			returnExchangeRecordsLength={returnExchangeRecords.length}
+			tenantType={tenantType}
+			orderItemsSize={orderItems.length}
+			orderStatus={orderDetail.orderStatus}
+			orderHandler={completeAcceptance}
+			rejectOrCompleteHandler={showRejectConfirmation}
+		/>
+	);
+
+	const renderCompleteOrderButton = (): ReactNode => (
+		<AlertDialog key="complete-order">
+			<AlertDialogTrigger asChild>
+				<Button
+					variant="outline"
+					size="sm"
+					className="h-8 px-2 text-xs flex items-center gap-1 hover:bg-green-600 bg-green-700 text-white hover:text-white"
+				>
+					完成订单
+				</Button>
+			</AlertDialogTrigger>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle className="text-sm">确认完成订单?</AlertDialogTitle>
+					<AlertDialogDescription className="text-xs">
+						确认后，订单状态将更新为"已完成"，此操作不可撤销。
+					</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel className="text-xs">取消</AlertDialogCancel>
+					<AlertDialogAction onClick={completeOrder} className="bg-green-600 hover:bg-green-500 text-xs">
+						确认完成
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+	);
+
+	const renderExportButton = (): ReactNode => (
+		<Button
+			key="export-excel"
+			variant="outline"
+			size="sm"
+			className="h-8 px-2 text-xs flex items-center gap-1 hover:bg-gray-100"
+			onClick={exportToExcel}
+			disabled={exportingExcel}
+		>
+			{exportingExcel ? (
+				<span className="animate-spin mr-1">⏳</span>
+			) : (
+				<Download className="h-3 w-3 mr-1" />
+			)}
+			导出Excel
+		</Button>
+	);
+
+	const tenantActionButtons: ReactNode[] = [];
+
+	if (tenantEnum === TenantType.PROVIDER) {
+		if (orderDetail.orderStatus === OrderStatus.EXCHANGE_REQUESTED) {
+			tenantActionButtons.push(renderExchangeProcessingButton());
+		}
+
+		if (canShowStartProcessing(orderDetail.orderStatus as OrderStatus, tenantType) && orderDetail.orderStatus !== OrderStatus.EXCHANGE_REQUESTED) {
+			tenantActionButtons.push(renderStartProcessingButton());
+		}
+
+		if (isEditing && shouldEnterEditMode(orderDetail.orderStatus as OrderStatus, tenantType)) {
+			const providerTitle = orderDetail.orderStatus === OrderStatus.EXCHANGE_IN_PROGRESS ? "确认完成换货备货?" : "确认完成备货?";
+			tenantActionButtons.push(
+				renderFinalizeQuantitiesButton(
+					"complete-preparing",
+					"完成备货",
+					providerTitle,
+					"提交后，系统将更新商品的实际出货量，总金额也会相应调整。"
+				)
+			);
+		}
+	}
+
+	if (tenantEnum === TenantType.MARKET) {
+		if (canShowBeginInspect(orderDetail.orderStatus as OrderStatus, tenantType)) {
+			tenantActionButtons.push(renderBeginInspectButton());
+		}
+
+		if (shouldShowMarketExchangeConfirmation) {
+			tenantActionButtons.push(renderMarketConfirmExchangeButton());
+		} else if (canShowDeliverToCustomer(orderDetail.orderStatus as OrderStatus, tenantType)) {
+			tenantActionButtons.push(renderDeliverToCustomerButton());
+		}
+
+		if (orderDetail.orderStatus === OrderStatus.EXCHANGE_INSPECTING) {
+			tenantActionButtons.push(renderMarketExchangeInspectButton());
+		}
+
+		if (isEditing && shouldEnterEditMode(orderDetail.orderStatus as OrderStatus, tenantType)) {
+			const marketTitle = orderDetail.orderStatus === OrderStatus.EXCHANGE_INSPECTING ? "确认完成换货验收?" : "确认完成验收?";
+			tenantActionButtons.push(
+				renderFinalizeQuantitiesButton(
+					"complete-inspection",
+					"完成验收",
+					marketTitle,
+					"提交后，商品验收完成，订单将进入下一流程。"
+				)
+			);
+		}
+
+		//tenantActionButtons.push(renderItemOperationButton());
+	}
+
+	if (tenantEnum === TenantType.CUSTOMER) {
+		if (canShowCustomerBeginInspect(orderDetail.orderStatus as OrderStatus, tenantType)) {
+			tenantActionButtons.push(renderCustomerBeginInspectButton());
+		}
+
+		tenantActionButtons.push(renderItemOperationButton());
+
+		if (canShowCompleteOrder(orderDetail.orderStatus as OrderStatus, tenantType)) {
+			tenantActionButtons.push(renderCompleteOrderButton());
+		}
+	}
+
+	const actionBarButtons: ReactNode[] = [...tenantActionButtons, renderExportButton()];
+
+	const handleExchangeReturnInputChange = (orderDetailId: number, value: string) => {
+		setExchangeReturnRecords((prev) => prev.map((record) => (
+			record.orderDetailId === orderDetailId
+				? { ...record, inputQuantity: value }
+				: record
+		)));
+	};
+
+	const handleSubmitExchangeReturnRecord = async (record: ExchangeReturnRecordWithInput) => {
+		setExchangeReturnRecords((prev) => prev.map((item) => (
+			item.orderDetailId === record.orderDetailId ? { ...item, submitting: true, submitError: null } : item
+		)));
+
+		try {
+			const response = await fetch(`/api/orders/${orderDetail?.orderCode}/inspect-sub-orders`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					operateBy: user?.name || '',
+					receipt: {
+						id: record.orderDetailId,
+						orderId: orderDetail?.orderCode,
+						productName: record.productName,
+						operationType: record.operationType,
+						quantity: Number(record.inputQuantity) || 0,
+						reason: record.reason,
+						unit: record.unit,
+					},
+				}),
+			});
+
+			if (!response.ok) {
+				throw new Error(`提交退换货记录失败: ${response.status}`);
+			}
+
+			setExchangeReturnRecords((prev) => prev.map((item) => (
+				item.orderDetailId === record.orderDetailId
+					? { ...item, submitting: false, status: 'COMPLETED', actualQuantity: record.inputQuantity }
+					: item
+			)));
+
+			toast({
+				title: '提交成功',
+				description: `${record.productName} 的退换货已更新`,
+				variant: 'success',
+			});
+		} catch (error) {
+			setExchangeReturnRecords((prev) => prev.map((item) => (
+				item.orderDetailId === record.orderDetailId
+					? { ...item, submitting: false, submitError: error instanceof Error ? error.message : '提交失败' }
+					: item
+			)));
+
+			toast({
+				title: '提交失败',
+				description: error instanceof Error ? error.message : '提交退换货记录时发生错误',
+				variant: 'destructive',
+			});
+		}
+	};
+
+	const canCompleteExchangeReturn = exchangeReturnRecords.length > 0 && exchangeReturnRecords.every((record) => record.status === 'COMPLETED');
 
 	return (
 		<div className="container mx-auto py-6">
@@ -1604,11 +1159,10 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 								</div>
 							</CardTitle>
 						</CardHeader>
-						{(orderDetail.orderStatus === "AFTER_SALE" || orderDetail.orderStatus === "REJECTED") && !showOrderInfo && (
+					{shouldShowCountdownDisplay && !showOrderInfo && (
 							<div className="relative">
-								<AfterSaleCountdown
+							<ReturnCountdown
 									afterSaleAt={orderDetail.afterSaleAt}
-									rejectedAt={orderDetail.rejectedAt}
 									orderStatus={orderDetail.orderStatus}
 									forceUpdate={afterSaleTimestamp}
 								/>
@@ -1671,7 +1225,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 										</div>
 										<div>
 											<p className="text-sm text-gray-500">实付金额</p>
-											<p className="text-sm font-mono text-primary">¥{(parseFloat(orderDetail.actualAmount) - parseFloat(returnMoney())).toFixed(2)}</p>
+											<p className="text-sm font-mono text-primary">¥{(parseFloat(orderDetail.actualAmount) - parseFloat(returnMoney)).toFixed(2)}</p>
 										</div>
 									</div>
 								</div>
@@ -1719,373 +1273,207 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 								共 {orderItems.length} 类商品，下表中单价为下单日产品中间价
 							</CardDescription>
 						</div>
-						<div className="flex items-center gap-2">
-							<CustomButton
-								returnExchangeRecordsLength={returnExchangeRecords.length}
-								tenantType={tenantType}
-								orderItemsSize={orderItems.length}
-								orderStatus={orderDetail.orderStatus}
-								orderHandler={completeAcceptance}
-								rejectOrCompleteHandler={showRejectConfirmation}
-							/>
-							{orderDetail.orderStatus === 'AFTER_SALE' as OrderStatus && tenantType.toLowerCase() === 'customer' && (
-								<AlertDialog>
-									<AlertDialogTrigger asChild>
-										<Button
-											variant="outline"
-											size="sm"
-											className="h-8 px-2 text-xs flex items-center gap-1 hover:bg-green-600 bg-green-700 text-white hover:text-white"
-										>
-											完成订单
-										</Button>
-									</AlertDialogTrigger>
-									<AlertDialogContent>
-										<AlertDialogHeader>
-											<AlertDialogTitle className="text-sm">确认完成订单?</AlertDialogTitle>
-											<AlertDialogDescription className="text-xs">
-												确认后，订单状态将更新为"已完成"，此操作不可撤销。
-											</AlertDialogDescription>
-										</AlertDialogHeader>
-										<AlertDialogFooter>
-											<AlertDialogCancel className="text-xs">取消</AlertDialogCancel>
-											<AlertDialogAction onClick={completeOrder} className="bg-green-600 hover:bg-green-500 text-xs">
-												确认完成
-											</AlertDialogAction>
-										</AlertDialogFooter>
-									</AlertDialogContent>
-								</AlertDialog>
-							)}
-
-							<Button
-								variant="outline"
-								size="sm"
-								className="h-8 px-2 text-xs flex items-center gap-1 hover:bg-gray-100"
-								onClick={exportToExcel}
-								disabled={exportingExcel}
-							>
-								{exportingExcel ? (
-									<span className="animate-spin mr-1">⏳</span>
-								) : (
-									<Download className="h-3 w-3 mr-1" />
-								)}
-								导出Excel
-							</Button>
-							{/* 当订单状态为SUPPLIER_DELIVERING且tenantType为market时显示开始验收按钮 */}
-							{(orderDetail.orderStatus === "SUPPLIER_DELIVERING" || orderDetail.orderStatus === "EXCHANGE_NEW_DELIVERING") && tenantType.toLowerCase() === 'market' && (
-								<AlertDialog open={showBeginInspectDialog} onOpenChange={setShowBeginInspectDialog}>
-									<AlertDialogTrigger asChild>
-										<Button className="bg-blue-600 hover:bg-blue-500" size="sm">
-											开始验收
-										</Button>
-									</AlertDialogTrigger>
-									<AlertDialogContent>
-										<AlertDialogHeader>
-											<AlertDialogTitle className="text-sm">确认开始验收?</AlertDialogTitle>
-											<AlertDialogDescription className="text-xs">
-												确认后，订单状态更新为"验收中"，表示您已开始验收该订单的商品。
-											</AlertDialogDescription>
-										</AlertDialogHeader>
-										<AlertDialogFooter>
-											<AlertDialogCancel>取消</AlertDialogCancel>
-											<AlertDialogAction onClick={handleBeginInspect} disabled={beginInspecting} className="bg-blue-600 hover:bg-blue-500 text-xs">
-												{beginInspecting ? "处理中..." : "确认"}
-											</AlertDialogAction>
-										</AlertDialogFooter>
-									</AlertDialogContent>
-								</AlertDialog>
-							)}
-							{/* 只有当订单状态为 ASSIGNED 或 EXCHANGE_REQUESTED 时才显示开始备货按钮，并且tenantType为provider */}
-							{(orderDetail.orderStatus === "ASSIGNED" || orderDetail.orderStatus === "EXCHANGE_REQUESTED") && tenantType.toLowerCase() === 'provider' && (
-								<AlertDialog>
-									<AlertDialogTrigger asChild>
-										<Button className="bg-blue-600 hover:bg-blue-500" size="sm">
-											{orderDetail.orderStatus === "ASSIGNED" ? "开始备货" : "开始换货"}
-										</Button>
-									</AlertDialogTrigger>
-									<AlertDialogContent>
-										<AlertDialogHeader>
-											<AlertDialogTitle className="text-sm">确认开始备货?</AlertDialogTitle>
-											<AlertDialogDescription className="text-xs">
-												确认后，订单状态更新为"备货中"，表示您已开始准备该订单的商品。
-												您可以编辑实际出货数量。
-											</AlertDialogDescription>
-										</AlertDialogHeader>
-										<AlertDialogFooter>
-											<AlertDialogCancel>取消</AlertDialogCancel>
-											<AlertDialogAction onClick={handleStartProcessing} disabled={processing} className="bg-blue-600 hover:bg-blue-500 text-xs">
-												{processing ? "处理中..." : "确认"}
-											</AlertDialogAction>
-										</AlertDialogFooter>
-									</AlertDialogContent>
-								</AlertDialog>
-							)}
-							{/* 当处于供应商备货编辑模式时显示保存按钮，或 market 租户验收换货商品时也显示 */}
-							{isEditing && ((orderDetail.orderStatus === "SUPPLIER_PREPARING" || orderDetail.orderStatus === "EXCHANGE_IN_PROGRESS") && tenantType.toLowerCase() === 'provider' || (orderDetail.orderStatus === "EXCHANGE_INSPECTING" && tenantType.toLowerCase() === 'market')) && (
-								<AlertDialog>
-									<AlertDialogTrigger asChild>
-										<Button className="bg-green-600 hover:bg-green-500 flex items-center gap-1" size="sm" disabled={hasErrors() || savingChanges}>
-											<Save className="h-4 w-4" />
-											{savingChanges ? "保存中..." : tenantType.toLowerCase() === 'market' ? "完成验收" : "完成备货"}
-										</Button>
-									</AlertDialogTrigger>
-									<AlertDialogContent>
-										<AlertDialogHeader>
-											<AlertDialogTitle className="text-sm font-semibold">
-												{tenantType.toLowerCase() === 'market' ? "确认完成换货验收?" : "确认实收金额?"}
-											</AlertDialogTitle>
-											<AlertDialogDescription className="text-xs">
-												{tenantType.toLowerCase() === 'market' 
-													? "提交后，换货商品验收完成，订单将进入下一流程。"
-													: "提交后，系统将更新商品的实际出货量，总金额也会相应调整。"}
-											</AlertDialogDescription>
-											<Separator />
-											<div className="mt-4 space-y-1 text-sm text-muted-foreground">
-												<p>原价: <span className="font-semibold font-mono ml-2">¥{originalTotal}</span></p>
-												<p className="text-red-600">折扣: <span className="font-semibold font-mono ml-2">-¥{discountTotal}</span></p>
-												<p className="text-red-600">退款: <span className="font-semibold font-mono ml-2">-¥{returnMoney()}</span></p>
-												<p>实收: <span className="font-semibold font-mono ml-2">¥{(parseFloat(actualTotal) - parseFloat(returnMoney())).toFixed(2)}</span></p>
-											</div>
-											<Separator />
-										</AlertDialogHeader>
-										<AlertDialogFooter>
-											<AlertDialogCancel>取消</AlertDialogCancel>
-											<AlertDialogAction
-												onClick={handleSaveActualQuantities}
-												disabled={hasErrors() || savingChanges}
-												className="bg-green-600 hover:bg-green-500 text-xs"
-											>
-												{savingChanges ? "保存中..." : "确认"}
-											</AlertDialogAction>
-										</AlertDialogFooter>
-									</AlertDialogContent>
-								</AlertDialog>
-							)}
+						<div className="flex flex-wrap items-center gap-2 justify-end">
+							{actionBarButtons}
 						</div>
 					</CardHeader>
 					<CardContent>
 						<div className="overflow-x-auto" style={{ position: "relative" }}>
-							<div className="relative" style={{ maxHeight: "600px", overflowY: "auto", zIndex: 40 }}>
-								<table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
-									<colgroup>
-										<col style={{ width: "250px" }} />
-										<col />
-										<col />
-										{shouldDisplayActualQuantity(orderDetail.orderStatus as OrderStatus) && <col />}
-										<col />
-										<col />
-										<col />
-										<col />
-										<col />
-										{shouldOrderInspectMenu(orderDetail.orderStatus as OrderStatus) && <col />}
-									</colgroup>
-									<thead style={{
-										position: "sticky",
-										top: 0,
-										zIndex: 1000,
-										backgroundColor: "white",
-										boxShadow: "0 2px 8px rgba(0,0,0,0.15)"
-									}}>
-										<tr className="text-xs font-semibold bg-black text-white">
-											<th className="text-left p-3 border-b">商品名称</th>
-											<th className="text-left p-3 border-b">类别</th>
-											<th className="text-center p-3 border-b">下单数量</th>
-											{shouldDisplayActualQuantity(orderDetail.orderStatus as OrderStatus) && (
-												<th className="text-center p-3 border-b">实际数量</th>
-											)}
-											<th className="text-center p-3 border-b">单位</th>
-											<th className="text-right p-3 border-b">单价</th>
-											<th className="text-right p-3 border-b">折扣</th>
-											<th className="text-right p-3 border-b">实际单价</th>
-											<th className="text-right p-3 border-b">小计（折后）</th>
-											{shouldOrderInspectMenu(orderDetail.orderStatus as OrderStatus) && (
-												<th className="text-right p-3 border-b">操作</th>
-											)}
-										</tr>
-									</thead>
-									<tbody>
-										{orderItems.map((item) => {
-											// 获取当前商品的退换货记录
-											const itemReturnExchanges = getItemReturnExchangeRecords(item.id);
-
-											return (
-												<Fragment key={item.id}>
-													<tr className={`text-xs text-gray-700 ${isProductSigned(item.id) ? "bg-green-50" : ""}`}>
-														<td className="p-2 border-b">
-															{item.name}
-															{(item.processingRequirements || item.remark) && (
-																<div className="mt-1 text-xs text-gray-500">
-																	{item.processingRequirements && (
-																		<div className="mb-1">{item.processingRequirements}</div>
-																	)}
-																	{item.remark && <div>备注: {item.remark}</div>}
-																</div>
-															)}
-															{isProductSigned(item.id) && (
-																<div className="mt-1">
-																	<Badge variant="outline" className="bg-green-50 text-green-600 border-green-200 text-[10px]">
-																		已签收
-																	</Badge>
-																	{getProductSignRecord(item.id)?.reason && (
-																		<div className="mt-0.5 text-[10px] text-green-600">
-																			{getProductSignRecord(item.id)?.reason}
-																		</div>
-																	)}
-																</div>
-															)}
-														</td>
-														<td className="p-2 border-b">{item.category}</td>
-														<td className="p-2 text-center border-b font-mono font-semibold">
-															{parseFloat(item.quantity).toFixed(2)}
-														</td>
-														{shouldDisplayActualQuantity(orderDetail.orderStatus as OrderStatus) && (
-															<td className="p-2 text-center border-b w-[120px]">
-																{isEditing ? (
-																	<div>
-																		<Input
-																			type="number"
-																			value={item.actualQuantity || ''}
-																			onChange={(e) => handleActualQuantityChange && handleActualQuantityChange(item.id, e.target.value)}
-																			className={`max-w-[100px] text-center font-mono font-semibold ${itemErrors[item.id] ? 'border-red-500' : ''}`}
-																			step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
-																			min="0"
-																			max="999999.99"
-																			disabled={item.status !== "EXCHANGED"}
-																			onKeyDown={(e) => handleActualQuantityKeyDown(e, item.id)}
-																		/>
-																		{itemErrors[item.id] && (
-																			<p className="text-xs text-red-500 mt-1">{itemErrors[item.id]}</p>
-																		)}
-																	</div>
-																) : (
-																	<span className="font-mono font-semibold">{parseFloat(item.actualQuantity).toFixed(2)}</span>
-																)}
-															</td>
-														)}
-														<td className="p-2 text-center border-b font-mono">{item.unit}</td>
-														<td className="p-2 text-right border-b font-mono font-semibold">¥{parseFloat(item.price).toFixed(2)}</td>
-														<td className="p-2 text-right border-b font-mono font-semibold">
-															{(parseFloat(item.discountRate) * 100).toFixed(0)}%
-														</td>
-														<td className="p-2 text-right border-b font-mono font-semibold">¥{parseFloat(item.actualPrice).toFixed(2)}</td>
-														<td className="p-2 text-right border-b font-mono font-semibold">
-															¥{isEditing
-																? (parseFloat(item.actualPrice) * parseFloat(item.actualQuantity)).toFixed(2)
-																: (item.actualAmount && parseFloat(item.actualAmount) > 0
-																	? parseFloat(item.actualAmount).toFixed(2)
-																	: (parseFloat(item.actualPrice) * parseFloat(item.actualQuantity)).toFixed(2))}
-														</td>
-														{shouldOrderInspectMenu(orderDetail.orderStatus as OrderStatus) && (
-															<td className="p-2 text-right border-b">
-																{hasProductOperation(item.id) ? (
-																	<Badge variant="outline" className={`rounded-full ${isProductSigned(item.id) ? "bg-green-50 text-green-600 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}>
-																		{isProductSigned(item.id) ? "已签收" : "申请售后"}
-																	</Badge>
-																) : (
-																	<DropdownMenu>
-																		<DropdownMenuTrigger asChild>
-																			<Button
-																				variant="outline"
-																				size="sm"
-																			>
-																				...
-																				<ChevronDownIcon className="ml-1 h-4 w-4" />
-																			</Button>
-																		</DropdownMenuTrigger>
-																		<DropdownMenuContent align="end">
-																			<DropdownMenuItem onClick={() => handleOperation(item.id, "SIGN" as OperationType)} className="cursor-pointer text-xs">
-																				签收
-																			</DropdownMenuItem>
-																			<DropdownMenuItem onClick={() => handleOperation(item.id, "RETURN" as OperationType)} className="cursor-pointer text-xs">
-																				退货
-																			</DropdownMenuItem>
-																			<DropdownMenuItem onClick={() => handleOperation(item.id, "EXCHANGE" as OperationType)} className="cursor-pointer text-xs">
-																				换货
-																			</DropdownMenuItem>
-																		</DropdownMenuContent>
-																	</DropdownMenu>
-																)}
-															</td>
-														)}
-													</tr>
-
-													{/* 显示退换货记录作为内联行，签收记录已经通过行背景色和标签显示 */}
-													{itemReturnExchanges.length > 0 && itemReturnExchanges.map((record, index) => {
-														if (record.operationType === 'SIGN') {
-															// 签收记录不显示为内联行
-															return null;
-														}
-
-														return (
-															<tr key={`${item.id}}`} className="bg-red-50">
-																<td colSpan={2} className="py-1 text-center border-b">
-																	<span className="text-xs font-medium text-red-600">
-																		{record.operationType === 'RETURN' ? '退货' : '换货'}: {record.reason}
-																	</span>
-																</td>
-																<td className="text-center py-1 border-b" colSpan={shouldDisplayActualQuantity(orderDetail.orderStatus as OrderStatus) ? 2 : 1}>
-																	<span className="text-xs font-mono font-medium text-red-600">
-																		-{record.quantity}
-																	</span>
-																</td>
-																<td className="text-center py-1 border-b">
-																	<span className="text-xs font-mono text-red-600">{record.unit}</span>
-																</td>
-																<td className="text-right py-1 border-b" colSpan={4}>
-																	<span className="text-xs font-mono font-medium text-red-600">
-																		{record.operationType === 'RETURN'
-																			? `-¥${(parseFloat(item.actualPrice) * record.quantity).toFixed(2)}`
-																			: ''
-																		}
-																	</span>
-																</td>
-																{shouldOrderInspectMenu(orderDetail.orderStatus as OrderStatus) && (
-																	<td className="py-1 border-b"></td>
-																)}
-															</tr>
-														);
-													})}
-												</Fragment>
-											);
-										})}
-									</tbody>
-								</table>
-							</div>
-
-							<div className="mt-6 flex flex-col items-end">
-								<div className="w-full max-w-xs space-y-2">
-									<div className="flex justify-between text-sm">
-										<span className="text-gray-500">原价:</span>
-										<span className="font-mono font-semibold">¥{isEditing
-											? orderItems.reduce((acc, item) => acc + parseFloat(item.price) * parseFloat(item.actualQuantity), 0).toFixed(2)
-											: parseFloat(orderDetail.totalAmount).toFixed(2)}</span>
-									</div>
-									<div className="flex justify-between text-sm">
-										<span className="text-gray-500">折扣金额:</span>
-										<span className="font-mono font-semibold text-red-500">¥{isEditing
-											? (orderItems.reduce((acc, item) => acc + parseFloat(item.price) * parseFloat(item.actualQuantity), 0) -
-												orderItems.reduce((acc, item) => acc + parseFloat(item.actualPrice) * parseFloat(item.actualQuantity), 0)).toFixed(2)
-											: parseFloat(orderDetail.discountAmount || "0").toFixed(2)}</span>
-									</div>
-									{shouldDisplayReturnMoney() && (
-										<div className="flex justify-between text-sm">
-											<span className="text-gray-500">退货金额:</span>
-											<span className="font-mono font-semibold text-red-500">¥{returnMoney()}</span>
-										</div>
+					<div className="relative" style={{ maxHeight: "600px", overflowY: "auto", zIndex: 40 }}>
+						<Table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
+							<colgroup>
+								<col style={{ width: "250px" }} />
+								<col />
+								<col />
+								{shouldShowActualQuantityColumn && <col />}
+								<col />
+								<col />
+								<col />
+								<col />
+								<col />
+								{shouldShowInspectMenu(orderDetail.orderStatus as OrderStatus, tenantType) && <col />}
+							</colgroup>
+							<TableHeader style={{ position: "sticky", top: 0, zIndex: 1000, backgroundColor: "white", boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
+								<TableRow className="text-xs font-semibold bg-black text-white">
+									<TableHead className="text-left p-3 border-b">商品名称</TableHead>
+									<TableHead className="text-left p-3 border-b">类别</TableHead>
+									<TableHead className="text-center p-3 border-b">下单数量</TableHead>
+									{shouldShowActualQuantityColumn && (
+										<TableHead className="text-center p-3 border-b">实际数量</TableHead>
 									)}
-									<Separator />
-									<div className="flex justify-between">
-										<span>{isEditing ? "实际金额:" : "实付金额:"}</span>
-										<span className="font-mono font-semibold">
-											¥{isEditing
-												? (orderItems.reduce((acc, item) => acc + parseFloat(item.actualPrice) * parseFloat(item.actualQuantity), 0) - parseFloat(returnMoney())).toFixed(2)
-												: (parseFloat(orderDetail.actualAmount) - parseFloat(returnMoney())).toFixed(2)}
-										</span>
-									</div>
-								</div>
-							</div>
-						</div>
-					</CardContent>
-				</Card>
+									<TableHead className="text-center p-3 border-b">单位</TableHead>
+									<TableHead className="text-right p-3 border-b">单价</TableHead>
+									<TableHead className="text-right p-3 border-b">折扣</TableHead>
+									<TableHead className="text-right p-3 border-b">实际单价</TableHead>
+									<TableHead className="text-right p-3 border-b">小计（折后）</TableHead>
+									{shouldShowInspectMenu(orderDetail.orderStatus as OrderStatus, tenantType) && (
+										<TableHead className="text-right p-3 border-b">操作</TableHead>
+									)}
+							</TableRow>
+							</TableHeader>
+							<TableBody>
+								{orderItems.map((item) => {
+									const itemReturnExchanges = getItemReturnExchangeRecords(item.id);
+									const actualStatus = getProductActualStatus(item.id);
+									const canEdit = canProductBeEdited(item.id);
+
+									return (
+										<Fragment key={item.id}>
+											<TableRow className={`text-xs text-gray-700 ${actualStatus === 'RETURN' ? 'bg-red-50' : actualStatus === 'EXCHANGE' ? 'bg-orange-50' : actualStatus === 'SIGN' ? 'bg-green-50' : ''}`}>
+												<TableCell className="p-2 border-b">
+													{item.name}
+													{(item.processingRequirements || item.remark) && (
+														<div className="mt-1 text-xs text-gray-500">
+															{item.processingRequirements && (
+																<div className="mb-1">{item.processingRequirements}</div>
+															)}
+															{item.remark && <div>备注: {item.remark}</div>}
+														</div>
+													)}
+													{actualStatus === 'SIGN' && (
+														<div className="mt-1">
+															<Badge variant="outline" className="bg-green-50 text-green-600 border-green-200 text-[10px]">
+																已签收
+															</Badge>
+														</div>
+													)}
+													{actualStatus === 'RETURN' && (
+														<div className="mt-1">
+															<Badge variant="outline" className="bg-red-50 text-red-600 border-red-200 text-[10px]">
+																已退货
+															</Badge>
+														</div>
+													)}
+													{actualStatus === 'EXCHANGE' && (
+														<div className="mt-1">
+															<Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200 text-[10px]">
+																已换货
+															</Badge>
+														</div>
+													)}
+												</TableCell>
+												<TableCell className="p-2 border-b">{item.category}</TableCell>
+												<TableCell className="p-2 text-center border-b font-mono font-semibold">
+													{parseFloat(item.quantity).toFixed(2)}
+												</TableCell>
+												{shouldShowActualQuantityColumn && (
+													<TableCell className="p-2 text-center border-b w-[120px]">
+														{isEditing ? (
+															<div>
+																<Input
+																	type="number"
+																	value={item.actualQuantity || ''}
+																	onChange={(event) => handleActualQuantityChange && handleActualQuantityChange(item.id, event.target.value)}
+																	className={`max-w-[100px] text-center font-mono font-semibold ${itemErrors[item.id] ? 'border-red-500' : ''}`}
+																	step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
+																	min="0"
+																	max="999999.99"
+																	onKeyDown={(event) => handleActualQuantityKeyDown(event, item.id)}
+																	disabled={!canEdit}
+																/>
+																{itemErrors[item.id] && (
+																	<p className="text-xs text-red-500 mt-1">{itemErrors[item.id]}</p>
+																)}
+															</div>
+														) : (
+															<span className="font-mono font-semibold">{parseFloat(item.actualQuantity).toFixed(2)}</span>
+														)}
+													</TableCell>
+												)}
+												<TableCell className="p-2 text-center border-b font-mono">{item.unit}</TableCell>
+												<TableCell className="p-2 text-right border-b font-mono font-semibold">¥{parseFloat(item.price).toFixed(2)}</TableCell>
+												<TableCell className="p-2 text-right border-b font-mono font-semibold">
+													{(parseFloat(item.discountRate) * 100).toFixed(0)}%
+												</TableCell>
+												<TableCell className="p-2 text-right border-b font-mono font-semibold">¥{parseFloat(item.actualPrice).toFixed(2)}</TableCell>
+												<TableCell className="p-2 text-right border-b font-mono font-semibold">
+													¥{isEditing
+														? (parseFloat(item.actualPrice) * parseFloat(item.actualQuantity)).toFixed(2)
+														: (item.actualAmount && parseFloat(item.actualAmount) > 0
+															? parseFloat(item.actualAmount).toFixed(2)
+															: (parseFloat(item.actualPrice) * parseFloat(item.actualQuantity)).toFixed(2))}
+												</TableCell>
+												{shouldShowInspectMenu(orderDetail.orderStatus as OrderStatus, tenantType) && (
+													<TableCell className="p-2 text-right border-b">
+														{actualStatus === 'SIGN' || actualStatus === 'RETURN' || actualStatus === 'EXCHANGE' ? (
+															<Badge variant="outline" className={`rounded-full ${
+																actualStatus === 'SIGN' ? "bg-green-50 text-green-600 border-green-200" :
+																actualStatus === 'RETURN' ? "bg-red-50 text-red-600 border-red-200" :
+																"bg-orange-50 text-orange-600 border-orange-200"
+															}`}>
+																{actualStatus === 'SIGN' ? "已签收" : actualStatus === 'RETURN' ? "已退货" : "已换货"}
+															</Badge>
+														) : actualStatus === 'PENDING' && canEdit ? (
+															<DropdownMenu>
+																<DropdownMenuTrigger asChild>
+																	<Button variant="outline" size="sm">
+																		...
+																		<ChevronDownIcon className="ml-1 h-4 w-4" />
+																	</Button>
+																</DropdownMenuTrigger>
+																<DropdownMenuContent align="end">
+																	<DropdownMenuItem onClick={() => handleOperation(item.id, OperationType.SIGN)} className="cursor-pointer text-xs">
+																		签收
+																	</DropdownMenuItem>
+																	<DropdownMenuItem onClick={() => handleOperation(item.id, OperationType.RETURN)} className="cursor-pointer text-xs">
+																		退货
+																	</DropdownMenuItem>
+																	<DropdownMenuItem onClick={() => handleOperation(item.id, OperationType.EXCHANGE)} className="cursor:pointer text-xs">
+																		换货
+																	</DropdownMenuItem>
+																</DropdownMenuContent>
+															</DropdownMenu>
+														) : (
+															<Badge variant="outline" className="rounded-full bg-gray-50 text-gray-500 border-gray-200">
+																不可操作
+															</Badge>
+														)}
+													</TableCell>
+												)}
+											</TableRow>
+
+											{itemReturnExchanges.length > 0 && itemReturnExchanges.map((record) => {
+												if (record.operationType === OperationType.SIGN) {
+													return null;
+												}
+
+												return (
+													<TableRow key={`${item.id}-${record.operationType}-${record.quantity}`} className="bg-red-50">
+														<TableCell colSpan={2} className="py-1 text-center border-b">
+															<span className="text-xs font-medium text-red-600">
+																{record.operationType === OperationType.RETURN ? '退货' : '换货'}: {record.reason}
+															</span>
+														</TableCell>
+														<TableCell className="text-center py-1 border-b" colSpan={shouldShowActualQuantityColumn ? 2 : 1}>
+															<span className="text-xs font-mono font-medium text-red-600">
+																-{record.quantity}
+															</span>
+														</TableCell>
+														<TableCell className="text-center py-1 border-b">
+															<span className="text-xs font-mono text-red-600">{record.unit}</span>
+														</TableCell>
+														<TableCell className="text-right py-1 border-b" colSpan={4}>
+															<span className="text-xs font-mono font-medium text-red-600">
+																{record.operationType === OperationType.RETURN
+																	? `-¥${(parseFloat(item.actualPrice) * record.quantity).toFixed(2)}`
+																	: ''}
+															</span>
+														</TableCell>
+														{shouldShowInspectMenu(orderDetail.orderStatus as OrderStatus, tenantType) && (
+															<TableCell className="py-1 border-b" />
+														)}
+													</TableRow>
+												);
+											})}
+										</Fragment>
+									);
+								})}
+							</TableBody>
+						</Table>
+					</div>
+				</div>
+			</CardContent>
+		</Card>
 
 				{/* 订单分类统计 */}
 				<Card>
@@ -2105,184 +1493,136 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 						</div>
 					</CardContent>
 				</Card>
+
+				<Card>
+					<CardHeader>
+						<CardTitle>退换货记录</CardTitle>
+					</CardHeader>
+					<CardContent>
+						{loadingExchangeReturn ? (
+							<div className="flex items-center text-sm text-muted-foreground">
+								<Loader2 className="mr-2 h-4 w-4 animate-spin" /> 正在加载退换货记录...
+							</div>
+						) : exchangeReturnError ? (
+							<Alert variant="destructive">
+								<AlertTitle>加载失败</AlertTitle>
+								<AlertDescription>{exchangeReturnError}</AlertDescription>
+							</Alert>
+						) : exchangeReturnRecords.length === 0 ? (
+							<p className="text-sm text-muted-foreground">暂无退换货记录。</p>
+						) : (
+							<div className="overflow-x-auto rounded-md border">
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead>商品</TableHead>
+											<TableHead>类型</TableHead>
+											<TableHead className="text-right">申请数量</TableHead>
+											<TableHead className="text-right">状态</TableHead>
+											<TableHead>说明</TableHead>
+											<TableHead>实际数量</TableHead>
+											<TableHead>处理信息</TableHead>
+											<TableHead className="text-right">操作</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{exchangeReturnRecords.map((record) => (
+											<TableRow key={`${record.orderDetailId}-${record.operationType}`}>
+												<TableCell>
+													<div className="space-y-1">
+														<p className="text-sm font-medium text-foreground">{record.productName}</p>
+														<p className="text-xs text-muted-foreground">单位：{record.unit}</p>
+													</div>
+												</TableCell>
+												<TableCell>
+													<Badge variant={record.operationType === OperationType.RETURN ? "destructive" : "warning"}>
+														{record.operationType === OperationType.RETURN ? '退货' : '换货'}
+													</Badge>
+												</TableCell>
+												<TableCell className="text-right font-mono text-sm">
+													{Number(record.quantity).toFixed(2)}
+												</TableCell>
+												<TableCell className="text-right">
+													<Badge variant="outline" className="text-xs">
+														{record.status === 'PENDING' ? '待处理' : record.status === 'COMPLETED' ? '已完成' : record.status}
+													</Badge>
+												</TableCell>
+												<TableCell>
+													<p className="text-sm text-muted-foreground whitespace-pre-line">{record.reason || '-'}</p>
+												</TableCell>
+												<TableCell>
+													{record.status === 'COMPLETED' ? (
+														<Badge variant="outline" className="text-xs">已处理</Badge>
+													) : (
+														<Input
+															type="number"
+															value={record.inputQuantity}
+															onChange={(event) => handleExchangeReturnInputChange(record.orderDetailId, event.target.value)}
+															className="max-w-[120px]"
+															step="0.01"
+															min="0"
+															disabled={record.submitting}
+														/>
+													)}
+												</TableCell>
+												<TableCell>
+													<div className="text-xs text-muted-foreground space-y-1">
+														<p>操作人：{record.processedBy || '-'}</p>
+														<p>时间：{record.processedAt ? new Date(record.processedAt).toLocaleString() : '-'}</p>
+														<p>实收：{record.actualQuantity ?? '-'}</p>
+													</div>
+												</TableCell>
+												<TableCell className="text-right">
+													{record.status === 'COMPLETED' ? (
+														<Badge variant="outline" className="text-xs">已完成</Badge>
+													) : (
+														<Button
+															size="sm"
+															onClick={() => handleSubmitExchangeReturnRecord(record)}
+															disabled={record.submitting}
+														>
+															{record.submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : '提交'}
+														</Button>
+													)}
+												</TableCell>
+										</TableRow>
+										))}
+									</TableBody>
+								</Table>
+							</div>
+						)}
+					</CardContent>
+				</Card>
 			</div>
 
 			{/* 退换货操作对话框 */}
-			<Dialog
-				open={showOperationDialog}
-				onOpenChange={(open) => {
-					setShowOperationDialog(open);
-					// 如果对话框关闭，清除状态，防止事件处理问题
-					if (!open) {
-						setTimeout(() => {
-							setOperatingProductId(0);
-							setOperationType(null);
-							setOperatingQuantity("0");
-							setOperatingReason("");
-							setUseFullQuantity(false);
-							setQuantityError("");
-							setReasonError("");
-							setShowConfirmDialog(false);
-						}, 100);
-					}
-				}}>
-				<DialogContent className="sm:max-w-[425px]">
-					<DialogHeader>
-						<DialogTitle className="text-sm font-semibold">
-							{operationType === 'RETURN' ? '商品退货' :
-								operationType === 'EXCHANGE' ? '商品换货' : '商品签收'}:
-							{orderItems.find(item => item.id === operatingProductId)?.name}
-						</DialogTitle>
-						<DialogDescription className="text-xs">
-							请填写{operationType === 'RETURN' ? '退货' :
-								operationType === 'EXCHANGE' ? '换货' : '签收'}信息
-							{getItemReturnExchangeRecords(operatingProductId).length > 0 && (
-								<>
-									<span className="block mt-1 text-red-500 text-xs font-mono">注意：此操作将覆盖该商品之前的退换货记录</span>
-									{getItemReturnExchangeRecords(operatingProductId).map((record, index) => (
-										<span key={index} className="block mt-1 text-xs text-gray-500">
-											之前记录: {record.operationType === 'RETURN' ? '退货' :
-												record.operationType === 'EXCHANGE' ? '换货' : '签收'} {record.quantity} {record.unit}
-										</span>
-									))}
-								</>
-							)}
-						</DialogDescription>
-					</DialogHeader>
-					<div className="grid gap-4">
-						<div className="grid grid-cols-4 items-center gap-4">
-							<Label htmlFor="quantity" className="col-span-4 text-sm">
-								{operationType === 'RETURN' ? '退货' :
-									operationType === 'EXCHANGE' ? '换货' : '签收'}数量 ({orderItems.find(item => item.id === operatingProductId)?.unit || ''})
-							</Label>
-							<div className="col-span-4 flex items-center space-x-2">
-								<Input
-									id="quantity"
-									type="number"
-									value={operatingQuantity || '0'}
-									onChange={(e) => handleQuantityChange(e.target.value)}
-									className={`flex-grow font-mono ${operationType !== 'SIGN' ? 'text-red-600' : ''} ${quantityError ? 'border-red-500' : ''}`}
-									step="0.1"
-									min="0"
-								/>
-								{/* <span className="text-sm font-medium">
-									{orderItems.find(item => item.id === operatingProductId)?.unit || ''}
-								</span> */}
-							</div>
-							{quantityError && (
-								<p className="text-xs text-red-500 col-span-4">{quantityError}</p>
-							)}
-							<div className="flex items-center space-x-2 col-span-4">
-								<Checkbox
-									id="useFullQuantity"
-									checked={useFullQuantity}
-									onCheckedChange={(checked) => handleUseFullQuantity(checked === true)}
-								/>
-								<label
-									htmlFor="useFullQuantity"
-									className="text-xs leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-								>全选
-									{/* 全选 ({orderItems.find(item => item.id === operatingProductId)?.actualQuantity || '0'} {orderItems.find(item => item.id === operatingProductId)?.unit || ''}) */}
-								</label>
-							</div>
-						</div>
-						<div className="grid grid-cols-4 items-center gap-4">
-							<Label htmlFor="reason" className="col-span-4">
-								{operationType === 'RETURN' ? '退货' :
-									operationType === 'EXCHANGE' ? '换货' : '签收'}原因
-								{operationType === 'SIGN' && <span className="text-xs text-gray-500 ml-1">(可选)</span>}
-							</Label>
-							<Textarea
-								id="reason"
-								value={operatingReason || ''}
-								onChange={(e) => handleReasonChange(e.target.value)}
-								placeholder={operationType === 'SIGN' ?
-									"请填写签收备注（可选）..." :
-									"请填写详细原因，不少于8个字..."}
-								className={`col-span-4 resize-none ${reasonError ? 'border-red-500' : ''}`}
-								maxLength={255}
-							/>
-							{reasonError && (
-								<p className="text-xs text-red-500 col-span-4">{reasonError}</p>
-							)}
-							<div className="text-xs text-right text-gray-500 col-span-4">
-								{operatingReason.length}/255 {operationType !== 'SIGN' && operatingReason.length < 8 ? `(至少需要8个字)` : ''}
-							</div>
-						</div>
-					</div>
-					<DialogFooter>
-						<Button variant="outline" size="sm" onClick={() => setShowOperationDialog(false)}>
-							取消
-						</Button>
-						<Button
-							size="sm"
-							onClick={handleSubmitOperation}
-							disabled={!!quantityError || operatingQuantity === "0" ||
-								(operationType !== 'SIGN' && (!!reasonError || operatingReason.length < 8))}
-						>
-							确定
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
-
-			{/* 退换货确认对话框 */}
-			<AlertDialog
-				open={showConfirmDialog}
-				onOpenChange={(open) => {
-					setShowConfirmDialog(open);
-					if (!open) {
-						setTimeout(() => {
-						}, 100);
-					}
-				}}
-			>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle className="text-sm font-semibold">确认{operationType === 'RETURN' ? '退货' :
-							operationType === 'EXCHANGE' ? '换货' : '签收'}</AlertDialogTitle>
-						<AlertDialogDescription className="text-xs">
-							{operationType === 'SIGN' ? (
-								<span>您确定要签收商品吗？签收后将确认商品已收到并检查无误。</span>
-							) : (
-								<span>您确定要提交以下{operationType === 'RETURN' ? '退货' : '换货'}信息吗？</span>
-							)}
-							{getItemReturnExchangeRecords(operatingProductId).length > 0 && (
-								<>
-									<span className="block mt-1 text-red-500 font-medium">此操作将覆盖该商品之前的退换货记录</span>
-									{getItemReturnExchangeRecords(operatingProductId).map((record, index) => (
-										<span key={index} className="block mt-1 p-2 bg-gray-100 rounded-sm text-xs">
-											<span className="block">之前的操作: {record.operationType === 'RETURN' ? '退货' :
-												record.operationType === 'EXCHANGE' ? '换货' : '签收'}</span>
-											<span className="block mt-1 font-mono">数量: {record.quantity} {record.unit}</span>
-											<span className="block mt-1">原因: {record.reason}</span>
-										</span>
-									))}
-								</>
-							)}
-						</AlertDialogDescription>
-						<div className="mt-4 space-y-1 text-sm text-muted-foreground">
-							<Separator />
-							<p className="text-xs">商品名称: <span className="font-semibold text-gray-800 ml-2">{orderItems.find(item => item.id === operatingProductId)?.name}</span></p>
-							{operationType === 'SIGN' ? (
-								<p className="text-xs">收货数量: <span className="font-mono font-semibold text-gray-800 ml-2">{orderItems.find(item => item.id === operatingProductId)?.actualQuantity}({orderItems.find(item => item.id === operatingProductId)?.unit})</span> </p>
-							) : (
-								<>
-									<p className="text-xs">{operationType === 'RETURN' ? '退货' : '换货'}数量: <span className="font-mono font-semibold text-gray-800 ml-2">{operatingQuantity} {orderItems.find(item => item.id === operatingProductId)?.unit}</span></p>
-									<p className="text-xs">{operationType === 'RETURN' ? '退货' : '换货'}原因: <span className="font-semibold text-gray-800 ml-2">{operatingReason || '无'}</span></p>
-								</>
-							)}
-							<Separator />
-						</div>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel className="text-xs">取消</AlertDialogCancel>
-						<AlertDialogAction onClick={handleConfirmOperation} className="text-xs">
-							确认
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
+			<ProductSignDialog
+				showOperationDialog={showOperationDialog}
+				setShowOperationDialog={setShowOperationDialog}
+				showConfirmDialog={showConfirmDialog}
+				setShowConfirmDialog={setShowConfirmDialog}
+				operatingProductId={operatingProductId}
+				setOperatingProductId={setOperatingProductId}
+				operationType={operationType}
+				setOperationType={setOperationType}
+				operatingQuantity={operatingQuantity}
+				setOperatingQuantity={setOperatingQuantity}
+				operatingReason={operatingReason}
+				setOperatingReason={setOperatingReason}
+				useFullQuantity={useFullQuantity}
+				setUseFullQuantity={setUseFullQuantity}
+				quantityError={quantityError}
+				setQuantityError={setQuantityError}
+				reasonError={reasonError}
+				setReasonError={setReasonError}
+				handleQuantityChange={handleQuantityChange}
+				handleReasonChange={handleReasonChange}
+				handleUseFullQuantity={handleUseFullQuantity}
+				handleSubmitOperation={handleSubmitOperation}
+				handleConfirmOperation={handleConfirmOperation}
+				getItemReturnExchangeRecords={getItemReturnExchangeRecords}
+				orderItems={orderItems}
+			/>
 
 			{/* 配送人员选择对话框 */}
 			<Dialog open={showDeliveryStaffDialog} onOpenChange={setShowDeliveryStaffDialog}>
@@ -2355,9 +1695,9 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 			<AlertDialog open={showRejectConfirmDialog} onOpenChange={setShowRejectConfirmDialog}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle className="text-sm font-semibold">{orderDetail.orderStatus === "AFTER_SALE" ? "确认拒绝供应商售后服务?" : "确认完成订单?"}</AlertDialogTitle>
+		<AlertDialogTitle className="text-sm font-semibold">{orderDetail.orderStatus === OrderStatus.RETURN_REQUESTED ? "确认拒绝供应商售后服务?" : "确认完成订单?"}</AlertDialogTitle>
 						<AlertDialogDescription className="text-xs">
-							{orderDetail.orderStatus === "AFTER_SALE" ? "拒绝供应商售后服务，市场将在2小时内处理客户的售后申请。" : ""}
+			{orderDetail.orderStatus === OrderStatus.RETURN_REQUESTED ? "拒绝供应商售后服务，市场将在2小时内处理客户的售后申请。" : ""}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
