@@ -62,6 +62,10 @@ interface ProductSignDialogProps {
 
   // 订单数据
   orderItems: OrderItem[];
+
+  // 订单状态
+  orderStatus?: string;
+  tenantType?: string;
 }
 
 export default function ProductSignDialog({
@@ -90,6 +94,8 @@ export default function ProductSignDialog({
   handleConfirmOperation,
   getItemReturnExchangeRecords,
   orderItems,
+  orderStatus,
+  tenantType,
 }: ProductSignDialogProps) {
   const currentItem = orderItems.find(item => item.id === operatingProductId);
   const itemRecords = getItemReturnExchangeRecords(operatingProductId);
@@ -143,39 +149,137 @@ export default function ProductSignDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
-            {/* 数量输入 */}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="quantity" className="col-span-4 text-sm">
-                {operationType === 'RETURN' ? '退货' :
-                  operationType === 'EXCHANGE' ? '换货' : '签收'}数量 ({currentItem?.unit || ''})
-              </Label>
-              <div className="col-span-4 flex items-center space-x-2">
-                <Input
-                  id="quantity"
-                  type="number"
-                  value={operatingQuantity || '0'}
-                  onChange={(e) => handleQuantityChange(e.target.value)}
-                  className={`flex-grow font-mono ${operationType !== 'SIGN' ? 'text-red-600' : ''} ${quantityError ? 'border-red-500' : ''}`}
-                  step="0.1"
-                  min="0"
-                />
+            {/* 商品信息展示 */}
+            <div className="grid grid-cols-2 gap-4 p-3 bg-gray-50 rounded-md">
+              <div className="text-xs">
+                <span className="text-gray-500">客户需求量：</span>
+                <span className="font-mono font-semibold">{currentItem?.quantity} {currentItem?.unit}</span>
               </div>
-              {quantityError && (
-                <p className="text-xs text-red-500 col-span-4">{quantityError}</p>
-              )}
-              {/* 全选复选框 */}
-              <div className="flex items-center space-x-2 col-span-4">
-                <Checkbox
-                  id="useFullQuantity"
-                  checked={useFullQuantity}
-                  onCheckedChange={(checked) => handleUseFullQuantity(checked === true)}
-                />
-                <label
-                  htmlFor="useFullQuantity"
-                  className="text-xs leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >全选</label>
+              <div className="text-xs">
+                <span className="text-gray-500">实际到货量：</span>
+                <span className="font-mono font-semibold">{currentItem?.actualQuantity} {currentItem?.unit}</span>
               </div>
             </div>
+
+            {/* 换货数量计算 */}
+            {operationType === 'EXCHANGE' && (
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="damagedQuantity" className="col-span-4 text-sm font-medium">
+                  坏货数量 ({currentItem?.unit || ''})
+                </Label>
+                <div className="col-span-4 flex items-center space-x-2">
+                  <Input
+                    id="damagedQuantity"
+                    type="number"
+                    value={operatingQuantity || '0'}
+                    onChange={(e) => handleQuantityChange(e.target.value)}
+                    className={`flex-grow font-mono text-red-600 ${quantityError ? 'border-red-500' : ''}`}
+                    step="0.01"
+                    min="0"
+                    max={currentItem?.actualQuantity || '0'}
+                    placeholder="输入坏货数量"
+                  />
+                </div>
+                {quantityError && (
+                  <p className="text-xs text-red-500 col-span-4">{quantityError}</p>
+                )}
+
+                {/* 计算结果展示 */}
+                <div className="col-span-4 p-3 bg-blue-50 rounded-md border">
+                  <div className="text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">客户需求量：</span>
+                      <span className="font-mono">{currentItem?.quantity} {currentItem?.unit}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">实际到货量：</span>
+                      <span className="font-mono">{currentItem?.actualQuantity} {currentItem?.unit}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-red-600">坏货数量：</span>
+                      <span className="font-mono text-red-600">-{operatingQuantity || '0'} {currentItem?.unit}</span>
+                    </div>
+                    <Separator className="my-2" />
+                    <div className="flex justify-between font-semibold">
+                      <span className="text-green-600">需要换货量：</span>
+                      <span className="font-mono text-green-600">
+                        {(() => {
+                          const quantity = parseFloat(currentItem?.quantity || '0');
+                          const actualQuantity = parseFloat(currentItem?.actualQuantity || '0');
+                          const damagedQuantity = parseFloat(operatingQuantity || '0');
+                          const exchangeQuantity = Math.max(0, quantity - (actualQuantity - damagedQuantity));
+                          return exchangeQuantity.toFixed(2);
+                        })()} {currentItem?.unit}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 当换货数量为0时的提示 */}
+                  {(() => {
+                    const quantity = parseFloat(currentItem?.quantity || '0');
+                    const actualQuantity = parseFloat(currentItem?.actualQuantity || '0');
+                    const damagedQuantity = parseFloat(operatingQuantity || '0');
+                    const exchangeQuantity = Math.max(0, quantity - (actualQuantity - damagedQuantity));
+
+                    const shouldShowHint = exchangeQuantity === 0 && (
+                      (tenantType?.toLowerCase() === 'market' && orderStatus === 'MARKET_INSPECTING') ||
+                      (tenantType?.toLowerCase() === 'customer' && orderStatus === 'CUSTOMER_INSPECTING')
+                    );
+
+                    return shouldShowHint ? (
+                      <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                        <div className="flex items-start space-x-2">
+                          <div className="flex-shrink-0">
+                            <svg className="w-5 h-5 text-blue-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div className="text-xs text-blue-800">
+                            <p className="font-medium">无需换货</p>
+                            <p className="mt-1">计算结果显示换货数量为0，建议您按客户下单数量执行签收操作，以确认商品验收完成。</p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* 普通数量输入（非换货操作） */}
+            {operationType !== 'EXCHANGE' && (
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="quantity" className="col-span-4 text-sm">
+                  {operationType === 'RETURN' ? '退货' : '签收'}数量 ({currentItem?.unit || ''})
+                </Label>
+                <div className="col-span-4 flex items-center space-x-2">
+                  <Input
+                    id="quantity"
+                    type="number"
+                    value={operatingQuantity || '0'}
+                    onChange={(e) => handleQuantityChange(e.target.value)}
+                    className={`flex-grow font-mono ${operationType !== 'SIGN' ? 'text-red-600' : ''} ${quantityError ? 'border-red-500' : ''}`}
+                    step="0.1"
+                    min="0"
+                  />
+                </div>
+                {quantityError && (
+                  <p className="text-xs text-red-500 col-span-4">{quantityError}</p>
+                )}
+                {/* 全选复选框 */}
+                <div className="flex items-center space-x-2 col-span-4">
+                  <Checkbox
+                    id="useFullQuantity"
+                    checked={useFullQuantity}
+                    onCheckedChange={(checked) => handleUseFullQuantity(checked === true)}
+                  />
+                  <label
+                    htmlFor="useFullQuantity"
+                    className="text-xs leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >全选</label>
+                </div>
+              </div>
+            )}
 
             {/* 原因输入 */}
             <div className="grid grid-cols-4 items-center gap-4">
@@ -252,10 +356,24 @@ export default function ProductSignDialog({
               <p className="text-xs">商品名称: <span className="font-semibold text-gray-800 ml-2">{currentItem?.name}</span></p>
               {operationType === 'SIGN' ? (
                 <p className="text-xs">收货数量: <span className="font-mono font-semibold text-gray-800 ml-2">{currentItem?.actualQuantity}({currentItem?.unit})</span> </p>
+              ) : operationType === 'EXCHANGE' ? (
+                <Fragment>
+                  <p className="text-xs">坏货数量: <span className="font-mono font-semibold text-red-600 ml-2">{operatingQuantity} {currentItem?.unit}</span></p>
+                  <p className="text-xs">换货数量: <span className="font-mono font-semibold text-green-600 ml-2">
+                    {(() => {
+                      const quantity = parseFloat(currentItem?.quantity || '0');
+                      const actualQuantity = parseFloat(currentItem?.actualQuantity || '0');
+                      const damagedQuantity = parseFloat(operatingQuantity || '0');
+                      const exchangeQuantity = Math.max(0, quantity - (actualQuantity - damagedQuantity));
+                      return exchangeQuantity.toFixed(2);
+                    })()} {currentItem?.unit}
+                  </span></p>
+                  <p className="text-xs">换货原因: <span className="font-semibold text-gray-800 ml-2">{operatingReason || '无'}</span></p>
+                </Fragment>
               ) : (
                 <Fragment>
-                  <p className="text-xs">{operationType === 'RETURN' ? '退货' : '换货'}数量: <span className="font-mono font-semibold text-gray-800 ml-2">{operatingQuantity} {currentItem?.unit}</span></p>
-                  <p className="text-xs">{operationType === 'RETURN' ? '退货' : '换货'}原因: <span className="font-semibold text-gray-800 ml-2">{operatingReason || '无'}</span></p>
+                  <p className="text-xs">退货数量: <span className="font-mono font-semibold text-gray-800 ml-2">{operatingQuantity} {currentItem?.unit}</span></p>
+                  <p className="text-xs">退货原因: <span className="font-semibold text-gray-800 ml-2">{operatingReason || '无'}</span></p>
                 </Fragment>
               )}
               <Separator />

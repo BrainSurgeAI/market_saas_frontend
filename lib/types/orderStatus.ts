@@ -32,6 +32,14 @@ export enum OperationType {
   SIGN = 'SIGN',
 }
 
+export enum ExchangeItemStatus {
+  PENDING = 'PENDING',
+  SHIPPED = 'SHIPPED',
+  RECEIVED = 'RECEIVED',
+  REJECTED = 'REJECTED',
+  COMPLETED = 'COMPLETED',
+}
+
 export enum TenantType {
   PROVIDER = 'provider',
   MARKET = 'market',
@@ -64,6 +72,23 @@ export interface OrderItem {
   actualAmount: string;
   status: string;
   receiptQuantity: string | null;
+}
+
+export interface ExchangeItem {
+  id: number;
+  returnExchangeId: number;
+  productCode: string;
+  productName: string;
+  quantity: number;
+  requestedQuantity?: number; // 供应商需要的换货量
+  actualQuantity?: number; // 实际发货量
+  price: number;
+  totalAmount: number;
+  status: ExchangeItemStatus;
+  shippedAt: string | null;
+  receivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface OrderDetail {

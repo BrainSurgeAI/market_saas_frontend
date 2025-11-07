@@ -12,8 +12,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useOrderDetails } from "@/app/workspace/hooks/useOrderDetails";
 import { useWorkspace } from "@/lib/WorkspaceContext";
-import { OperationType, OrderItem, ReturnExchangeItem, TenantType } from "@/lib/types/orderStatus";
+import { OperationType, OrderItem, ReturnExchangeItem, TenantType, ExchangeItemStatus } from "@/lib/types/orderStatus";
 import { Loader2, ArrowLeft } from "lucide-react";
+import { ExchangeItemsTable } from "./ExchangeItemsTable";
 
 interface ExchangeOrderPageProps {
   orderCode: string;
@@ -201,6 +202,120 @@ export function ExchangeOrderPage({ orderCode, orgId, tenantType }: ExchangeOrde
             </Alert>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  // 检查是否使用ExchangeItemsTable组件的条件
+  const shouldUseExchangeItemsTable = tenantType.toLowerCase() === TenantType.PROVIDER &&
+    orderDetail?.orderStatus === 'EXCHANGE_IN_PROGRESS';
+
+  if (shouldUseExchangeItemsTable) {
+    // 转换数据格式为ExchangeItem[]
+    const exchangeItems = exchangeRows.map(({ item, requestedQuantity, records }) => ({
+      id: item.id,
+      returnExchangeId: records[0]?.id || item.id,
+      productCode: item.productId,
+      productName: item.name,
+      quantity: requestedQuantity,
+      price: parseFloat(item.price),
+      totalAmount: requestedQuantity * parseFloat(item.price),
+      status: 'PENDING' as const, // 这里需要根据实际状态映射
+      shippedAt: null,
+      receivedAt: null,
+      createdAt: orderDetail?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }));
+
+    const handleStatusChange = async (itemId: number, newStatus: ExchangeItemStatus, reason?: string) => {
+      // 这里需要实现状态变更API调用
+      try {
+        const response = await fetch(`/api/orders/${orderCode}/exchange-items/${itemId}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            status: newStatus,
+            reason: reason || '',
+            operateBy: user?.name || '',
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`状态更新失败: ${response.status}`);
+        }
+
+        toast({
+          title: '操作成功',
+          description: '换货商品状态已更新',
+          variant: 'success',
+        });
+
+        // 刷新数据
+        window.location.reload();
+      } catch (err) {
+        toast({
+          title: '操作失败',
+          description: err instanceof Error ? err.message : '状态更新时发生错误',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    const canPerformAction = (item: ExchangeItem, action: string) => {
+      // PROVIDER用户在EXCHANGE_IN_PROGRESS状态下可以进行发货操作
+      if (tenantType.toLowerCase() === TenantType.PROVIDER && action === 'ship') {
+        return item.status === ExchangeItemStatus.PENDING;
+      }
+      return false;
+    };
+
+    const getStatusLabel = (status: ExchangeItemStatus) => {
+      const labels: Record<ExchangeItemStatus, string> = {
+        [ExchangeItemStatus.PENDING]: '待发货',
+        [ExchangeItemStatus.SHIPPED]: '已发货',
+        [ExchangeItemStatus.RECEIVED]: '已收货',
+        [ExchangeItemStatus.REJECTED]: '已拒收',
+        [ExchangeItemStatus.COMPLETED]: '已完成',
+      };
+      return labels[status] || status;
+    };
+
+    const getStatusVariant = (status: ExchangeItemStatus) => {
+      const variants: Record<ExchangeItemStatus, "default" | "secondary" | "destructive" | "outline"> = {
+        [ExchangeItemStatus.PENDING]: 'outline',
+        [ExchangeItemStatus.SHIPPED]: 'secondary',
+        [ExchangeItemStatus.RECEIVED]: 'default',
+        [ExchangeItemStatus.REJECTED]: 'destructive',
+        [ExchangeItemStatus.COMPLETED]: 'default',
+      };
+      return variants[status] || 'default';
+    };
+
+    return (
+      <div className="container mx-auto py-10 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">换货商品管理</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              订单编号：{orderDetail?.orderCode}
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => router.back()}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> 返回订单详情
+          </Button>
+        </div>
+
+        <ExchangeItemsTable
+          items={exchangeItems}
+          loading={loading}
+          tenantType={tenantType}
+          onStatusChange={handleStatusChange}
+          canPerformAction={canPerformAction}
+          getStatusLabel={getStatusLabel}
+          getStatusVariant={getStatusVariant}
+        />
       </div>
     );
   }

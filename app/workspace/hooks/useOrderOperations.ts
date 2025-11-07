@@ -6,6 +6,7 @@ import { OrderDetail } from '@/lib/types/orderStatus';
 export function useOrderOperations(
   orderCode: string,
   orderItems: OrderItem[],
+  setOrderItems: (items: OrderItem[]) => void,
   returnExchangeRecords: ReturnExchangeItem[],
   setReturnExchangeRecords: (records: ReturnExchangeItem[]) => void,
   user: any
@@ -145,13 +146,23 @@ export function useOrderOperations(
     const item = orderItems.find(item => item.id === operatingProductId);
     if (!item || !operationType || !orderDetail) return;
 
+    // 计算实际提交的数量
+    let actualQuantity = parseFloat(operatingQuantity);
+    if (operationType === 'EXCHANGE') {
+      // 换货操作：计算换货数量 = 客户需求量 - (实际到货量 - 坏货数量)
+      const customerQuantity = parseFloat(item.quantity || '0');
+      const actualDeliveryQuantity = parseFloat(item.actualQuantity || '0');
+      const damagedQuantity = parseFloat(operatingQuantity || '0');
+      actualQuantity = Math.max(0, customerQuantity - (actualDeliveryQuantity - damagedQuantity));
+    }
+
     const operationRecord: ReturnExchangeItem = {
       orderId: orderCode,
       id: item.id,
       productId: item.productId,
       productName: item.name,
       operationType: operationType,
-      quantity: parseFloat(operatingQuantity),
+      quantity: actualQuantity,
       reason: operatingReason || (operationType === 'SIGN' ? '签收' : ''),
       unit: item.unit
     };
@@ -192,6 +203,23 @@ export function useOrderOperations(
         // 更新本地状态中的退换货记录（仅限当前订单）
         const currentOrderRecords = records.filter(record => record.orderId === orderCode);
         setReturnExchangeRecords(currentOrderRecords);
+
+        // 如果是换货操作，更新商品的实际数量：实际供货量 - 坏货量
+        if (operationType === 'EXCHANGE') {
+          const damagedQuantity = parseFloat(operatingQuantity || '0');
+          const updatedOrderItems = orderItems.map(orderItem => {
+            if (orderItem.id === operatingProductId) {
+              const currentActualQuantity = parseFloat(orderItem.actualQuantity || '0');
+              const newActualQuantity = Math.max(0, currentActualQuantity - damagedQuantity);
+              return {
+                ...orderItem,
+                actualQuantity: newActualQuantity.toString()
+              };
+            }
+            return orderItem;
+          });
+          setOrderItems(updatedOrderItems);
+        }
 
         toast({
           title: '操作成功',
@@ -315,6 +343,10 @@ export function useOrderOperations(
       RETURNED: 'RETURN',
       EXCHANGED: 'EXCHANGE',
     };
+
+		if (rawStatus === 'PENDING') {
+			return 'PENDING';
+		}
 
     const lockedStatuses = new Set(['SIGN', 'RETURN', 'EXCHANGE']);
 

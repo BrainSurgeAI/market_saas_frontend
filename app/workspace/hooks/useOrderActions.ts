@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { OrderDetail, OrderItem, OrderStatus, TenantType, DeliveryPerson } from '@/lib/types/orderStatus';
+import { OrderDetail, OrderItem, OrderStatus, TenantType, DeliveryPerson, OperationType } from '@/lib/types/orderStatus';
 import { useToast } from '@/hooks/use-toast';
 
 export function useOrderActions(
@@ -24,6 +24,7 @@ export function useOrderActions(
   const [afterSaleTimestamp, setAfterSaleTimestamp] = useState<number>(0);
   const [showRejectConfirmDialog, setShowRejectConfirmDialog] = useState(false);
   const [statusChangeMessage, setStatusChangeMessage] = useState<{ title: string; description: string } | null>(null);
+  const [requestingCustomerExchange, setRequestingCustomerExchange] = useState(false);
 
   // 处理开始备货
   const handleStartProcessing = async () => {
@@ -133,25 +134,18 @@ export function useOrderActions(
   // 完成验收
   const completeAcceptance = async () => {
     try {
-      let hasExchangeStatus = false;
+      const exchangeRecords = returnExchangeRecords.filter((record: any) => record.operationType === OperationType.EXCHANGE);
+      const hasExchangeStatus = exchangeRecords.length > 0;
 
-      for (const item of orderItems) {
-        const records = returnExchangeRecords.filter((record: any) => record.id === item.id);
+      const status = hasExchangeStatus
+        ? OrderStatus.EXCHANGE_REQUESTED
+        : tenantType.toLowerCase() === TenantType.MARKET
+          ? OrderStatus.MARKET_ACCEPTED
+          : OrderStatus.COMPLETED;
 
-        if (records.some((record: any) => record.operationType === 'EXCHANGE')) {
-          hasExchangeStatus = true;
-          break;
-        }
-      }
-
-      const status = hasExchangeStatus ? OrderStatus.EXCHANGE_REQUESTED : tenantType.toLowerCase() === TenantType.MARKET ? OrderStatus.MARKET_ACCEPTED : OrderStatus.COMPLETED;
-
-      let apiUrl;
-      if (status === OrderStatus.MARKET_ACCEPTED || status === OrderStatus.COMPLETED) {
-        apiUrl = `/api/orders/${orderCode}/accept`;
-      } else {
-        apiUrl = `/api/orders/${orderCode}/exchange-request`;
-      }
+      const apiUrl = hasExchangeStatus
+        ? `/api/orders/${orderCode}/exchange-request`
+        : `/api/orders/${orderCode}/accept`;
 
       const response = await fetch(apiUrl, {
         method: 'PATCH',
@@ -435,6 +429,53 @@ export function useOrderActions(
     }
   };
 
+  const requestCustomerExchange = async () => {
+    if (!orderDetail) return;
+
+    try {
+      setRequestingCustomerExchange(true);
+      const response = await fetch(`/api/orders/${orderCode}/exchange-request`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          operateBy: user?.name || '',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`申请换货失败: ${response.status}`);
+      }
+
+      setOrderDetail({
+        ...orderDetail,
+        orderStatus: OrderStatus.EXCHANGE_REQUESTED,
+      });
+
+      setStatusChangeMessage({
+        title: '已提交换货申请',
+        description: '市场将尽快处理您的换货需求',
+      });
+
+      toast({
+        title: '提交成功',
+        description: `订单${orderCode}已提交换货申请`,
+        variant: 'success',
+        duration: 3000,
+      });
+    } catch (error) {
+      toast({
+        title: '提交失败',
+        description: error instanceof Error ? error.message : '提交换货申请时出错',
+        variant: 'destructive',
+        duration: 3000,
+      });
+    } finally {
+      setRequestingCustomerExchange(false);
+    }
+  };
+
   return {
     processing,
     setProcessing,
@@ -461,5 +502,7 @@ export function useOrderActions(
     deliverToCustomer,
     handleBeginInspect,
     handleRejectOrComplete,
+    requestCustomerExchange,
+    requestingCustomerExchange,
   };
 }

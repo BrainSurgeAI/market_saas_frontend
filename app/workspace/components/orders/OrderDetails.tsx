@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState, useEffect } from "react";
+import { Fragment, useMemo, useState, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -8,12 +8,12 @@ import { useWorkspace } from "@/lib/WorkspaceContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { ArrowLeft, Calendar, MapPin, User, Save, ChevronDownIcon, Download, ChevronUp, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 // 导入类型定义（type-only import）
-import type { 
+import type {
   OrderDetail,
   OrderItem,
   ReturnExchangeItem,
@@ -21,13 +21,15 @@ import type {
   DeliveryPerson,
   ExchangeReturnRecord,
   ExchangeReturnRecordWithInput,
+  ExchangeItem,
 } from "@/lib/types/orderStatus";
 
 // 导入枚举和值
-import { 
-  OrderStatus, 
-  OperationType, 
-  TenantType
+import {
+  OrderStatus,
+  OperationType,
+  TenantType,
+  ExchangeItemStatus
 } from "@/lib/types/orderStatus";
 
 // 导入状态工具函数
@@ -51,7 +53,7 @@ import { useOrderOperations } from "@/app/workspace/hooks/useOrderOperations";
 import { useOrderEditing } from "@/app/workspace/hooks/useOrderEditing";
 import { useOrderActions } from "@/app/workspace/hooks/useOrderActions";
 
-import { getStatusVariant, translateOrderStatus } from "@/lib/utils";
+import { cn, getStatusVariant, translateOrderStatus } from "@/lib/utils";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -87,11 +89,11 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import CustomButton from "./CustomButton";
 import ProductSignDialog from "./ProductSignDialog";
 import { Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ExchangeItemsTable } from "./ExchangeItemsTable";
 
 
 interface OrderDetailProps {
@@ -111,6 +113,39 @@ interface ProviderDeliverRequest {
 }
 
 type MarketInspectRequest = ItemQuantityPayload[];
+
+type ActionDialogConfig = {
+	title: string;
+	description?: string;
+	confirmLabel?: string;
+	cancelLabel?: string;
+	confirmClassName?: string;
+	body?: ReactNode;
+};
+
+type BaseActionDescriptor = {
+	key: string;
+	label: string;
+	variant?: ButtonProps["variant"];
+	size?: ButtonProps["size"];
+	disabled?: boolean;
+	loading?: boolean;
+	icon?: ReactNode;
+	className?: string;
+};
+
+type DialogActionDescriptor = BaseActionDescriptor & {
+	type: "dialog";
+	onConfirm: () => void;
+	dialog: ActionDialogConfig;
+};
+
+type ButtonActionDescriptor = BaseActionDescriptor & {
+	type: "button";
+	onClick: () => void;
+};
+
+type ActionDescriptor = DialogActionDescriptor | ButtonActionDescriptor;
 
 export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetailProps) {
 	const params = useParams();
@@ -153,6 +188,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 	const operations = useOrderOperations(
 		orderCode,
 		orderItems,
+		setOrderItems,
 		returnExchangeRecords,
 		setReturnExchangeRecords,
 		user
@@ -187,7 +223,6 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		getProductSignRecord,
 		hasProductOperation,
 		getProductActualStatus,
-		canProductBeEdited,
 	} = operations;
 
 	const editing = useOrderEditing(orderItems, setOrderItems);
@@ -234,6 +269,8 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		deliverToCustomer,
 		handleBeginInspect,
 		handleRejectOrComplete,
+		requestCustomerExchange,
+		requestingCustomerExchange,
 	} = actions;
 
 	// 处理确认操作
@@ -253,6 +290,91 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		}
 		return shouldShowCountdown(orderDetail.orderStatus as OrderStatus);
 	}, [orderDetail]);
+
+	// ExchangeItemsTable 相关函数
+	const handleExchangeStatusChange = async (itemId: number, newStatus: ExchangeItemStatus, reason?: string) => {
+		try {
+			// 直接从localExchangeItems中获取最新的actualQuantity，如果没有则从exchangeItems获取
+			const localItem = localExchangeItems.find(item => item.id === itemId);
+			const exchangeItem = exchangeItems.find(item => item.id === itemId);
+			const actualQuantity = localItem?.actualQuantity ?? exchangeItem?.actualQuantity ?? 0;
+
+			// 所有换货操作都通过更新实际数量API实现
+			const response = await fetch(`/api/orders/${orderCode}/update-exchange-item-actual`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					orderDetailId: itemId,
+					actualQuantity: actualQuantity,
+				}),
+			});
+
+			if (!response.ok) {
+				throw new Error(`更新换货实际数量失败: ${response.status}`);
+			}
+
+			toast({
+				title: '操作成功',
+				description: '换货商品状态已更新',
+				variant: 'success',
+			});
+
+			// 刷新数据
+			window.location.reload();
+		} catch (err) {
+			toast({
+				title: '操作失败',
+				description: err instanceof Error ? err.message : '状态更新时发生错误',
+				variant: 'destructive',
+			});
+		}
+	};
+
+	const canPerformExchangeAction = (item: ExchangeItem, action: string) => {
+		// PROVIDER用户在EXCHANGE_IN_PROGRESS状态下可以进行确认操作
+		if (tenantType.toLowerCase() === TenantType.PROVIDER && action === 'confirm') {
+			return orderDetail?.orderStatus === 'EXCHANGE_IN_PROGRESS' && item.status === ExchangeItemStatus.PENDING;
+		}
+		// PROVIDER用户在其他状态下可以进行发货操作
+		if (tenantType.toLowerCase() === TenantType.PROVIDER && action === 'ship') {
+			return item.status === ExchangeItemStatus.PENDING;
+		}
+		// MARKET用户可以进行收货、拒收、完成操作
+		if (tenantType.toLowerCase() === TenantType.MARKET) {
+			if (action === 'receive' && item.status === ExchangeItemStatus.SHIPPED) return true;
+			if (action === 'reject' && item.status === ExchangeItemStatus.SHIPPED) return true;
+			if (action === 'complete' && item.status === ExchangeItemStatus.RECEIVED) return true;
+		}
+		// CUSTOMER用户可以确认完成
+		if (tenantType.toLowerCase() === TenantType.CUSTOMER && action === 'confirm') {
+			return item.status === ExchangeItemStatus.RECEIVED;
+		}
+		return false;
+	};
+
+	const getExchangeStatusLabel = (status: ExchangeItemStatus) => {
+		const labels: Record<ExchangeItemStatus, string> = {
+			[ExchangeItemStatus.PENDING]: '待发货',
+			[ExchangeItemStatus.SHIPPED]: '已发货',
+			[ExchangeItemStatus.RECEIVED]: '已收货',
+			[ExchangeItemStatus.REJECTED]: '已拒收',
+			[ExchangeItemStatus.COMPLETED]: '已完成',
+		};
+		return labels[status] || status;
+	};
+
+	const getExchangeStatusVariant = (status: ExchangeItemStatus) => {
+		const variants: Record<ExchangeItemStatus, "default" | "secondary" | "destructive" | "outline"> = {
+			[ExchangeItemStatus.PENDING]: 'outline',
+			[ExchangeItemStatus.SHIPPED]: 'secondary',
+			[ExchangeItemStatus.RECEIVED]: 'default',
+			[ExchangeItemStatus.REJECTED]: 'destructive',
+			[ExchangeItemStatus.COMPLETED]: 'default',
+		};
+		return variants[status] || 'default';
+	};
 
 	const shouldShowActualQuantityColumn = useMemo(() => {
 		if (!orderDetail) {
@@ -319,18 +441,47 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 	}, [orderDetail]);
 
 	// 处理返回上一页
-	const handleGoBack = () => {
+	const handleGoBack = useCallback(() => {
 		router.back();
-	};
+	}, [router]);
 
-	const navigateToMarketExchangePage = () => {
+	const navigateToMarketExchangePage = useCallback(() => {
 		const marketParam = params?.market_id;
 		const marketId = Array.isArray(marketParam) ? marketParam[0] : marketParam ?? orgId;
 		router.push(`/workspace/markets/${marketId}/orders/${orderCode}/exchange`);
-	};
+	}, [router, params, orgId, orderCode]);
+
+	const handleBeginExchangeProcessing = useCallback(async () => {
+		try {
+			setStartingExchange(true);
+			const response = await fetch(`/api/orders/${orderCode}/begin-exchange-progress`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ operateBy: user?.name || '' }),
+			});
+
+			if (!response.ok) {
+				throw new Error(`开始换货失败: ${response.status}`);
+			}
+
+			const providerParam = params?.provider_id;
+			const providerId = Array.isArray(providerParam) ? providerParam[0] : providerParam ?? '';
+			router.push(`/workspace/providers/${providerId}/orders/${orderCode}/exchange`);
+		} catch (error) {
+			toast({
+				title: '操作失败',
+				description: error instanceof Error ? error.message : '开始换货时出错',
+				variant: 'destructive',
+			});
+		} finally {
+			setStartingExchange(false);
+		}
+	}, [orderCode, params, router, toast, user?.name]);
 
 	// 添加导出Excel功能
-	const exportToExcel = async () => {
+	const exportToExcel = useCallback(async () => {
 		if (!orderItems || orderItems.length === 0) {
 			toast({
 				title: "导出失败",
@@ -470,12 +621,24 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		} finally {
 			setExportingExcel(false);
 		}
-	};
+	}, [
+		orderItems,
+		toast,
+		getItemReturnExchangeRecords,
+		orderDetail,
+		isEditing,
+		actualTotal,
+		originalTotal,
+		discountTotal,
+		returnMoney,
+		orderCode
+	]);
 
 	// 添加 showOrderInfo 和 showBeginInspectDialog 状态
 	const [showOrderInfo, setShowOrderInfo] = useState(false);
 	const [showBeginInspectDialog, setShowBeginInspectDialog] = useState(false);
 	const [exportingExcel, setExportingExcel] = useState(false);
+	const [startingExchange, setStartingExchange] = useState(false);
 
 	// ReturnCountdown 组件
 	const ReturnCountdown = ({ afterSaleAt, orderStatus, forceUpdate }: {
@@ -666,6 +829,449 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		}
 	};
 
+	const tenantEnum = tenantType.toLowerCase() as TenantType;
+	const orderStatus = orderDetail?.orderStatus as OrderStatus | undefined;
+	const hasExchangedItems = orderItems.some((item) => item.status?.toUpperCase() === "EXCHANGED");
+	const shouldShowMarketExchangeConfirmation =
+		tenantEnum === TenantType.MARKET &&
+		orderStatus === OrderStatus.EXCHANGE_REQUESTED &&
+		hasExchangedItems;
+
+const productStatusSummary = useMemo(() => {
+	const totalItems = orderItems.length;
+
+		const receiptMap = returnExchangeRecords.reduce<Record<number, OperationType | undefined>>((acc, record) => {
+		acc[record.id] = record.operationType;
+		return acc;
+	}, {});
+
+	const normalizedStatuses = orderItems.map((item) => {
+		const receiptStatus = receiptMap[item.id];
+		if (receiptStatus === OperationType.EXCHANGE) {
+			return 'EXCHANGE';
+		}
+		if (receiptStatus === OperationType.RETURN) {
+			return 'RETURN';
+		}
+		if (receiptStatus === OperationType.SIGN) {
+			return 'SIGN';
+		}
+		return item.status?.toUpperCase() ?? 'PENDING';
+	});
+
+	const hasExchange = normalizedStatuses.includes('EXCHANGE');
+	const inspectedStatuses = new Set(['SIGN', 'RETURN', 'EXCHANGE']);
+	const inspectedCount = normalizedStatuses.filter((status) => inspectedStatuses.has(status)).length;
+	const allInspected = totalItems > 0 && inspectedCount === totalItems;
+
+	// 创建商品ID到状态的映射
+	const itemStatusMap = orderItems.reduce((acc, item, index) => {
+		acc[item.id] = normalizedStatuses[index];
+		return acc;
+	}, {} as Record<number, string>);
+
+	return { totalItems, hasExchange, allInspected, itemStatusMap };
+	}, [orderItems, returnExchangeRecords]);
+
+	const exchangeRecords = useMemo(
+		() => exchangeReturnRecords.filter((record) => record.operationType === OperationType.EXCHANGE),
+		[exchangeReturnRecords]
+	);
+
+	// 转换退换货记录为ExchangeItem格式，用于ExchangeItemsTable
+	const [localExchangeItems, setLocalExchangeItems] = useState<ExchangeItem[]>([]);
+
+	const exchangeItems = useMemo(() => {
+		return exchangeRecords.map((record) => {
+			// 从orderItems中获取价格信息
+			const orderItem = orderItems.find(item => item.id === record.orderDetailId);
+			const price = orderItem ? parseFloat(orderItem.actualPrice) : 0;
+			const quantity = Number(record.inputQuantity) || Number(record.quantity) || 0;
+			const requestedQuantity = Number(record.quantity); // quantity代表供应商需要的换货量
+
+			// 优先使用本地状态中的actualQuantity（用于内联编辑）
+			const localItem = localExchangeItems.find(item => item.id === record.orderDetailId);
+			const actualQuantity = localItem?.actualQuantity ?? Number(record.actualQuantity) ?? undefined;
+
+			return {
+				id: record.orderDetailId,
+				returnExchangeId: record.orderDetailId, // 使用orderDetailId作为returnExchangeId
+				productCode: record.productName, // 这里假设productName就是productCode，或者需要从其他地方获取
+				productName: record.productName,
+				quantity: quantity,
+				requestedQuantity: requestedQuantity,
+				actualQuantity: actualQuantity,
+				price: price,
+				totalAmount: quantity * price,
+				status: record.status === 'COMPLETED' ? ExchangeItemStatus.COMPLETED :
+						record.status === 'PROGRESS' ? ExchangeItemStatus.SHIPPED : // PROGRESS表示供应商已操作过换货
+						record.status === 'PENDING' ? ExchangeItemStatus.PENDING :
+						ExchangeItemStatus.PENDING, // 默认状态映射
+				shippedAt: record.processedAt || null,
+				receivedAt: record.actualQuantity ? record.processedAt : null,
+				createdAt: orderDetail?.createdAt || new Date().toISOString(),
+				updatedAt: record.processedAt || new Date().toISOString(),
+			};
+		}) satisfies ExchangeItem[];
+	}, [exchangeRecords, orderItems, orderDetail, localExchangeItems]);
+
+	// 更新本地实际数量的函数
+	const updateLocalActualQuantity = (itemId: number, actualQuantity: number) => {
+		setLocalExchangeItems(prev => {
+			const existingItem = prev.find(item => item.id === itemId);
+			if (existingItem) {
+				return prev.map(item =>
+					item.id === itemId
+						? { ...item, actualQuantity }
+						: item
+				);
+			} else {
+				return [...prev, { id: itemId, actualQuantity } as ExchangeItem];
+			}
+		});
+	};
+
+	// 处理确定换货操作
+	const handleConfirmExchange = async () => {
+		try {
+			setStartingExchange(true);
+			const response = await fetch(`/api/orders/${orderCode}/begin-exchange-progress`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ operateBy: user?.name || '' }),
+			});
+
+			if (!response.ok) {
+				throw new Error(`开始换货失败: ${response.status}`);
+			}
+
+			const result = await response.json();
+
+			toast({
+				title: '操作成功',
+				description: '已开始换货流程，现在可以编辑实际换货数量',
+				variant: 'success',
+			});
+
+			// 更新订单状态
+			if (orderDetail) {
+				setOrderDetail({
+					...orderDetail,
+					orderStatus: 'EXCHANGE_IN_PROGRESS',
+				});
+			}
+		} catch (error) {
+			toast({
+				title: '操作失败',
+				description: error instanceof Error ? error.message : '开始换货时出错',
+				variant: 'destructive',
+			});
+		} finally {
+			setStartingExchange(false);
+		}
+	};
+
+	// 检查是否所有换货商品都已完成（状态为SHIPPED或COMPLETED）
+	const allExchangeItemsCompleted = useMemo(() => {
+		const exchangeItemsWithStatus = exchangeItems.filter(item =>
+			item.status === ExchangeItemStatus.SHIPPED || item.status === ExchangeItemStatus.COMPLETED
+		);
+		return exchangeItems.length > 0 && exchangeItemsWithStatus.length === exchangeItems.length;
+	}, [exchangeItems]);
+
+	// 处理交付到市场的操作
+	const handleDeliverToMarket = async () => {
+		try {
+			const response = await fetch(`/api/orders/${orderCode}/exchange-deliver-from-provider-to-market`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					operateBy: user?.name || '',
+					items: exchangeItems.map(item => ({
+						id: item.id,
+						productId: item.productCode,
+						actualQuantity: item.actualQuantity || 0,
+						requestedQuantity: item.requestedQuantity || item.quantity,
+						remark: null, // 暂时设为null，后续可以扩展
+					})),
+				}),
+			});
+
+			if (!response.ok) {
+				throw new Error(`交付到市场失败: ${response.status}`);
+			}
+
+			toast({
+				title: '操作成功',
+				description: '商品已交付到市场',
+				variant: 'success',
+			});
+
+			// 刷新页面
+			window.location.reload();
+		} catch (err) {
+			toast({
+				title: '操作失败',
+				description: err instanceof Error ? err.message : '交付到市场时发生错误',
+				variant: 'destructive',
+			});
+		}
+	};
+
+	const actionDescriptors = useMemo<ActionDescriptor[]>(() => {
+		if (!orderDetail || !orderStatus) {
+			return [];
+		}
+
+		const status = orderStatus;
+		const descriptors: ActionDescriptor[] = [];
+		const hasBlockingErrors = hasErrors();
+
+		if (tenantEnum === TenantType.PROVIDER) {
+			if (status === OrderStatus.EXCHANGE_REQUESTED) {
+				descriptors.push({
+					key: "provider-exchange-progress",
+					type: "button",
+					label: startingExchange ? "处理中..." : "确认换货",
+					variant: "outline",
+					size: "sm",
+					className: "h-8 px-3 text-xs",
+					onClick: handleBeginExchangeProcessing,
+					loading: startingExchange,
+					disabled: startingExchange,
+				});
+			}
+
+			if (canShowStartProcessing(status, tenantType) && status !== OrderStatus.EXCHANGE_REQUESTED) {
+				const isAssigned = status === OrderStatus.ASSIGNED;
+				descriptors.push({
+					key: "provider-start-processing",
+					type: "dialog",
+					label: isAssigned ? "开始备货" : "开始换货",
+					size: "sm",
+					className: "bg-blue-600 hover:bg-blue-500 text-white",
+					dialog: {
+						title: isAssigned ? "确认开始备货?" : "确认开始换货?",
+						description: "确认后，订单状态更新为\"备货中\"，表示您已开始准备该订单的商品。您可以编辑实际发货数量。",
+					},
+					onConfirm: handleStartProcessing,
+					loading: processing,
+					disabled: processing,
+				});
+			}
+
+			if (isEditing && shouldEnterEditMode(status, tenantType)) {
+				const providerTitle = status === OrderStatus.EXCHANGE_IN_PROGRESS ? "确认完成换货备货?" : "确认完成备货?";
+				descriptors.push({
+					key: "provider-finalize-quantities",
+					type: "dialog",
+					label: savingChanges ? "保存中..." : "完成备货",
+					size: "sm",
+					className: "bg-green-600 hover:bg-green-500 text-white flex items-center gap-1",
+					dialog: {
+						title: providerTitle,
+						description: "提交后，系统将更新商品的实际出货量，总金额也会相应调整。",
+						body: createSettlementSummary({
+							actualTotal,
+							discountTotal,
+							originalTotal,
+							returnMoney,
+						}),
+					},
+					onConfirm: handleSaveActualQuantities,
+					disabled: hasBlockingErrors || savingChanges,
+					loading: savingChanges,
+					icon: <Save className="h-4 w-4" />,
+				});
+			}
+		}
+
+		if (tenantEnum === TenantType.MARKET) {
+			if (canShowBeginInspect(status, tenantType)) {
+				descriptors.push({
+					key: "market-begin-inspect",
+					type: "dialog",
+					label: beginInspecting ? "处理中..." : "开始验收",
+					size: "sm",
+					className: "bg-blue-600 hover:bg-blue-500 text-white",
+					dialog: {
+						title: "确认开始验收?",
+						description: "确认后，订单状态更新为\"验收中\"，表示您已开始验收该订单的商品。",
+					},
+					onConfirm: handleBeginInspect,
+					disabled: beginInspecting,
+					loading: beginInspecting,
+				});
+			}
+
+			if (shouldShowMarketExchangeConfirmation) {
+				descriptors.push({
+					key: "market-confirm-exchange",
+					type: "dialog",
+					label: "确认换货",
+					size: "sm",
+					className: "bg-purple-600 hover:bg-purple-500 text-white",
+					dialog: {
+						title: "确认进入换货流程?",
+						description: "确认后将跳转至换货处理页面，请核对需要换货的商品信息并提交换货申请。",
+					},
+					onConfirm: navigateToMarketExchangePage,
+				});
+			} else if (canShowDeliverToCustomer(status, tenantType)) {
+				descriptors.push({
+					key: "market-deliver-to-customer",
+					type: "dialog",
+					label: deliveringToCustomer ? "处理中..." : "确认发货",
+					size: "sm",
+					className: "bg-purple-600 hover:bg-purple-500 text-white",
+					dialog: {
+						title: "确认开始发货?",
+						description: "确认后，订单状态将更新为\"配送中\"，表示市场正在将商品配送给客户。",
+					},
+					onConfirm: deliverToCustomer,
+					disabled: deliveringToCustomer,
+					loading: deliveringToCustomer,
+				});
+			}
+
+			if (status === OrderStatus.EXCHANGE_INSPECTING) {
+				descriptors.push({
+					key: "market-exchange-inspect",
+					type: "button",
+					label: "验收换货",
+					variant: "outline",
+					size: "sm",
+					className: "h-8 px-3 text-xs",
+					onClick: navigateToMarketExchangePage,
+				});
+			}
+
+		const completionAction = buildCompletionAction({
+				tenant: tenantEnum,
+				status,
+				returnExchangeRecords,
+				orderItems,
+				completeAcceptance,
+			showRejectConfirmation,
+				productStatusSummary,
+				requestCustomerExchange,
+				requestingCustomerExchange,
+			});
+			if (completionAction) {
+				descriptors.push(completionAction);
+			}
+		}
+
+		if (tenantEnum === TenantType.CUSTOMER) {
+			if (canShowCustomerBeginInspect(status, tenantType)) {
+				descriptors.push({
+					key: "customer-begin-inspect",
+					type: "dialog",
+					label: beginInspecting ? "处理中..." : "开始验收",
+					size: "sm",
+					className: "bg-blue-600 hover:bg-blue-500 text-white",
+					dialog: {
+						title: "确认开始验收?",
+						description: "确认后，订单状态更新为\"客户验收中\"，表示您已开始验收该订单的商品。",
+					},
+					onConfirm: handleBeginInspect,
+					disabled: beginInspecting,
+					loading: beginInspecting,
+				});
+			}
+
+		const completionAction = buildCompletionAction({
+				tenant: tenantEnum,
+				status,
+				returnExchangeRecords,
+				orderItems,
+				completeAcceptance,
+			showRejectConfirmation,
+				productStatusSummary,
+				requestCustomerExchange,
+				requestingCustomerExchange,
+			});
+			if (completionAction) {
+				descriptors.push(completionAction);
+			}
+
+			if (canShowCompleteOrder(status, tenantType)) {
+				descriptors.push({
+					key: "customer-complete-order",
+					type: "dialog",
+					label: "完成订单",
+					variant: "outline",
+					size: "sm",
+					className: "h-8 px-2 text-xs flex items-center gap-1 hover:bg-green-600 bg-green-700 text-white hover:text-white",
+					dialog: {
+						title: "确认完成订单?",
+						description: "确认后，订单状态将更新为\"已完成\"，此操作不可撤销。",
+					},
+					onConfirm: completeOrder,
+				});
+			}
+		}
+
+		const exportAction: ActionDescriptor = {
+			key: "export-excel",
+			type: "button",
+			label: exportingExcel ? "导出中..." : "导出Excel",
+			variant: "outline",
+			size: "sm",
+			className: "h-8 px-2 text-xs flex items-center gap-1 hover:bg-gray-100",
+			onClick: exportToExcel,
+			loading: exportingExcel,
+			disabled: exportingExcel,
+			icon: !exportingExcel ? <Download className="h-3 w-3" /> : undefined,
+		};
+
+		descriptors.push(exportAction);
+	return descriptors;
+	}, [
+		orderDetail,
+		orderStatus,
+		tenantEnum,
+		tenantType,
+		isEditing,
+		savingChanges,
+		hasErrors,
+		actualTotal,
+		discountTotal,
+		originalTotal,
+		returnMoney,
+		processing,
+		beginInspecting,
+		deliveringToCustomer,
+		returnExchangeRecords,
+		orderItems,
+		completeAcceptance,
+		handleRejectOrComplete,
+		showRejectConfirmation,
+		canShowCustomerBeginInspect,
+		canShowCompleteOrder,
+		canShowStartProcessing,
+		canShowBeginInspect,
+		canShowDeliverToCustomer,
+		shouldEnterEditMode,
+		shouldShowMarketExchangeConfirmation,
+		handleStartProcessing,
+		handleSaveActualQuantities,
+		handleBeginInspect,
+		deliverToCustomer,
+		exportToExcel,
+		handleBeginExchangeProcessing,
+		startingExchange,
+		completeOrder,
+		navigateToMarketExchangePage,
+		productStatusSummary,
+		requestCustomerExchange,
+		requestingCustomerExchange
+	]);
+
 	if (loading) {
 		return (
 			<div className="container mx-auto py-6">
@@ -690,7 +1296,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		);
 	}
 
-	if (!orderDetail) {
+	if (!orderDetail || !orderStatus) {
 		return (
 			<div className="container mx-auto py-6">
 				<div className="flex flex-col items-center py-12">
@@ -704,340 +1310,6 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		);
 	}
 
-	const tenantEnum = tenantType.toLowerCase() as TenantType;
-	const hasExchangedItems = orderItems.some((item) => item.status?.toUpperCase() === "EXCHANGED");
-	const shouldShowMarketExchangeConfirmation =
-		tenantEnum === TenantType.MARKET &&
-		(orderDetail.orderStatus as OrderStatus) === OrderStatus.EXCHANGE_REQUESTED &&
-		hasExchangedItems;
-
-	const renderStartProcessingButton = (): ReactNode => (
-		<AlertDialog key="start-processing">
-			<AlertDialogTrigger asChild>
-				<Button className="bg-blue-600 hover:bg-blue-500" size="sm">
-					{orderDetail.orderStatus === OrderStatus.ASSIGNED ? "开始备货" : "开始换货"}
-				</Button>
-			</AlertDialogTrigger>
-			<AlertDialogContent>
-				<AlertDialogHeader>
-					<AlertDialogTitle className="text-sm">确认开始备货?</AlertDialogTitle>
-					<AlertDialogDescription className="text-xs">
-						确认后，订单状态更新为"备货中"，表示您已开始准备该订单的商品。
-						您可以编辑实际发货数量。
-					</AlertDialogDescription>
-				</AlertDialogHeader>
-				<AlertDialogFooter>
-					<AlertDialogCancel>取消</AlertDialogCancel>
-					<AlertDialogAction onClick={handleStartProcessing} disabled={processing} className="bg-blue-600 hover:bg-blue-500 text-xs">
-						{processing ? "处理中..." : "确认"}
-					</AlertDialogAction>
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
-	);
-
-	const renderExchangeProcessingButton = (): ReactNode => (
-		<Button
-			key="exchange-processing"
-			variant="outline"
-			onClick={async () => {
-				try {
-					const response = await fetch(`/api/orders/${orderCode}/begin-exchange-progress`, {
-						method: 'PATCH',
-						headers: {
-							'Content-Type': 'application/json',
-						},
-						body: JSON.stringify({ operateBy: user?.name || '' }),
-					});
-
-					if (!response.ok) {
-						throw new Error(`开始换货失败: ${response.status}`);
-					}
-
-					router.push(`/workspace/providers/${params?.provider_id}/orders/${orderCode}/exchange`);
-				} catch (error) {
-					toast({
-						title: '操作失败',
-						description: error instanceof Error ? error.message : '开始换货时出错',
-						variant: 'destructive',
-					});
-				}
-			}}
-			size="sm"
-		>
-			确认换货
-		</Button>
-	);
-
-	const renderBeginInspectButton = (): ReactNode => (
-		<AlertDialog key="begin-inspect" open={showBeginInspectDialog} onOpenChange={setShowBeginInspectDialog}>
-			<AlertDialogTrigger asChild>
-				<Button className="bg-blue-600 hover:bg-blue-500" size="sm">
-					开始验收
-				</Button>
-			</AlertDialogTrigger>
-			<AlertDialogContent>
-				<AlertDialogHeader>
-					<AlertDialogTitle className="text-sm">确认开始验收?</AlertDialogTitle>
-					<AlertDialogDescription className="text-xs">
-						确认后，订单状态更新为"验收中"，表示您已开始验收该订单的商品。
-					</AlertDialogDescription>
-				</AlertDialogHeader>
-				<AlertDialogFooter>
-					<AlertDialogCancel>取消</AlertDialogCancel>
-					<AlertDialogAction onClick={handleBeginInspect} disabled={beginInspecting} className="bg-blue-600 hover:bg-blue-500 text-xs">
-						{beginInspecting ? "处理中..." : "确认"}
-					</AlertDialogAction>
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
-	);
-
-	const renderCustomerBeginInspectButton = (): ReactNode => (
-		<AlertDialog key="customer-begin-inspect" open={showBeginInspectDialog} onOpenChange={setShowBeginInspectDialog}>
-			<AlertDialogTrigger asChild>
-				<Button className="bg-blue-600 hover:bg-blue-500" size="sm">
-					开始验收
-				</Button>
-			</AlertDialogTrigger>
-			<AlertDialogContent>
-				<AlertDialogHeader>
-					<AlertDialogTitle className="text-sm">确认开始验收?</AlertDialogTitle>
-					<AlertDialogDescription className="text-xs">
-						确认后，订单状态更新为"客户验收中"，表示您已开始验收该订单的商品。
-					</AlertDialogDescription>
-				</AlertDialogHeader>
-				<AlertDialogFooter>
-					<AlertDialogCancel>取消</AlertDialogCancel>
-					<AlertDialogAction onClick={handleBeginInspect} disabled={beginInspecting} className="bg-blue-600 hover:bg-blue-500 text-xs">
-						{beginInspecting ? "处理中..." : "确认"}
-					</AlertDialogAction>
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
-	);
-
-	const renderDeliverToCustomerButton = (): ReactNode => (
-		<AlertDialog key="deliver-to-customer">
-			<AlertDialogTrigger asChild>
-				<Button className="bg-purple-600 hover:bg-purple-500" size="sm">
-					确认发货
-				</Button>
-			</AlertDialogTrigger>
-			<AlertDialogContent>
-				<AlertDialogHeader>
-					<AlertDialogTitle className="text-sm">确认开始发货?</AlertDialogTitle>
-					<AlertDialogDescription className="text-xs">
-						确认后，订单状态将更新为"配送中"，表示市场正在将商品配送给客户。
-					</AlertDialogDescription>
-				</AlertDialogHeader>
-				<AlertDialogFooter>
-					<AlertDialogCancel>取消</AlertDialogCancel>
-					<AlertDialogAction onClick={deliverToCustomer} disabled={deliveringToCustomer} className="bg-purple-600 hover:bg-purple-500 text-xs">
-						{deliveringToCustomer ? "处理中..." : "确认"}
-					</AlertDialogAction>
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
-	);
-
-	const renderMarketConfirmExchangeButton = (): ReactNode => (
-		<AlertDialog key="market-confirm-exchange">
-			<AlertDialogTrigger asChild>
-				<Button className="bg-purple-600 hover:bg-purple-500" size="sm">
-					确认换货
-				</Button>
-			</AlertDialogTrigger>
-			<AlertDialogContent>
-				<AlertDialogHeader>
-					<AlertDialogTitle className="text-sm">确认进入换货流程?</AlertDialogTitle>
-					<AlertDialogDescription className="text-xs">
-						确认后将跳转至换货处理页面，请核对需要换货的商品信息并提交换货申请。
-					</AlertDialogDescription>
-				</AlertDialogHeader>
-				<AlertDialogFooter>
-					<AlertDialogCancel>取消</AlertDialogCancel>
-					<AlertDialogAction onClick={navigateToMarketExchangePage} className="bg-purple-600 hover:bg-purple-500 text-xs">
-						确认
-					</AlertDialogAction>
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
-	);
-
-	const renderMarketExchangeInspectButton = (): ReactNode => (
-		<Button
-			key="market-exchange-inspect"
-			variant="outline"
-			onClick={() => router.push(`/workspace/markets/${params?.market_id}/orders/${orderCode}/exchange`)}
-			size="sm"
-		>
-			验收换货
-		</Button>
-	);
-
-	const renderFinalizeQuantitiesButton = (key: string, label: string, confirmTitle: string, confirmDescription: string): ReactNode => (
-		<AlertDialog key={key}>
-			<AlertDialogTrigger asChild>
-				<Button className="bg-green-600 hover:bg-green-500 flex items-center gap-1" size="sm" disabled={hasErrors() || savingChanges}>
-					<Save className="h-4 w-4" />
-					{savingChanges ? "保存中..." : label}
-				</Button>
-			</AlertDialogTrigger>
-			<AlertDialogContent>
-				<AlertDialogHeader>
-					<AlertDialogTitle className="text-sm font-semibold">{confirmTitle}</AlertDialogTitle>
-					<AlertDialogDescription className="text-xs">
-						{confirmDescription}
-					</AlertDialogDescription>
-					<Separator />
-					<div className="mt-4 space-y-1 text-sm text-muted-foreground">
-						<p>原价: <span className="font-semibold font-mono ml-2">¥{originalTotal}</span></p>
-						<p className="text-red-600">折扣: <span className="font-semibold font-mono ml-2">-¥{discountTotal}</span></p>
-						<p className="text-red-600">退款: <span className="font-semibold font-mono ml-2">-¥{returnMoney}</span></p>
-						<p>实收: <span className="font-semibold font-mono ml-2">¥{(parseFloat(actualTotal) - parseFloat(returnMoney)).toFixed(2)}</span></p>
-					</div>
-					<Separator />
-				</AlertDialogHeader>
-				<AlertDialogFooter>
-					<AlertDialogCancel>取消</AlertDialogCancel>
-					<AlertDialogAction
-						onClick={handleSaveActualQuantities}
-						disabled={hasErrors() || savingChanges}
-						className="bg-green-600 hover:bg-green-500 text-xs"
-					>
-						{savingChanges ? "保存中..." : "确认"}
-					</AlertDialogAction>
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
-	);
-
-	const renderItemOperationButton = (): ReactNode => (
-		<CustomButton
-			key="item-operations"
-			returnExchangeRecordsLength={returnExchangeRecords.length}
-			tenantType={tenantType}
-			orderItemsSize={orderItems.length}
-			orderStatus={orderDetail.orderStatus}
-			orderHandler={completeAcceptance}
-			rejectOrCompleteHandler={showRejectConfirmation}
-		/>
-	);
-
-	const renderCompleteOrderButton = (): ReactNode => (
-		<AlertDialog key="complete-order">
-			<AlertDialogTrigger asChild>
-				<Button
-					variant="outline"
-					size="sm"
-					className="h-8 px-2 text-xs flex items-center gap-1 hover:bg-green-600 bg-green-700 text-white hover:text-white"
-				>
-					完成订单
-				</Button>
-			</AlertDialogTrigger>
-			<AlertDialogContent>
-				<AlertDialogHeader>
-					<AlertDialogTitle className="text-sm">确认完成订单?</AlertDialogTitle>
-					<AlertDialogDescription className="text-xs">
-						确认后，订单状态将更新为"已完成"，此操作不可撤销。
-					</AlertDialogDescription>
-				</AlertDialogHeader>
-				<AlertDialogFooter>
-					<AlertDialogCancel className="text-xs">取消</AlertDialogCancel>
-					<AlertDialogAction onClick={completeOrder} className="bg-green-600 hover:bg-green-500 text-xs">
-						确认完成
-					</AlertDialogAction>
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
-	);
-
-	const renderExportButton = (): ReactNode => (
-		<Button
-			key="export-excel"
-			variant="outline"
-			size="sm"
-			className="h-8 px-2 text-xs flex items-center gap-1 hover:bg-gray-100"
-			onClick={exportToExcel}
-			disabled={exportingExcel}
-		>
-			{exportingExcel ? (
-				<span className="animate-spin mr-1">⏳</span>
-			) : (
-				<Download className="h-3 w-3 mr-1" />
-			)}
-			导出Excel
-		</Button>
-	);
-
-	const tenantActionButtons: ReactNode[] = [];
-
-	if (tenantEnum === TenantType.PROVIDER) {
-		if (orderDetail.orderStatus === OrderStatus.EXCHANGE_REQUESTED) {
-			tenantActionButtons.push(renderExchangeProcessingButton());
-		}
-
-		if (canShowStartProcessing(orderDetail.orderStatus as OrderStatus, tenantType) && orderDetail.orderStatus !== OrderStatus.EXCHANGE_REQUESTED) {
-			tenantActionButtons.push(renderStartProcessingButton());
-		}
-
-		if (isEditing && shouldEnterEditMode(orderDetail.orderStatus as OrderStatus, tenantType)) {
-			const providerTitle = orderDetail.orderStatus === OrderStatus.EXCHANGE_IN_PROGRESS ? "确认完成换货备货?" : "确认完成备货?";
-			tenantActionButtons.push(
-				renderFinalizeQuantitiesButton(
-					"complete-preparing",
-					"完成备货",
-					providerTitle,
-					"提交后，系统将更新商品的实际出货量，总金额也会相应调整。"
-				)
-			);
-		}
-	}
-
-	if (tenantEnum === TenantType.MARKET) {
-		if (canShowBeginInspect(orderDetail.orderStatus as OrderStatus, tenantType)) {
-			tenantActionButtons.push(renderBeginInspectButton());
-		}
-
-		if (shouldShowMarketExchangeConfirmation) {
-			tenantActionButtons.push(renderMarketConfirmExchangeButton());
-		} else if (canShowDeliverToCustomer(orderDetail.orderStatus as OrderStatus, tenantType)) {
-			tenantActionButtons.push(renderDeliverToCustomerButton());
-		}
-
-		if (orderDetail.orderStatus === OrderStatus.EXCHANGE_INSPECTING) {
-			tenantActionButtons.push(renderMarketExchangeInspectButton());
-		}
-
-		if (isEditing && shouldEnterEditMode(orderDetail.orderStatus as OrderStatus, tenantType)) {
-			const marketTitle = orderDetail.orderStatus === OrderStatus.EXCHANGE_INSPECTING ? "确认完成换货验收?" : "确认完成验收?";
-			tenantActionButtons.push(
-				renderFinalizeQuantitiesButton(
-					"complete-inspection",
-					"完成验收",
-					marketTitle,
-					"提交后，商品验收完成，订单将进入下一流程。"
-				)
-			);
-		}
-
-		//tenantActionButtons.push(renderItemOperationButton());
-	}
-
-	if (tenantEnum === TenantType.CUSTOMER) {
-		if (canShowCustomerBeginInspect(orderDetail.orderStatus as OrderStatus, tenantType)) {
-			tenantActionButtons.push(renderCustomerBeginInspectButton());
-		}
-
-		tenantActionButtons.push(renderItemOperationButton());
-
-		if (canShowCompleteOrder(orderDetail.orderStatus as OrderStatus, tenantType)) {
-			tenantActionButtons.push(renderCompleteOrderButton());
-		}
-	}
-
-	const actionBarButtons: ReactNode[] = [...tenantActionButtons, renderExportButton()];
 
 	const handleExchangeReturnInputChange = (orderDetailId: number, value: string) => {
 		setExchangeReturnRecords((prev) => prev.map((record) => (
@@ -1101,8 +1373,6 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 			});
 		}
 	};
-
-	const canCompleteExchangeReturn = exchangeReturnRecords.length > 0 && exchangeReturnRecords.every((record) => record.status === 'COMPLETED');
 
 	return (
 		<div className="container mx-auto py-6">
@@ -1273,9 +1543,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 								共 {orderItems.length} 类商品，下表中单价为下单日产品中间价
 							</CardDescription>
 						</div>
-						<div className="flex flex-wrap items-center gap-2 justify-end">
-							{actionBarButtons}
-						</div>
+				<ActionToolbar actions={actionDescriptors} />
 					</CardHeader>
 					<CardContent>
 						<div className="overflow-x-auto" style={{ position: "relative" }}>
@@ -1314,12 +1582,12 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 							<TableBody>
 								{orderItems.map((item) => {
 									const itemReturnExchanges = getItemReturnExchangeRecords(item.id);
-									const actualStatus = getProductActualStatus(item.id);
-									const canEdit = canProductBeEdited(item.id);
+									const actualStatus = productStatusSummary.itemStatusMap[item.id] || 'PENDING';
+									const canEdit = !['SIGN', 'RETURN', 'EXCHANGE'].includes(actualStatus);
 
 									return (
 										<Fragment key={item.id}>
-											<TableRow className={`text-xs text-gray-700 ${actualStatus === 'RETURN' ? 'bg-red-50' : actualStatus === 'EXCHANGE' ? 'bg-orange-50' : actualStatus === 'SIGN' ? 'bg-green-50' : ''}`}>
+											<TableRow className={`text-xs text-gray-700 ${actualStatus === 'RETURN' ? 'bg-red-50' : actualStatus === 'EXCHANGE' ? 'bg-yellow-50' : actualStatus === 'SIGN' ? 'bg-green-50' : ''}`}>
 												<TableCell className="p-2 border-b">
 													{item.name}
 													{(item.processingRequirements || item.remark) && (
@@ -1496,101 +1764,52 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 
 				<Card>
 					<CardHeader>
-						<CardTitle>退换货记录</CardTitle>
+						<div className="flex items-center justify-between">
+							<CardTitle>退换货记录</CardTitle>
+							<div className="flex gap-2">
+								{allExchangeItemsCompleted && tenantType.toLowerCase() === TenantType.PROVIDER && (
+									<Button
+										onClick={handleDeliverToMarket}
+										className="bg-green-600 hover:bg-green-500 text-white"
+										size="sm"
+									>
+										确定交付到市场
+									</Button>
+								)}
+								{tenantType.toLowerCase() === TenantType.PROVIDER &&
+								 orderDetail?.orderStatus === 'EXCHANGE_REQUESTED' &&
+								 exchangeItems.length > 0 && (
+									<Button
+										onClick={handleConfirmExchange}
+										className="bg-blue-600 hover:bg-blue-500 text-white"
+										size="sm"
+										disabled={startingExchange}
+									>
+										{startingExchange ? "处理中..." : "确定换货"}
+									</Button>
+								)}
+							</div>
+						</div>
 					</CardHeader>
 					<CardContent>
-						{loadingExchangeReturn ? (
-							<div className="flex items-center text-sm text-muted-foreground">
-								<Loader2 className="mr-2 h-4 w-4 animate-spin" /> 正在加载退换货记录...
-							</div>
-						) : exchangeReturnError ? (
-							<Alert variant="destructive">
-								<AlertTitle>加载失败</AlertTitle>
-								<AlertDescription>{exchangeReturnError}</AlertDescription>
-							</Alert>
-						) : exchangeReturnRecords.length === 0 ? (
-							<p className="text-sm text-muted-foreground">暂无退换货记录。</p>
-						) : (
-							<div className="overflow-x-auto rounded-md border">
-								<Table>
-									<TableHeader>
-										<TableRow>
-											<TableHead>商品</TableHead>
-											<TableHead>类型</TableHead>
-											<TableHead className="text-right">申请数量</TableHead>
-											<TableHead className="text-right">状态</TableHead>
-											<TableHead>说明</TableHead>
-											<TableHead>实际数量</TableHead>
-											<TableHead>处理信息</TableHead>
-											<TableHead className="text-right">操作</TableHead>
-										</TableRow>
-									</TableHeader>
-									<TableBody>
-										{exchangeReturnRecords.map((record) => (
-											<TableRow key={`${record.orderDetailId}-${record.operationType}`}>
-												<TableCell>
-													<div className="space-y-1">
-														<p className="text-sm font-medium text-foreground">{record.productName}</p>
-														<p className="text-xs text-muted-foreground">单位：{record.unit}</p>
-													</div>
-												</TableCell>
-												<TableCell>
-													<Badge variant={record.operationType === OperationType.RETURN ? "destructive" : "warning"}>
-														{record.operationType === OperationType.RETURN ? '退货' : '换货'}
-													</Badge>
-												</TableCell>
-												<TableCell className="text-right font-mono text-sm">
-													{Number(record.quantity).toFixed(2)}
-												</TableCell>
-												<TableCell className="text-right">
-													<Badge variant="outline" className="text-xs">
-														{record.status === 'PENDING' ? '待处理' : record.status === 'COMPLETED' ? '已完成' : record.status}
-													</Badge>
-												</TableCell>
-												<TableCell>
-													<p className="text-sm text-muted-foreground whitespace-pre-line">{record.reason || '-'}</p>
-												</TableCell>
-												<TableCell>
-													{record.status === 'COMPLETED' ? (
-														<Badge variant="outline" className="text-xs">已处理</Badge>
-													) : (
-														<Input
-															type="number"
-															value={record.inputQuantity}
-															onChange={(event) => handleExchangeReturnInputChange(record.orderDetailId, event.target.value)}
-															className="max-w-[120px]"
-															step="0.01"
-															min="0"
-															disabled={record.submitting}
-														/>
-													)}
-												</TableCell>
-												<TableCell>
-													<div className="text-xs text-muted-foreground space-y-1">
-														<p>操作人：{record.processedBy || '-'}</p>
-														<p>时间：{record.processedAt ? new Date(record.processedAt).toLocaleString() : '-'}</p>
-														<p>实收：{record.actualQuantity ?? '-'}</p>
-													</div>
-												</TableCell>
-												<TableCell className="text-right">
-													{record.status === 'COMPLETED' ? (
-														<Badge variant="outline" className="text-xs">已完成</Badge>
-													) : (
-														<Button
-															size="sm"
-															onClick={() => handleSubmitExchangeReturnRecord(record)}
-															disabled={record.submitting}
-														>
-															{record.submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : '提交'}
-														</Button>
-													)}
-												</TableCell>
-										</TableRow>
-										))}
-									</TableBody>
-								</Table>
+						{allExchangeItemsCompleted && tenantType.toLowerCase() === TenantType.PROVIDER && (
+							<div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+								<p className="text-sm text-green-800">
+									所有换货商品都已完成，可以点击上方按钮确认交付到市场。
+								</p>
 							</div>
 						)}
+						<ExchangeItemsTable
+							items={exchangeItems}
+							loading={loadingExchangeReturn}
+							tenantType={tenantType}
+							orderStatus={orderDetail?.orderStatus}
+							onStatusChange={handleExchangeStatusChange}
+							onUpdateActualQuantity={updateLocalActualQuantity}
+							canPerformAction={canPerformExchangeAction}
+							getStatusLabel={getExchangeStatusLabel}
+							getStatusVariant={getExchangeStatusVariant}
+						/>
 					</CardContent>
 				</Card>
 			</div>
@@ -1622,6 +1841,8 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 				handleConfirmOperation={handleConfirmOperation}
 				getItemReturnExchangeRecords={getItemReturnExchangeRecords}
 				orderItems={orderItems}
+				orderStatus={orderDetail?.orderStatus}
+				tenantType={tenantType}
 			/>
 
 			{/* 配送人员选择对话框 */}
@@ -1712,3 +1933,243 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 
 	);
 } 
+
+function ActionToolbar({ actions }: { actions: ActionDescriptor[] }) {
+	if (!actions.length) {
+		return null;
+	}
+
+	return (
+		<div className="flex flex-wrap items-center justify-end gap-2">
+			{actions.map((action) =>
+				action.type === "dialog" ? (
+					<ActionDialogButton key={action.key} action={action} />
+				) : (
+					<RegularActionButton key={action.key} action={action} />
+				)
+			)}
+		</div>
+	);
+}
+
+function ActionDialogButton({ action }: { action: DialogActionDescriptor }) {
+	const triggerDisabled = Boolean(action.disabled || action.loading);
+	const triggerClasses = cn("h-8 px-3 text-xs", action.className);
+	const confirmClasses = cn(
+		action.dialog.confirmClassName ?? action.className,
+		!(action.dialog.confirmClassName || action.className) && "bg-primary text-white hover:bg-primary/90"
+	);
+	const confirmLabel = action.dialog.confirmLabel ?? "确认";
+	const cancelLabel = action.dialog.cancelLabel ?? "取消";
+
+	return (
+		<AlertDialog>
+			<AlertDialogTrigger asChild>
+				<Button
+					variant={action.variant}
+					size={action.size ?? "sm"}
+					className={triggerClasses}
+					disabled={triggerDisabled}
+				>
+					<ButtonContent action={action} />
+				</Button>
+			</AlertDialogTrigger>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle className="text-sm font-semibold">{action.dialog.title}</AlertDialogTitle>
+					{action.dialog.description && (
+						<AlertDialogDescription className="text-xs">
+							{action.dialog.description}
+						</AlertDialogDescription>
+					)}
+				</AlertDialogHeader>
+				{action.dialog.body}
+				<AlertDialogFooter>
+					<AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+					<AlertDialogAction
+						onClick={action.onConfirm}
+						className={confirmClasses}
+						disabled={triggerDisabled}
+					>
+						{action.loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+						{action.loading ? "处理中..." : confirmLabel}
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+	);
+}
+
+function RegularActionButton({ action }: { action: ButtonActionDescriptor }) {
+	const disabled = Boolean(action.disabled || action.loading);
+	return (
+		<Button
+			variant={action.variant}
+			size={action.size ?? "sm"}
+			className={cn("h-8 px-3 text-xs", action.className)}
+			onClick={action.onClick}
+			disabled={disabled}
+		>
+			<ButtonContent action={action} />
+		</Button>
+	);
+}
+
+function ButtonContent({ action }: { action: BaseActionDescriptor }) {
+	return (
+		<>
+			{action.loading ? (
+				<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+			) : action.icon ? (
+				<span className="mr-2 flex items-center">{action.icon}</span>
+			) : null}
+			<span>{action.label}</span>
+		</>
+	);
+}
+
+function createSettlementSummary({
+	originalTotal,
+	discountTotal,
+	returnMoney,
+	actualTotal,
+}: {
+	originalTotal: string;
+	discountTotal: string;
+	returnMoney: string;
+	actualTotal: string;
+}): ReactNode {
+	const formatMoney = (value: string) => {
+		const parsed = parseFloat(value);
+		return Number.isFinite(parsed) ? parsed.toFixed(2) : "0.00";
+	};
+
+	const netTotal = parseFloat(actualTotal) - parseFloat(returnMoney);
+
+	return (
+		<>
+			<Separator />
+			<div className="mt-4 space-y-1 text-sm text-muted-foreground">
+				<p>
+					原价: <span className="font-semibold font-mono ml-2">¥{formatMoney(originalTotal)}</span>
+				</p>
+				<p className="text-red-600">
+					折扣: <span className="font-semibold font-mono ml-2">-¥{formatMoney(discountTotal)}</span>
+				</p>
+				<p className="text-red-600">
+					退款: <span className="font-semibold font-mono ml-2">-¥{formatMoney(returnMoney)}</span>
+				</p>
+				<p>
+					实收: <span className="font-semibold font-mono ml-2">¥{Number.isFinite(netTotal) ? netTotal.toFixed(2) : "0.00"}</span>
+				</p>
+			</div>
+			<Separator />
+		</>
+	);
+}
+
+
+function buildCompletionAction({
+	tenant,
+	status,
+	returnExchangeRecords,
+	orderItems,
+	completeAcceptance,
+	showRejectConfirmation,
+	productStatusSummary,
+	requestCustomerExchange,
+	requestingCustomerExchange,
+}: {
+	tenant: TenantType;
+	status: OrderStatus;
+	returnExchangeRecords: ReturnExchangeItem[];
+	orderItems: OrderItem[];
+	completeAcceptance: () => void;
+	showRejectConfirmation: () => void;
+	productStatusSummary: { totalItems: number; hasExchange: boolean; allInspected: boolean };
+	requestCustomerExchange: () => void;
+	requestingCustomerExchange: boolean;
+}): ActionDescriptor | null {
+	const requireAllProcessedStatuses = new Set<OrderStatus>([
+		OrderStatus.MARKET_INSPECTING,
+		OrderStatus.EXCHANGE_INSPECTING,
+		OrderStatus.CUSTOMER_INSPECTING,
+	]);
+
+const requireAllProcessed = requireAllProcessedStatuses.has(status);
+let allProcessed = true;
+
+if (tenant === TenantType.CUSTOMER && status === OrderStatus.CUSTOMER_INSPECTING) {
+	allProcessed = productStatusSummary.allInspected;
+} else if (requireAllProcessed) {
+	const processedCountMatch =
+		orderItems.length > 0 &&
+		returnExchangeRecords.length > 0 &&
+		returnExchangeRecords.length === orderItems.length;
+	allProcessed = processedCountMatch;
+}
+
+if (!allProcessed) {
+	return null;
+}
+
+	if (
+		tenant === TenantType.MARKET &&
+		(status === OrderStatus.MARKET_INSPECTING || status === OrderStatus.EXCHANGE_INSPECTING)
+	) {
+		return {
+			key: "market-complete-acceptance",
+			type: "button",
+			label: "完成验收",
+			className: "h-8 px-2 text-xs bg-green-700 text-white hover:bg-green-600",
+			onClick: completeAcceptance,
+		};
+	}
+
+		if (tenant === TenantType.CUSTOMER) {
+			if (status === OrderStatus.CUSTOMER_INSPECTING) {
+				if (productStatusSummary.hasExchange) {
+					return {
+						key: "customer-request-exchange",
+						type: "dialog",
+						label: requestingCustomerExchange ? "提交中..." : "申请换货",
+						className: "h-8 px-3 text-xs bg-orange-600 text-white hover:bg-orange-500",
+						dialog: {
+							title: "确认申请换货?",
+							description: "确认后，系统将通知市场处理换货申请。",
+						},
+						onConfirm: requestCustomerExchange,
+						disabled: requestingCustomerExchange,
+						loading: requestingCustomerExchange,
+					};
+				}
+
+				// Show complete acceptance button only when all items are inspected and none are exchanged
+				if (productStatusSummary.allInspected && !productStatusSummary.hasExchange) {
+					return {
+						key: "customer-complete-acceptance",
+						type: "dialog",
+						label: "完成验收",
+						className: "h-8 px-3 text-xs bg-green-700 text-white hover:bg-green-600",
+						dialog: {
+							title: "确认完成验收?",
+							description: "确认后，订单状态将更新为\"已完成\"。",
+						},
+						onConfirm: completeAcceptance,
+					};
+				}
+			}
+
+		if (status === OrderStatus.RETURN_REQUESTED) {
+			return {
+				key: "customer-reject-after-sale",
+				type: "button",
+				label: "拒绝供应商售后",
+				className: "h-8 px-2 text-xs bg-red-700 text-white hover:bg-red-600",
+				onClick: showRejectConfirmation,
+			};
+		}
+	}
+
+	return null;
+}
