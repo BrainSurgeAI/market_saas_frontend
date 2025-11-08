@@ -26,7 +26,7 @@ import { getStatusVariant, translateOrderStatus } from "@/lib/utils";
 import { useEffect, useState, useRef } from "react";
 import { Provider } from "@/app/workspace/markets/[market_id]/orders/page";
 import { Button } from "@/components/ui/button";
-import { Search } from "lucide-react";
+import { Search, HelpCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -424,7 +424,22 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 										<TableHead>送货地址</TableHead>
 										<TableHead>送货日期</TableHead>
 										<TableHead>状态</TableHead>
-										<TableHead className="text-left">金额(元)</TableHead>
+										<TableHead className="text-left">下单金额(元)</TableHead>
+										<TableHead className="text-left">
+											<div className="flex items-center gap-1">
+												<span>实际金额(元)</span>
+												<TooltipProvider>
+													<Tooltip>
+														<TooltipTrigger asChild>
+															<HelpCircle className="h-3.5 w-3.5 text-gray-500 cursor-help" />
+														</TooltipTrigger>
+														<TooltipContent>
+															<p>订单完成后显示实际金额</p>
+														</TooltipContent>
+													</Tooltip>
+												</TooltipProvider>
+											</div>
+										</TableHead>
 										{providers && providers.length > 0 && (
 											<TableHead className="text-right">操作</TableHead>
 										)}
@@ -474,6 +489,9 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 														{translateOrderStatus(order.orderStatus)}
 													</Badge>
 												)}
+											</TableCell>
+											<TableCell className="text-left font-mono">
+												￥{order.totalAmount}
 											</TableCell>
 											<TableCell className="text-left font-mono">
 												￥{order.actualAmount}

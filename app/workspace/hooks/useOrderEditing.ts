@@ -19,7 +19,7 @@ export function useOrderEditing(orderItems: OrderItem[], setOrderItems: (items: 
   };
 
   // 处理实际数量变更
-  const handleActualQuantityChange = (id: number, value: string) => {
+  const handleDeliverQuantityChange = (id: number, value: string) => {
     const item = orderItems.find(item => item.id === id);
     if (!item) return;
 
@@ -47,17 +47,17 @@ export function useOrderEditing(orderItems: OrderItem[], setOrderItems: (items: 
 
     const updatedItems = orderItems.map(item => {
       if (item.id === id) {
-        const actualQuantity = value;
+        const deliveredQuantity = value;
         const actualPrice = parseFloat(item.actualPrice);
 
-        const actualTotal = (actualQuantity && !isNaN(parseFloat(actualQuantity)) && !isNaN(actualPrice))
-          ? (parseFloat(actualQuantity) * actualPrice).toFixed(2)
+        const total = (deliveredQuantity && !isNaN(parseFloat(deliveredQuantity)) && !isNaN(actualPrice))
+          ? (parseFloat(deliveredQuantity) * actualPrice).toFixed(2)
           : item.total;
 
         return {
           ...item,
-          actualQuantity,
-          actualTotal
+          deliveredQuantity,
+          total
         };
       }
       return item;
@@ -67,7 +67,7 @@ export function useOrderEditing(orderItems: OrderItem[], setOrderItems: (items: 
   };
 
   // 处理输入框的 keydown 事件
-  const handleActualQuantityKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, itemId: number) => {
+  const handleDeliverQuantityKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, itemId: number) => {
     const item = orderItems.find(item => item.id === itemId);
     if (!item) return;
 
@@ -85,7 +85,7 @@ export function useOrderEditing(orderItems: OrderItem[], setOrderItems: (items: 
     }
 
     for (const item of orderItems) {
-      const quantity = parseFloat(item.actualQuantity);
+      const quantity = parseFloat(item.deliveredQuantity);
       if (isNaN(quantity) || quantity === 0) {
         const newErrors = { ...itemErrors };
         newErrors[item.id] = quantity === 0 ? '数量不能为0' : '请输入数字';
@@ -107,8 +107,8 @@ export function useOrderEditing(orderItems: OrderItem[], setOrderItems: (items: 
     setItemErrors,
     savingChanges,
     setSavingChanges,
-    handleActualQuantityChange,
-    handleActualQuantityKeyDown,
+    handleActualQuantityChange: handleDeliverQuantityChange,
+    handleActualQuantityKeyDown: handleDeliverQuantityKeyDown,
     isUnitAllowingDecimal,
     hasErrors,
     clearErrors,

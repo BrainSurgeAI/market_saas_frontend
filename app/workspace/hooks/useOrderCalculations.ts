@@ -26,7 +26,7 @@ export function useOrderCalculations(
   // 计算实际总额
   const calculateActualTotal = (items: OrderItem[]) => {
     return items.reduce((sum, item) => {
-      const actualTotal = parseFloat(item.actualPrice) * parseFloat(item.actualQuantity);
+      const actualTotal = parseFloat(item.actualPrice) * parseFloat(item.acceptedQuantity);
       return isNaN(actualTotal) ? sum : sum + actualTotal;
     }, 0).toFixed(2);
   };
@@ -34,9 +34,9 @@ export function useOrderCalculations(
   // 计算原始总额
   const calculateOriginalTotal = (items: OrderItem[]) => {
     return items.reduce((sum, item) => {
-      if (!item.actualQuantity || isNaN(parseFloat(item.actualQuantity))) return sum;
+      if (!item.acceptedQuantity || isNaN(parseFloat(item.acceptedQuantity))) return sum;
 
-      const quantity = parseFloat(item.actualQuantity);
+      const quantity = parseFloat(item.acceptedQuantity);
       const price = parseFloat(item.price);
       return sum + (quantity * price);
     }, 0).toFixed(2);
@@ -60,8 +60,11 @@ export function useOrderCalculations(
         summary[item.category] = { count: 0, total: 0 };
       }
 
-      // 简化：默认使用实际数量计算
-      summary[item.category].total += parseFloat(item.actualPrice) * parseFloat(item.actualQuantity);
+      if (parseFloat(item.deliveredQuantity ?? '0') > 0) {
+        summary[item.category].total += parseFloat(item.actualPrice) * parseFloat(item.deliveredQuantity);
+      } else {
+        summary[item.category].total += parseFloat(item.total);
+      }
     });
 
     return Object.entries(summary).map(([category, data]) => ({

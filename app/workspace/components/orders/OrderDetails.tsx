@@ -104,7 +104,7 @@ interface OrderDetailProps {
 
 type ItemQuantityPayload = {
 	id: number;
-	actualQuantity: string;
+	deliveredQuantity: string;
 };
 
 interface ProviderDeliverRequest {
@@ -376,19 +376,21 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		return variants[status] || 'default';
 	};
 
-	const shouldShowActualQuantityColumn = useMemo(() => {
+	const shouldShowDeliverQuantityColumn = useMemo(() => {
 		if (!orderDetail) {
 			return false;
 		}
 
-		if (tenantType.toLowerCase() === TenantType.PROVIDER) {
-			return true;
-		}
-		return ![
-			OrderStatus.PENDING,
-			OrderStatus.ASSIGNED,
-			OrderStatus.SUPPLIER_PREPARING,
-		].includes(orderDetail.orderStatus as OrderStatus);
+		return true;
+
+		// if (tenantType.toLowerCase() === TenantType.PROVIDER) {
+		// 	return true;
+		// }
+		// return ![
+		// 	OrderStatus.PENDING,
+		// 	OrderStatus.ASSIGNED,
+		// 	OrderStatus.SUPPLIER_PREPARING,
+		// ].includes(orderDetail.orderStatus as OrderStatus);
 	}, [orderDetail, tenantType]);
 
 	useEffect(() => {
@@ -518,7 +520,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 			// 添加数据
 			for (const item of orderItems) {
 				// 计算小计金额，确保使用最新的actualQuantity
-				const itemTotal = parseFloat(item.actualPrice) * parseFloat(item.actualQuantity);
+				const itemTotal = parseFloat(item.actualPrice) * parseFloat(item.acceptedQuantity);
 
 				// 获取当前商品的操作记录
 				const itemOperations = getItemReturnExchangeRecords(item.id);
@@ -534,7 +536,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 					name: item.name,
 					category: item.category,
 					quantity: parseFloat(item.quantity).toFixed(2),
-					actualQuantity: parseFloat(item.actualQuantity).toFixed(2),
+					acceptedQuantity: parseFloat(item.acceptedQuantity).toFixed(2),
 					unit: item.unit,
 					price: parseFloat(item.price).toFixed(2),
 					discountRate: `${(parseFloat(item.discountRate) * 100).toFixed(0)}%`,
@@ -728,7 +730,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		const buildPayload = (items: OrderItem[]): ItemQuantityPayload[] =>
 			items.map(item => ({
 				id: item.id,
-				actualQuantity: item.actualQuantity,
+				deliveredQuantity: item.deliveredQuantity ?? '0',
 			}));
 
 		try {
@@ -755,7 +757,6 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 				case TenantType.MARKET: {
 					const apiUrl = orderItems.some((item: OrderItem) => item.status === 'EXCHANGED') ? `/api/orders/${orderCode}/exchange-request` : `/api/orders/${orderCode}/accept`;
 
-					console.log("apiUrl:-----------", apiUrl);
 					const targetItems = orderDetail?.orderStatus === OrderStatus.EXCHANGE_INSPECTING
 						? orderItems.filter((item: OrderItem) => item.status === 'EXCHANGED')
 						: orderItems;
@@ -780,7 +781,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 			}
 
 			const updatedItems = orderItems.map((item) => {
-				const actualAmountVal = (parseFloat(item.actualPrice) * parseFloat(item.actualQuantity)).toFixed(2);
+				const actualAmountVal = (parseFloat(item.actualPrice) * parseFloat(item.acceptedQuantity)).toFixed(2);
 				return {
 					...item,
 					actualAmount: actualAmountVal,
@@ -1091,7 +1092,8 @@ const productStatusSummary = useMemo(() => {
 		}
 
 		if (tenantEnum === TenantType.MARKET) {
-			if (canShowBeginInspect(status, tenantType)) {
+			// EXCHANGE_DELIVERING状态下的"开始验收"按钮显示在退换货记录card上，不在这里显示
+			if (canShowBeginInspect(status, tenantType) && status !== OrderStatus.EXCHANGE_DELIVERING) {
 				descriptors.push({
 					key: "market-begin-inspect",
 					type: "dialog",
@@ -1553,7 +1555,7 @@ const productStatusSummary = useMemo(() => {
 								<col style={{ width: "250px" }} />
 								<col />
 								<col />
-								{shouldShowActualQuantityColumn && <col />}
+								{shouldShowDeliverQuantityColumn && <col />}
 								<col />
 								<col />
 								<col />
@@ -1566,13 +1568,15 @@ const productStatusSummary = useMemo(() => {
 									<TableHead className="text-left p-3 border-b">商品名称</TableHead>
 									<TableHead className="text-left p-3 border-b">类别</TableHead>
 									<TableHead className="text-center p-3 border-b">下单数量</TableHead>
-									{shouldShowActualQuantityColumn && (
-										<TableHead className="text-center p-3 border-b">实际数量</TableHead>
+									{shouldShowDeliverQuantityColumn && (
+										<TableHead className="text-center p-3 border-b">
+											发货数量
+										</TableHead>
 									)}
 									<TableHead className="text-center p-3 border-b">单位</TableHead>
-									<TableHead className="text-right p-3 border-b">单价</TableHead>
+									<TableHead className="text-right p-3 border-b">原价</TableHead>
 									<TableHead className="text-right p-3 border-b">折扣</TableHead>
-									<TableHead className="text-right p-3 border-b">实际单价</TableHead>
+									<TableHead className="text-right p-3 border-b">折扣价</TableHead>
 									<TableHead className="text-right p-3 border-b">小计（折后）</TableHead>
 									{shouldShowInspectMenu(orderDetail.orderStatus as OrderStatus, tenantType) && (
 										<TableHead className="text-right p-3 border-b">操作</TableHead>
@@ -1624,13 +1628,13 @@ const productStatusSummary = useMemo(() => {
 												<TableCell className="p-2 text-center border-b font-mono font-semibold">
 													{parseFloat(item.quantity).toFixed(2)}
 												</TableCell>
-												{shouldShowActualQuantityColumn && (
+												{shouldShowDeliverQuantityColumn && (
 													<TableCell className="p-2 text-center border-b w-[120px]">
 														{isEditing ? (
 															<div>
 																<Input
 																	type="number"
-																	value={item.actualQuantity || ''}
+																	value={item.deliveredQuantity ?? '0'}
 																	onChange={(event) => handleActualQuantityChange && handleActualQuantityChange(item.id, event.target.value)}
 																	className={`max-w-[100px] text-center font-mono font-semibold ${itemErrors[item.id] ? 'border-red-500' : ''}`}
 																	step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
@@ -1644,7 +1648,7 @@ const productStatusSummary = useMemo(() => {
 																)}
 															</div>
 														) : (
-															<span className="font-mono font-semibold">{parseFloat(item.actualQuantity).toFixed(2)}</span>
+															<span className="font-mono font-semibold">{parseFloat(item.deliveredQuantity ?? '0').toFixed(2)}</span>
 														)}
 													</TableCell>
 												)}
@@ -1656,10 +1660,9 @@ const productStatusSummary = useMemo(() => {
 												<TableCell className="p-2 text-right border-b font-mono font-semibold">¥{parseFloat(item.actualPrice).toFixed(2)}</TableCell>
 												<TableCell className="p-2 text-right border-b font-mono font-semibold">
 													¥{isEditing
-														? (parseFloat(item.actualPrice) * parseFloat(item.actualQuantity)).toFixed(2)
-														: (item.actualAmount && parseFloat(item.actualAmount) > 0
-															? parseFloat(item.actualAmount).toFixed(2)
-															: (parseFloat(item.actualPrice) * parseFloat(item.actualQuantity)).toFixed(2))}
+														? (parseFloat(item.actualPrice) * parseFloat(item.deliveredQuantity ?? '0')).toFixed(2)
+														: parseFloat(item.deliveredQuantity ?? '0') > 0 ? (parseFloat(item.actualPrice) * parseFloat(item.deliveredQuantity ?? '0')).toFixed(2) : parseFloat(item.total).toFixed(2)
+													 }
 												</TableCell>
 												{shouldShowInspectMenu(orderDetail.orderStatus as OrderStatus, tenantType) && (
 													<TableCell className="p-2 text-right border-b">
@@ -1712,7 +1715,7 @@ const productStatusSummary = useMemo(() => {
 																{record.operationType === OperationType.RETURN ? '退货' : '换货'}: {record.reason}
 															</span>
 														</TableCell>
-														<TableCell className="text-center py-1 border-b" colSpan={shouldShowActualQuantityColumn ? 2 : 1}>
+														<TableCell className="text-center py-1 border-b" colSpan={shouldShowDeliverQuantityColumn ? 2 : 1}>
 															<span className="text-xs font-mono font-medium text-red-600">
 																-{record.quantity}
 															</span>
@@ -1767,6 +1770,39 @@ const productStatusSummary = useMemo(() => {
 						<div className="flex items-center justify-between">
 							<CardTitle>退换货记录</CardTitle>
 							<div className="flex gap-2">
+								{tenantType.toLowerCase() === TenantType.MARKET &&
+								 orderDetail?.orderStatus === OrderStatus.EXCHANGE_DELIVERING && (
+									<AlertDialog>
+										<AlertDialogTrigger asChild>
+											<Button
+												variant="default"
+												size="sm"
+												className="bg-blue-600 hover:bg-blue-500 text-white"
+												disabled={beginInspecting}
+											>
+												{beginInspecting ? "处理中..." : "开始验收"}
+											</Button>
+										</AlertDialogTrigger>
+										<AlertDialogContent>
+											<AlertDialogHeader>
+												<AlertDialogTitle className="text-sm font-semibold">确认开始验收?</AlertDialogTitle>
+												<AlertDialogDescription className="text-xs">
+													确认后，订单状态更新为"验收中"，表示您已开始验收该订单的商品。
+												</AlertDialogDescription>
+											</AlertDialogHeader>
+											<AlertDialogFooter>
+												<AlertDialogCancel className="text-xs">取消</AlertDialogCancel>
+												<AlertDialogAction
+													onClick={handleBeginInspect}
+													className="bg-blue-600 hover:bg-blue-500 text-white text-xs"
+													disabled={beginInspecting}
+												>
+													{beginInspecting ? "处理中..." : "确认"}
+												</AlertDialogAction>
+											</AlertDialogFooter>
+										</AlertDialogContent>
+									</AlertDialog>
+								)}
 								{allExchangeItemsCompleted && tenantType.toLowerCase() === TenantType.PROVIDER && (
 									<Button
 										onClick={handleDeliverToMarket}
@@ -1806,12 +1842,16 @@ const productStatusSummary = useMemo(() => {
 							orderStatus={orderDetail?.orderStatus}
 							onStatusChange={handleExchangeStatusChange}
 							onUpdateActualQuantity={updateLocalActualQuantity}
+							onOperation={(itemId, operationType) => {
+								handleOperation(itemId, operationType as OperationType);
+							}}
 							canPerformAction={canPerformExchangeAction}
 							getStatusLabel={getExchangeStatusLabel}
 							getStatusVariant={getExchangeStatusVariant}
 						/>
 					</CardContent>
 				</Card>
+				
 			</div>
 
 			{/* 退换货操作对话框 */}

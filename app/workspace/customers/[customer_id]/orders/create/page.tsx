@@ -268,6 +268,7 @@ export default function CreateOrderPage() {
       }
 
       const data = await response.json();
+      console.log(data);
 
       toast({
         title: "订单已提交",

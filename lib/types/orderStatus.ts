@@ -68,10 +68,10 @@ export interface OrderItem {
   total: string;
   processingRequirements: string | null;
   remark: string | null;
-  actualQuantity: string;
+  acceptedQuantity: string;
   actualAmount: string;
   status: string;
-  receiptQuantity: string | null;
+  deliveredQuantity: string;
 }
 
 export interface ExchangeItem {

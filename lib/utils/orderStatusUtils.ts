@@ -75,15 +75,15 @@ export function shouldEnterEditMode(status: OrderStatus | string, tenantType: st
     return true;
   }
 
-  // 市场在验收状态下可以编辑（普通验收和换货验收都可以）
-  if ((status === OrderStatus.MARKET_INSPECTING || status === OrderStatus.EXCHANGE_INSPECTING) && tenantLower === TenantType.MARKET) {
-    return true;
-  }
+  // // 市场在验收状态下可以编辑（普通验收和换货验收都可以）
+  // if ((status === OrderStatus.MARKET_INSPECTING || status === OrderStatus.EXCHANGE_INSPECTING) && tenantLower === TenantType.MARKET) {
+  //   return true;
+  // }
 
-  // 客户在验收状态下可以编辑
-  if (status === OrderStatus.CUSTOMER_INSPECTING && tenantLower === TenantType.CUSTOMER) {
-    return true;
-  }
+  // // 客户在验收状态下可以编辑
+  // if (status === OrderStatus.CUSTOMER_INSPECTING && tenantLower === TenantType.CUSTOMER) {
+  //   return true;
+  // }
 
   return false;
 }

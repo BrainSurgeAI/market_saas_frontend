@@ -35,6 +35,7 @@ interface ExchangeItemsTableProps {
   orderStatus?: string;
   onStatusChange: (itemId: number, newStatus: ExchangeItemStatus, reason?: string) => Promise<void>;
   onUpdateActualQuantity?: (itemId: number, actualQuantity: number) => void;
+  onOperation?: (itemId: number, operationType: 'SIGN' | 'RETURN' | 'EXCHANGE') => void;
   canPerformAction: (item: ExchangeItem, action: string) => boolean;
   getStatusLabel: (status: ExchangeItemStatus) => string;
   getStatusVariant: (status: ExchangeItemStatus) => "default" | "secondary" | "destructive" | "outline";
@@ -55,6 +56,7 @@ export function ExchangeItemsTable({
   orderStatus,
   onStatusChange,
   onUpdateActualQuantity,
+  onOperation,
   canPerformAction,
   getStatusLabel,
   getStatusVariant,
@@ -320,6 +322,7 @@ export function ExchangeItemsTable({
                         orderStatus={orderStatus}
                         canPerformAction={canPerformAction}
                         onActionClick={handleActionClick}
+                        onOperation={onOperation}
                         getActionLabel={getActionLabel}
                       />
                     </TableCell>
@@ -413,6 +416,7 @@ interface ExchangeItemOperationMenuProps {
   orderStatus?: string;
   canPerformAction: (item: ExchangeItem, action: string) => boolean;
   onActionClick: (itemId: number, action: string) => void;
+  onOperation?: (itemId: number, operationType: 'SIGN' | 'RETURN' | 'EXCHANGE') => void;
   getActionLabel: (action: string) => string;
 }
 
@@ -422,6 +426,7 @@ function ExchangeItemOperationMenu({
   orderStatus,
   canPerformAction,
   onActionClick,
+  onOperation,
   getActionLabel,
 }: ExchangeItemOperationMenuProps) {
   const tenant = tenantType.toLowerCase();
@@ -429,6 +434,14 @@ function ExchangeItemOperationMenu({
   // 获取当前角色可执行的操作
   const availableActions = useMemo(() => {
     const actions: Array<{ key: string; label: string; variant?: "destructive" }> = [];
+
+    // MARKET用户在EXCHANGE_INSPECTING状态下显示签收、退货、换货选项
+    if (tenant === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING') {
+      actions.push({ key: "sign", label: "签收" });
+      actions.push({ key: "return", label: "退货", variant: "destructive" });
+      actions.push({ key: "exchange", label: "换货" });
+      return actions;
+    }
 
     if (tenant === TenantType.PROVIDER) {
       // PROVIDER在EXCHANGE_IN_PROGRESS状态下显示"确定"
@@ -474,12 +487,19 @@ function ExchangeItemOperationMenu({
 
   if (availableActions.length === 1) {
     const action = availableActions[0];
+    const handleClick = () => {
+      if (onOperation && (action.key === 'sign' || action.key === 'return' || action.key === 'exchange')) {
+        onOperation(item.id, action.key.toUpperCase() as 'SIGN' | 'RETURN' | 'EXCHANGE');
+      } else {
+        onActionClick(item.id, action.key);
+      }
+    };
     return (
       <Button
         size="sm"
         variant={action.variant === "destructive" ? "destructive" : "outline"}
         className="h-7 px-2 text-xs"
-        onClick={() => onActionClick(item.id, action.key)}
+        onClick={handleClick}
       >
         {action.label}
       </Button>
@@ -495,18 +515,27 @@ function ExchangeItemOperationMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-32">
-        {availableActions.map((action) => (
-          <DropdownMenuItem
-            key={action.key}
-            onClick={() => onActionClick(item.id, action.key)}
-            className={cn(
-              "text-xs cursor-pointer",
-              action.variant === "destructive" && "text-red-600"
-            )}
-          >
-            {action.label}
-          </DropdownMenuItem>
-        ))}
+        {availableActions.map((action) => {
+          const handleClick = () => {
+            if (onOperation && (action.key === 'sign' || action.key === 'return' || action.key === 'exchange')) {
+              onOperation(item.id, action.key.toUpperCase() as 'SIGN' | 'RETURN' | 'EXCHANGE');
+            } else {
+              onActionClick(item.id, action.key);
+            }
+          };
+          return (
+            <DropdownMenuItem
+              key={action.key}
+              onClick={handleClick}
+              className={cn(
+                "text-xs cursor-pointer",
+                action.variant === "destructive" && "text-red-600"
+              )}
+            >
+              {action.label}
+            </DropdownMenuItem>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

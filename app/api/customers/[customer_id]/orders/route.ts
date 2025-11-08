@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 		method: 'POST',
 		body: body,
 		needToken: true,
-		tags: [`orders-${customer_id}`]
+		revalidate: 0
 	});
 
 	if (!response.success) {
