@@ -213,11 +213,10 @@ export function ExchangeItemsTable({
             <colgroup>
               <col style={{ width: "180px" }} />
               <col style={{ width: "80px" }} />
-              <col style={{ width: "80px" }} />
-              <col style={{ width: "80px" }} />
+              <col style={{ width: "120px" }} />
               <col style={{ width: "80px" }} />
               <col style={{ width: "100px" }} />
-              <col style={{ width: "80px" }} />
+              <col style={{ width: "100px" }} />
               <col style={{ width: "100px" }} />
               <col style={{ width: "100px" }} />
               <col />
@@ -234,8 +233,7 @@ export function ExchangeItemsTable({
               <TableRow className="text-xs font-semibold bg-black text-white">
                 <TableHead className="text-left p-3 border-b">商品名称</TableHead>
                 <TableHead className="text-center p-3 border-b">换货数量</TableHead>
-                <TableHead className="text-center p-3 border-b">需要换货量</TableHead>
-                <TableHead className="text-center p-3 border-b">实际发货量</TableHead>
+                <TableHead className="text-center p-3 border-b">实际换货量</TableHead>
                 <TableHead className="text-right p-3 border-b">单价</TableHead>
                 <TableHead className="text-right p-3 border-b">总金额</TableHead>
                 <TableHead className="text-center p-3 border-b">状态</TableHead>
@@ -256,9 +254,6 @@ export function ExchangeItemsTable({
                     </TableCell>
                     <TableCell className="p-3 text-center border-b font-mono font-semibold">
                       {item.quantity}
-                    </TableCell>
-                    <TableCell className="p-3 text-center border-b font-mono">
-                      {item.requestedQuantity || item.quantity}
                     </TableCell>
                     <TableCell className="p-3 text-center border-b font-mono">
                       {editingItemId === item.id ? (
@@ -305,9 +300,15 @@ export function ExchangeItemsTable({
                       ¥{item.totalAmount.toFixed(2)}
                     </TableCell>
                     <TableCell className="p-3 text-center border-b">
-                      <Badge variant={getStatusVariant(item.status)} className="text-xs">
-                        {getStatusLabel(item.status)}
-                      </Badge>
+                      {item.status === ExchangeItemStatus.PENDING ? (
+                        <Badge variant="outline" className="bg-yellow-50 text-yellow-600 border-yellow-200 text-xs">
+                          待确认
+                        </Badge>
+                      ) : (
+                        <Badge variant={getStatusVariant(item.status)} className="text-xs">
+                          {getStatusLabel(item.status)}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="p-3 text-center border-b text-xs">
                       {item.shippedAt ? format(new Date(item.shippedAt), "MM-dd HH:mm") : "-"}
@@ -316,15 +317,21 @@ export function ExchangeItemsTable({
                       {item.receivedAt ? format(new Date(item.receivedAt), "MM-dd HH:mm") : "-"}
                     </TableCell>
                     <TableCell className="p-3 text-right border-b">
-                      <ExchangeItemOperationMenu
-                        item={item}
-                        tenantType={tenantType}
-                        orderStatus={orderStatus}
-                        canPerformAction={canPerformAction}
-                        onActionClick={handleActionClick}
-                        onOperation={onOperation}
-                        getActionLabel={getActionLabel}
-                      />
+                      {orderStatus === 'EXCHANGE_REQUESTED' ? (
+                        <Badge variant="outline" className="rounded-full bg-gray-50 text-gray-500 border-gray-200 text-xs">
+                          待确认
+                        </Badge>
+                      ) : (
+                        <ExchangeItemOperationMenu
+                          item={item}
+                          tenantType={tenantType}
+                          orderStatus={orderStatus}
+                          canPerformAction={canPerformAction}
+                          onActionClick={handleActionClick}
+                          onOperation={onOperation}
+                          getActionLabel={getActionLabel}
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 </Fragment>

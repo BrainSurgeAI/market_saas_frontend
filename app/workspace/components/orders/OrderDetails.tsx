@@ -1,16 +1,13 @@
 "use client";
 
-import { Fragment, useMemo, useState, useEffect, useCallback } from "react";
-import type { ReactNode } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { useWorkspace } from "@/lib/WorkspaceContext";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Button, type ButtonProps } from "@/components/ui/button";
-import { ArrowLeft, Calendar, MapPin, User, Save, ChevronDownIcon, Download, ChevronUp, ChevronDown } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Save, Download } from "lucide-react";
 
 // 导入类型定义（type-only import）
 import type {
@@ -36,6 +33,7 @@ import {
 import {
 	shouldEnterEditMode,
 	shouldShowInspectMenu,
+	shouldShowReceivedQuantityColumns,
 	shouldDisplayActualQuantity,
 	canShowStartProcessing,
 	canShowBeginInspect,
@@ -53,7 +51,7 @@ import { useOrderOperations } from "@/app/workspace/hooks/useOrderOperations";
 import { useOrderEditing } from "@/app/workspace/hooks/useOrderEditing";
 import { useOrderActions } from "@/app/workspace/hooks/useOrderActions";
 
-import { cn, getStatusVariant, translateOrderStatus } from "@/lib/utils";
+import { getStatusVariant, translateOrderStatus } from "@/lib/utils";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -66,10 +64,7 @@ import {
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
 	Dialog,
 	DialogContent,
@@ -92,8 +87,15 @@ import {
 import ProductSignDialog from "./ProductSignDialog";
 import { Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ExchangeItemsTable } from "./ExchangeItemsTable";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ActionToolbar } from "./order-details/ActionToolbar";
+import type { ActionDescriptor, ProductStatusSummary } from "./order-details/types";
+import { createSettlementSummary, buildCompletionAction } from "./order-details/helpers";
+import { OrderInfoCard } from "./order-details/OrderInfoCard";
+import { ProductListSection } from "./order-details/ProductListSection";
+import { ExchangeListSection } from "./order-details/ExchangeListSection";
+import { ReturnListSection } from "./order-details/ReturnListSection";
 
 
 interface OrderDetailProps {
@@ -114,39 +116,6 @@ interface ProviderDeliverRequest {
 
 type MarketInspectRequest = ItemQuantityPayload[];
 
-type ActionDialogConfig = {
-	title: string;
-	description?: string;
-	confirmLabel?: string;
-	cancelLabel?: string;
-	confirmClassName?: string;
-	body?: ReactNode;
-};
-
-type BaseActionDescriptor = {
-	key: string;
-	label: string;
-	variant?: ButtonProps["variant"];
-	size?: ButtonProps["size"];
-	disabled?: boolean;
-	loading?: boolean;
-	icon?: ReactNode;
-	className?: string;
-};
-
-type DialogActionDescriptor = BaseActionDescriptor & {
-	type: "dialog";
-	onConfirm: () => void;
-	dialog: ActionDialogConfig;
-};
-
-type ButtonActionDescriptor = BaseActionDescriptor & {
-	type: "button";
-	onClick: () => void;
-};
-
-type ActionDescriptor = DialogActionDescriptor | ButtonActionDescriptor;
-
 export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetailProps) {
 	const params = useParams();
 	const router = useRouter();
@@ -162,6 +131,8 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		setOrderItems,
 		returnExchangeRecords,
 		setReturnExchangeRecords,
+		rawReceipts,
+		inspections,
 		loading,
 		error,
 		isEditing,
@@ -191,7 +162,9 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		setOrderItems,
 		returnExchangeRecords,
 		setReturnExchangeRecords,
-		user
+		user,
+		orderDetail?.orderStatus,
+		tenantType
 	);
 	const {
 		operatingProductId,
@@ -281,6 +254,62 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 	// 处理显示拒绝确认对话框
 	const showRejectConfirmation = () => {
 		setShowRejectConfirmDialog(true);
+	};
+
+	// 处理提交换货申请
+	const [submittingExchangeRequest, setSubmittingExchangeRequest] = useState(false);
+	const handleSubmitExchangeRequest = async () => {
+		if (!orderDetail || !rawReceipts) return;
+
+		// 查找 EXCHANGE 类型的 receipt
+		const exchangeReceipt = rawReceipts.find(r => r.operationType === 'EXCHANGE');
+		if (!exchangeReceipt) return;
+
+		try {
+			setSubmittingExchangeRequest(true);
+
+			// 构建 payload，将 receipt 中的 items 转换为 API 需要的格式
+			const payload = {
+				operateBy: user?.name || '',
+				items: exchangeReceipt.items.map(item => {
+					// 找到对应的 orderItem
+					const orderItem = orderItems.find(oi => oi.productId === item.productId);
+					return {
+						id: orderItem?.id || 0,
+						deliveredQuantity: orderItem?.deliveredQuantity || '0',
+					};
+				}),
+			};
+
+			const response = await fetch(`/api/orders/${orderCode}/exchange-request`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(payload),
+			});
+
+			if (!response.ok) {
+				throw new Error(`提交换货申请失败: ${response.status}`);
+			}
+
+			toast({
+				title: '提交成功',
+				description: '换货申请已提交',
+				variant: 'success',
+			});
+
+			// 刷新页面以获取最新状态
+			window.location.reload();
+		} catch (err) {
+			toast({
+				title: '提交失败',
+				description: err instanceof Error ? err.message : '提交换货申请时发生错误',
+				variant: 'destructive',
+			});
+		} finally {
+			setSubmittingExchangeRequest(false);
+		}
 	};
 
 	// 处理显示倒计时
@@ -393,6 +422,13 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		// ].includes(orderDetail.orderStatus as OrderStatus);
 	}, [orderDetail, tenantType]);
 
+	const showReceivedQuantityColumn = useMemo(() => {
+		if (!orderDetail?.orderStatus) {
+			return false;
+		}
+		return shouldShowReceivedQuantityColumns(orderDetail.orderStatus as OrderStatus, tenantType);
+	}, [orderDetail, tenantType]);
+
 	useEffect(() => {
 		if (!orderDetail) {
 			return;
@@ -418,7 +454,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 				setLoadingExchangeReturn(true);
 				setExchangeReturnError(null);
 
-				const response = await fetch(`/api/orders/${orderDetail.orderCode}/exchange-and-return-order-details`);
+				const response = await fetch(`/api/orders/${orderCode}/exchange-and-return-order-details`);
 				if (!response.ok) {
 					throw new Error(`获取退换货记录失败: ${response.status}`);
 				}
@@ -520,7 +556,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 			// 添加数据
 			for (const item of orderItems) {
 				// 计算小计金额，确保使用最新的actualQuantity
-				const itemTotal = parseFloat(item.actualPrice) * parseFloat(item.acceptedQuantity);
+				const itemTotal = parseFloat(item.discountedUnitPrice) * parseFloat(item.acceptedQuantity);
 
 				// 获取当前商品的操作记录
 				const itemOperations = getItemReturnExchangeRecords(item.id);
@@ -535,12 +571,12 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 				worksheet.addRow({
 					name: item.name,
 					category: item.category,
-					quantity: parseFloat(item.quantity).toFixed(2),
+					quantity: parseFloat(item.orderedQty).toFixed(2),
 					acceptedQuantity: parseFloat(item.acceptedQuantity).toFixed(2),
 					unit: item.unit,
 					price: parseFloat(item.price).toFixed(2),
 					discountRate: `${(parseFloat(item.discountRate) * 100).toFixed(0)}%`,
-					actualPrice: parseFloat(item.actualPrice).toFixed(2),
+					actualPrice: parseFloat(item.discountedUnitPrice).toFixed(2),
 					total: isNaN(itemTotal) ? '0.00' : itemTotal.toFixed(2),
 					operations: operationsText,
 					processingRequirements: item.processingRequirements || '',
@@ -551,7 +587,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 				const returnExchangeRecords = itemOperations.filter(r => r.operationType !== 'SIGN');
 				for (const record of returnExchangeRecords) {
 					// 计算退货/换货金额
-					const recordAmount = parseFloat(item.actualPrice) * record.quantity;
+					const recordAmount = parseFloat(item.discountedUnitPrice) * record.quantity;
 
 					worksheet.addRow({
 						name: `- ${record.operationType === 'RETURN' ? '退货' : '换货'}`,
@@ -781,7 +817,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 			}
 
 			const updatedItems = orderItems.map((item) => {
-				const actualAmountVal = (parseFloat(item.actualPrice) * parseFloat(item.acceptedQuantity)).toFixed(2);
+				const actualAmountVal = (parseFloat(item.discountedUnitPrice) * parseFloat(item.acceptedQuantity)).toFixed(2);
 				return {
 					...item,
 					actualAmount: actualAmountVal,
@@ -838,7 +874,7 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		orderStatus === OrderStatus.EXCHANGE_REQUESTED &&
 		hasExchangedItems;
 
-const productStatusSummary = useMemo(() => {
+const productStatusSummary: ProductStatusSummary = useMemo(() => {
 	const totalItems = orderItems.length;
 
 		const receiptMap = returnExchangeRecords.reduce<Record<number, OperationType | undefined>>((acc, record) => {
@@ -857,6 +893,27 @@ const productStatusSummary = useMemo(() => {
 		if (receiptStatus === OperationType.SIGN) {
 			return 'SIGN';
 		}
+		// 根据订单状态和租户类型判断是否已签收
+		// 在 MARKET_INSPECTING 状态下，检查 marketInspectedQuantity
+		// 在 CUSTOMER_INSPECTING 状态下，检查 customerInspectedQuantity
+		const currentStatus = orderDetail?.orderStatus as OrderStatus;
+		const tenantLower = tenantType.toLowerCase();
+		
+		if (currentStatus === OrderStatus.MARKET_INSPECTING && tenantLower === TenantType.MARKET) {
+			if (parseFloat(item.marketInspectedQuantity || '0') > 0) {
+				return 'SIGN';
+			}
+		} else if (currentStatus === OrderStatus.CUSTOMER_INSPECTING && tenantLower === TenantType.CUSTOMER) {
+			if (parseFloat(item.customerInspectedQuantity || '0') > 0) {
+				return 'SIGN';
+			}
+		} else {
+			// 其他情况，检查 marketInspectedQuantity（保持向后兼容）
+			if (parseFloat(item.marketInspectedQuantity || '0') > 0) {
+				return 'SIGN';
+			}
+		}
+		
 		return item.status?.toUpperCase() ?? 'PENDING';
 	});
 
@@ -872,10 +929,159 @@ const productStatusSummary = useMemo(() => {
 	}, {} as Record<number, string>);
 
 	return { totalItems, hasExchange, allInspected, itemStatusMap };
-	}, [orderItems, returnExchangeRecords]);
+	}, [orderItems, returnExchangeRecords, orderDetail, tenantType]);
+
+	const inspectionProgress = useMemo(() => {
+		if (!inspections || inspections.length === 0) {
+			return {
+				marketCompleted: false,
+				customerCompleted: false,
+				marketInspectionResult: null as string | null,
+				customerInspectionResult: null as string | null,
+			};
+		}
+
+		const latestByType = inspections.reduce<Record<string, typeof inspections[number]>>((acc, record) => {
+			const typeKey = record.inspectedByType?.toUpperCase();
+			if (!typeKey) {
+				return acc;
+			}
+			const existingRound = acc[typeKey]?.inspectionRound ?? -Infinity;
+			const nextRound = record.inspectionRound ?? 0;
+			if (!acc[typeKey] || nextRound >= existingRound) {
+				acc[typeKey] = record;
+			}
+			return acc;
+		}, {});
+
+		const hasCompleted = (typeKey: 'MARKET' | 'CUSTOMER') => {
+			const result = latestByType[typeKey]?.inspectionResult?.toUpperCase();
+			if (!result) {
+				return false;
+			}
+			return result !== 'PENDING';
+		};
+
+		const getInspectionResult = (typeKey: 'MARKET' | 'CUSTOMER') => {
+			const record = latestByType[typeKey];
+			if (!record || !record.inspectionResult) {
+				return null;
+			}
+			const result = record.inspectionResult.toUpperCase();
+			return result || null;
+		};
+
+		return {
+			marketCompleted: hasCompleted('MARKET'),
+			customerCompleted: hasCompleted('CUSTOMER'),
+			marketInspectionResult: getInspectionResult('MARKET'),
+			customerInspectionResult: getInspectionResult('CUSTOMER'),
+		};
+	}, [inspections]);
+
+	// 判断是否应该显示操作菜单（考虑inspections数据）
+	// MARKET_INSPECTING 和 CUSTOMER_INSPECTING 使用相同的逻辑
+	const shouldShowInspectMenuWithInspections = useMemo(() => {
+		if (!orderDetail || !orderStatus) {
+			return false;
+		}
+
+		const tenantLower = tenantType.toLowerCase();
+		const statusEnum = orderStatus as OrderStatus;
+		
+		// 基础检查：订单状态是否在验收状态
+		const inspectableStatuses = new Set([
+			OrderStatus.MARKET_INSPECTING,
+			OrderStatus.EXCHANGE_INSPECTING,
+			OrderStatus.CUSTOMER_INSPECTING,
+		]);
+
+		if (!inspectableStatuses.has(statusEnum)) {
+			return false;
+		}
+
+		// 统一处理 MARKET 和 CUSTOMER 租户的逻辑
+		if (tenantLower === TenantType.MARKET || tenantLower === TenantType.CUSTOMER) {
+			// 如果有inspections数据，根据inspectionResult判断
+			if (inspections && inspections.length > 0) {
+				const result = tenantLower === TenantType.MARKET 
+					? inspectionProgress.marketInspectionResult
+					: inspectionProgress.customerInspectionResult;
+				// 如果inspectionResult是PENDING或null，显示操作菜单（允许进行验收操作）
+				// 对于 CUSTOMER_INSPECTING 状态，如果 result 是 null（没有 CUSTOMER 的 inspection 记录），也应该显示菜单
+				if (result === null || result === 'PENDING') {
+					return true;
+				}
+				// 如果 result 是 'PASS' 或 'FAIL'，说明已经完成验收，不显示菜单
+				return false;
+			}
+			
+			// 如果没有inspections数据，在验收状态下默认显示操作菜单
+			// MARKET_INSPECTING 和 CUSTOMER_INSPECTING 都允许进行验收操作
+			if (statusEnum === OrderStatus.MARKET_INSPECTING || statusEnum === OrderStatus.CUSTOMER_INSPECTING) {
+				return true;
+			}
+			
+			// EXCHANGE_INSPECTING 状态也允许操作
+			if (statusEnum === OrderStatus.EXCHANGE_INSPECTING) {
+				return true;
+			}
+		}
+
+		// 其他情况使用原来的逻辑
+		return shouldShowInspectMenu(statusEnum, tenantType);
+	}, [orderDetail, orderStatus, tenantType, inspections, inspectionProgress]);
+
+	// 判断是否应该显示状态列（考虑inspections数据）
+	// MARKET_INSPECTING 和 CUSTOMER_INSPECTING 使用相同的逻辑
+	const shouldShowStatusColumn = useMemo(() => {
+		if (!orderDetail || !orderStatus) {
+			return false;
+		}
+
+		const tenantLower = tenantType.toLowerCase();
+		const statusEnum = orderStatus as OrderStatus;
+		
+		// 统一处理 MARKET 和 CUSTOMER 租户的逻辑
+		if (tenantLower === TenantType.MARKET || tenantLower === TenantType.CUSTOMER) {
+			// 如果有inspections数据，根据inspectionResult判断
+			if (inspections && inspections.length > 0) {
+				const result = tenantLower === TenantType.MARKET 
+					? inspectionProgress.marketInspectionResult
+					: inspectionProgress.customerInspectionResult;
+				// 如果inspectionResult不是PENDING（已完成验收），显示状态列
+				if (result !== null && result !== 'PENDING') {
+					return true;
+				}
+			}
+			
+			// 检查是否有商品已签收（基于实际数量）
+			// 在 MARKET_INSPECTING 状态下，检查 marketInspectedQuantity
+			// 在 CUSTOMER_INSPECTING 状态下，检查 customerInspectedQuantity
+			if (statusEnum === OrderStatus.MARKET_INSPECTING && tenantLower === TenantType.MARKET) {
+				const hasInspectedItems = orderItems.some(item => parseFloat(item.marketInspectedQuantity || '0') > 0);
+				if (hasInspectedItems) {
+					return true;
+				}
+			} else if (statusEnum === OrderStatus.CUSTOMER_INSPECTING && tenantLower === TenantType.CUSTOMER) {
+				const hasInspectedItems = orderItems.some(item => parseFloat(item.customerInspectedQuantity || '0') > 0);
+				if (hasInspectedItems) {
+					return true;
+				}
+			}
+		}
+
+		// 如果没有inspections数据且没有已签收的商品，默认显示状态列
+		return true;
+	}, [orderDetail, orderStatus, tenantType, inspections, inspectionProgress, orderItems]);
 
 	const exchangeRecords = useMemo(
 		() => exchangeReturnRecords.filter((record) => record.operationType === OperationType.EXCHANGE),
+		[exchangeReturnRecords]
+	);
+
+	const returnRecords = useMemo(
+		() => exchangeReturnRecords.filter((record) => record.operationType === OperationType.RETURN),
 		[exchangeReturnRecords]
 	);
 
@@ -886,7 +1092,7 @@ const productStatusSummary = useMemo(() => {
 		return exchangeRecords.map((record) => {
 			// 从orderItems中获取价格信息
 			const orderItem = orderItems.find(item => item.id === record.orderDetailId);
-			const price = orderItem ? parseFloat(orderItem.actualPrice) : 0;
+			const price = orderItem ? parseFloat(orderItem.discountedUnitPrice) : 0;
 			const quantity = Number(record.inputQuantity) || Number(record.quantity) || 0;
 			const requestedQuantity = Number(record.quantity); // quantity代表供应商需要的换货量
 
@@ -905,7 +1111,7 @@ const productStatusSummary = useMemo(() => {
 				price: price,
 				totalAmount: quantity * price,
 				status: record.status === 'COMPLETED' ? ExchangeItemStatus.COMPLETED :
-						record.status === 'PROGRESS' ? ExchangeItemStatus.SHIPPED : // PROGRESS表示供应商已操作过换货
+						record.status === 'PROGRESSED' ? ExchangeItemStatus.SHIPPED : // PROGRESS表示供应商已操作过换货
 						record.status === 'PENDING' ? ExchangeItemStatus.PENDING :
 						ExchangeItemStatus.PENDING, // 默认状态映射
 				shippedAt: record.processedAt || null,
@@ -930,48 +1136,6 @@ const productStatusSummary = useMemo(() => {
 				return [...prev, { id: itemId, actualQuantity } as ExchangeItem];
 			}
 		});
-	};
-
-	// 处理确定换货操作
-	const handleConfirmExchange = async () => {
-		try {
-			setStartingExchange(true);
-			const response = await fetch(`/api/orders/${orderCode}/begin-exchange-progress`, {
-				method: 'PATCH',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({ operateBy: user?.name || '' }),
-			});
-
-			if (!response.ok) {
-				throw new Error(`开始换货失败: ${response.status}`);
-			}
-
-			const result = await response.json();
-
-			toast({
-				title: '操作成功',
-				description: '已开始换货流程，现在可以编辑实际换货数量',
-				variant: 'success',
-			});
-
-			// 更新订单状态
-			if (orderDetail) {
-				setOrderDetail({
-					...orderDetail,
-					orderStatus: 'EXCHANGE_IN_PROGRESS',
-				});
-			}
-		} catch (error) {
-			toast({
-				title: '操作失败',
-				description: error instanceof Error ? error.message : '开始换货时出错',
-				variant: 'destructive',
-			});
-		} finally {
-			setStartingExchange(false);
-		}
 	};
 
 	// 检查是否所有换货商品都已完成（状态为SHIPPED或COMPLETED）
@@ -1037,10 +1201,10 @@ const productStatusSummary = useMemo(() => {
 				descriptors.push({
 					key: "provider-exchange-progress",
 					type: "button",
-					label: startingExchange ? "处理中..." : "确认换货",
-					variant: "outline",
+					label: startingExchange ? "处理中..." : "确定退换货",
+					variant: "default",
 					size: "sm",
-					className: "h-8 px-3 text-xs",
+					className: "h-8 px-3 text-xs bg-blue-600 hover:bg-blue-500 text-white",
 					onClick: handleBeginExchangeProcessing,
 					loading: startingExchange,
 					disabled: startingExchange,
@@ -1092,6 +1256,24 @@ const productStatusSummary = useMemo(() => {
 		}
 
 		if (tenantEnum === TenantType.MARKET) {
+			// 在 MARKET_INSPECTING 状态下，如果 receipts 中有 EXCHANGE 类型的记录，显示提交换货申请按钮
+			if (status === OrderStatus.MARKET_INSPECTING && rawReceipts && rawReceipts.some(r => r.operationType === 'EXCHANGE')) {
+				descriptors.push({
+					key: "market-submit-exchange-request",
+					type: "dialog",
+					label: submittingExchangeRequest ? "提交中..." : "提交换货申请",
+					size: "sm",
+					className: "bg-purple-600 hover:bg-purple-500 text-white",
+					dialog: {
+						title: "确认提交换货申请?",
+						description: "确认后将提交换货申请，请确认换货信息无误。",
+					},
+					onConfirm: handleSubmitExchangeRequest,
+					disabled: submittingExchangeRequest,
+					loading: submittingExchangeRequest,
+				});
+			}
+
 			// EXCHANGE_DELIVERING状态下的"开始验收"按钮显示在退换货记录card上，不在这里显示
 			if (canShowBeginInspect(status, tenantType) && status !== OrderStatus.EXCHANGE_DELIVERING) {
 				descriptors.push({
@@ -1162,6 +1344,7 @@ const productStatusSummary = useMemo(() => {
 				productStatusSummary,
 				requestCustomerExchange,
 				requestingCustomerExchange,
+				inspectionProgress,
 			});
 			if (completionAction) {
 				descriptors.push(completionAction);
@@ -1169,6 +1352,24 @@ const productStatusSummary = useMemo(() => {
 		}
 
 		if (tenantEnum === TenantType.CUSTOMER) {
+			// 在 MARKET_INSPECTING 状态下，如果 receipts 中有 EXCHANGE 类型的记录，显示提交换货申请按钮
+			if (status === OrderStatus.MARKET_INSPECTING && rawReceipts && rawReceipts.some(r => r.operationType === 'EXCHANGE')) {
+				descriptors.push({
+					key: "customer-submit-exchange-request",
+					type: "dialog",
+					label: submittingExchangeRequest ? "提交中..." : "提交换货申请",
+					size: "sm",
+					className: "bg-purple-600 hover:bg-purple-500 text-white",
+					dialog: {
+						title: "确认提交换货申请?",
+						description: "确认后将提交换货申请，请确认换货信息无误。",
+					},
+					onConfirm: handleSubmitExchangeRequest,
+					disabled: submittingExchangeRequest,
+					loading: submittingExchangeRequest,
+				});
+			}
+
 			if (canShowCustomerBeginInspect(status, tenantType)) {
 				descriptors.push({
 					key: "customer-begin-inspect",
@@ -1196,6 +1397,7 @@ const productStatusSummary = useMemo(() => {
 				productStatusSummary,
 				requestCustomerExchange,
 				requestingCustomerExchange,
+				inspectionProgress,
 			});
 			if (completionAction) {
 				descriptors.push(completionAction);
@@ -1232,7 +1434,7 @@ const productStatusSummary = useMemo(() => {
 		};
 
 		descriptors.push(exportAction);
-	return descriptors;
+		return descriptors;
 	}, [
 		orderDetail,
 		orderStatus,
@@ -1271,7 +1473,11 @@ const productStatusSummary = useMemo(() => {
 		navigateToMarketExchangePage,
 		productStatusSummary,
 		requestCustomerExchange,
-		requestingCustomerExchange
+		requestingCustomerExchange,
+		rawReceipts,
+		submittingExchangeRequest,
+		handleSubmitExchangeRequest,
+		inspectionProgress,
 	]);
 
 	if (loading) {
@@ -1378,477 +1584,87 @@ const productStatusSummary = useMemo(() => {
 
 	return (
 		<div className="container mx-auto py-6">
-			{/* 状态变更提示 */}
-			{statusChangeMessage && (
-				<div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4 rounded shadow-sm relative">
-					<div className="flex">
-						<div className="flex-shrink-0">
-							<svg className="h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-								<path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-							</svg>
-						</div>
-						<div className="ml-3">
-							<p className="text-sm font-medium text-blue-800">{statusChangeMessage.title}</p>
-							<p className="text-sm text-blue-700 mt-1">{statusChangeMessage.description}</p>
-						</div>
-					</div>
-					{/* 添加关闭按钮 */}
-					<button
-						onClick={() => setStatusChangeMessage(null)}
-						className="absolute top-2 right-2 text-blue-500 hover:text-blue-700"
-						aria-label="关闭提示"
-					>
-						<svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-						</svg>
-					</button>
-				</div>
-			)}
-
 			<div className="space-y-6">
-				<div className="grid grid-cols-1 gap-6">
-					<Card>
-						<CardHeader className="flex flex-row items-center">
-							<CardTitle>
-								<div className="flex items-center">
-									订单信息
-									<Button
-										variant="ghost"
-										size="icon"
-										className="ml-2 h-5 w-5"
-										onClick={() => {
-											const newState = !showOrderInfo;
-											setShowOrderInfo(newState);
-										}}
-									>
-										{showOrderInfo ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-									</Button>
-									<div className="flex items-center justify-end">
-										<Badge variant={getStatusVariant(orderDetail.orderStatus)} className="text-xs  rounded-full">
-											{translateOrderStatus(orderDetail.orderStatus)}
-										</Badge>
-									</div>
-								</div>
-							</CardTitle>
-						</CardHeader>
-					{shouldShowCountdownDisplay && !showOrderInfo && (
-							<div className="relative">
-							<ReturnCountdown
-									afterSaleAt={orderDetail.afterSaleAt}
-									orderStatus={orderDetail.orderStatus}
-									forceUpdate={afterSaleTimestamp}
-								/>
-							</div>
-						)}
-						{showOrderInfo && (
-							<CardContent className="space-y-4">
-								<div className="grid grid-cols-4 gap-4">
-									<div>
-										<p className="text-sm text-gray-500">下单时间</p>
-										<p className="text-xs font-medium">
-											{orderDetail.createdAt ? format(new Date(orderDetail.createdAt), "yyyy年MM月dd日 HH:mm") : "-"}
-										</p>
-									</div>
-									<div>
-										<p className="text-sm text-gray-500">下单客户</p>
-										<p className="text-xs">{orderDetail.customerName || "-"}</p>
-									</div>
-									<div className="flex items-start">
-										<Calendar className="h-4 w-4 text-gray-500 mt-0.5 mr-2" />
-										<div>
-											<p className="text-sm text-gray-500">配送日期</p>
-											<p className="text-xs font-medium">
-												{format(new Date(orderDetail.deliveryDate), "yyyy年MM月dd日")}
-											</p>
-										</div>
-									</div>
-									<div className="flex items-start">
-										<User className="h-4 w-4 text-gray-500 mt-0.5 mr-2" />
-										<div>
-											<p className="text-sm text-gray-500">收货人</p>
-											<p className="text-xs font-medium">{orderDetail.contactName}</p>
-											<p className="text-sm font-mono mt-1">{orderDetail.contactPhone}</p>
-										</div>
-									</div>
-								</div>
+				<OrderInfoCard
+					orderDetail={orderDetail}
+					afterSaleTimestamp={afterSaleTimestamp}
+					shouldShowCountdownDisplay={shouldShowCountdownDisplay}
+					statusChangeMessage={statusChangeMessage}
+					onDismissStatusMessage={() => setStatusChangeMessage(null)}
+				/>
 
-
-
-								<div className="flex items-start">
-									<MapPin className="h-4 w-4 text-gray-500 mt-0.5 mr-2" />
-									<div>
-										<p className="text-sm text-gray-500">配送地址</p>
-										<p className="text-xs font-medium">{orderDetail.deliveryAddress}</p>
-									</div>
-								</div>
-
-								<Separator />
-
-								<div className="space-y-2">
-									<p className="text-sm text-gray-500">订单金额</p>
-									<div className="grid grid-cols-3 gap-4">
-										<div>
-											<p className="text-sm text-gray-500">原价（以下单日产品中间价计算）</p>
-											<p className="text-sm font-mono">¥{parseFloat(orderDetail.totalAmount).toFixed(2)}</p>
-										</div>
-										<div>
-											<p className="text-sm text-gray-500">折扣</p>
-											<p className="text-sm text-red-500 font-mono">¥{parseFloat(orderDetail.discountAmount || "0").toFixed(2)}</p>
-										</div>
-										<div>
-											<p className="text-sm text-gray-500">实付金额</p>
-											<p className="text-sm font-mono text-primary">¥{(parseFloat(orderDetail.actualAmount) - parseFloat(returnMoney)).toFixed(2)}</p>
-										</div>
-									</div>
-								</div>
-
-								<Separator />
-
-								<div className="grid grid-cols-2 gap-4">
-									<div className="flex items-start">
-										<User className="h-4 w-4 text-gray-500 mt-0.5 mr-2" />
-										<div>
-											<p className="text-sm text-gray-500">配送公司</p>
-											<p className="text-sm mt-1">{orderDetail.providerName || "-"}</p>
-										</div>
-									</div>
-									<div className="flex items-start">
-										<User className="h-4 w-4 text-gray-500 mt-0.5 mr-2" />
-										<div>
-											<p className="text-sm text-gray-500">配送人</p>
-											<p className="text-xs font-medium">{orderDetail.deliveryStaffName || "-"}</p>
-											<p className="text-sm font-mono mt-1">{orderDetail.deliveryStaffPhone || "-"}</p>
-										</div>
-									</div>
-								</div>
-
-								{orderDetail.remark && (
-									<>
-										<Separator />
-										<div>
-											<p className="text-sm text-gray-500">订单备注</p>
-											<p className="text-sm mt-1 p-2 bg-gray-50 rounded-md">{orderDetail.remark}</p>
-										</div>
-									</>
-								)}
-							</CardContent>
-						)}
-					</Card>
-				</div>
-
-				{/* 订单商品列表 */}
+				{/* 订单商品列表和退换货记录 */}
 				<Card>
 					<CardHeader className="flex flex-row items-center justify-between">
-						<div>
-							<CardTitle>商品清单</CardTitle>
-							<CardDescription className="text-xs text-gray-500 mt-1">
-								共 {orderItems.length} 类商品，下表中单价为下单日产品中间价
-							</CardDescription>
-						</div>
-				<ActionToolbar actions={actionDescriptors} />
+						<CardTitle>订单详情</CardTitle>
+						<ActionToolbar actions={actionDescriptors} />
 					</CardHeader>
 					<CardContent>
-						<div className="overflow-x-auto" style={{ position: "relative" }}>
-					<div className="relative" style={{ maxHeight: "600px", overflowY: "auto", zIndex: 40 }}>
-						<Table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
-							<colgroup>
-								<col style={{ width: "250px" }} />
-								<col />
-								<col />
-								{shouldShowDeliverQuantityColumn && <col />}
-								<col />
-								<col />
-								<col />
-								<col />
-								<col />
-								{shouldShowInspectMenu(orderDetail.orderStatus as OrderStatus, tenantType) && <col />}
-							</colgroup>
-							<TableHeader style={{ position: "sticky", top: 0, zIndex: 1000, backgroundColor: "white", boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
-								<TableRow className="text-xs font-semibold bg-black text-white">
-									<TableHead className="text-left p-3 border-b">商品名称</TableHead>
-									<TableHead className="text-left p-3 border-b">类别</TableHead>
-									<TableHead className="text-center p-3 border-b">下单数量</TableHead>
-									{shouldShowDeliverQuantityColumn && (
-										<TableHead className="text-center p-3 border-b">
-											发货数量
-										</TableHead>
-									)}
-									<TableHead className="text-center p-3 border-b">单位</TableHead>
-									<TableHead className="text-right p-3 border-b">原价</TableHead>
-									<TableHead className="text-right p-3 border-b">折扣</TableHead>
-									<TableHead className="text-right p-3 border-b">折扣价</TableHead>
-									<TableHead className="text-right p-3 border-b">小计（折后）</TableHead>
-									{shouldShowInspectMenu(orderDetail.orderStatus as OrderStatus, tenantType) && (
-										<TableHead className="text-right p-3 border-b">操作</TableHead>
-									)}
-							</TableRow>
-							</TableHeader>
-							<TableBody>
-								{orderItems.map((item) => {
-									const itemReturnExchanges = getItemReturnExchangeRecords(item.id);
-									const actualStatus = productStatusSummary.itemStatusMap[item.id] || 'PENDING';
-									const canEdit = !['SIGN', 'RETURN', 'EXCHANGE'].includes(actualStatus);
+						<Tabs defaultValue="products" className="w-full">
+							<TabsList>
+								<TabsTrigger value="products">商品清单</TabsTrigger>
+								<TabsTrigger value="exchange">换货清单</TabsTrigger>
+								<TabsTrigger value="return">退货清单</TabsTrigger>
+							</TabsList>
+							<TabsContent value="products" className="mt-4">
+							<ProductListSection
+								orderDetail={orderDetail}
+								orderItems={orderItems}
+								tenantType={tenantType}
+								isEditing={isEditing}
+								itemErrors={itemErrors}
+								shouldShowDeliverQuantityColumn={shouldShowDeliverQuantityColumn}
+								shouldShowReceivedQuantityColumn={showReceivedQuantityColumn}
+								shouldShowInspectMenu={shouldShowInspectMenuWithInspections}
+								shouldShowStatusColumn={shouldShowStatusColumn}
+								handleActualQuantityChange={handleActualQuantityChange}
+								handleActualQuantityKeyDown={handleActualQuantityKeyDown}
+								handleOperation={handleOperation}
+								productStatusSummary={productStatusSummary}
+								isUnitAllowingDecimal={isUnitAllowingDecimal}
+							/>
 
-									return (
-										<Fragment key={item.id}>
-											<TableRow className={`text-xs text-gray-700 ${actualStatus === 'RETURN' ? 'bg-red-50' : actualStatus === 'EXCHANGE' ? 'bg-yellow-50' : actualStatus === 'SIGN' ? 'bg-green-50' : ''}`}>
-												<TableCell className="p-2 border-b">
-													{item.name}
-													{(item.processingRequirements || item.remark) && (
-														<div className="mt-1 text-xs text-gray-500">
-															{item.processingRequirements && (
-																<div className="mb-1">{item.processingRequirements}</div>
-															)}
-															{item.remark && <div>备注: {item.remark}</div>}
-														</div>
-													)}
-													{actualStatus === 'SIGN' && (
-														<div className="mt-1">
-															<Badge variant="outline" className="bg-green-50 text-green-600 border-green-200 text-[10px]">
-																已签收
-															</Badge>
-														</div>
-													)}
-													{actualStatus === 'RETURN' && (
-														<div className="mt-1">
-															<Badge variant="outline" className="bg-red-50 text-red-600 border-red-200 text-[10px]">
-																已退货
-															</Badge>
-														</div>
-													)}
-													{actualStatus === 'EXCHANGE' && (
-														<div className="mt-1">
-															<Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200 text-[10px]">
-																已换货
-															</Badge>
-														</div>
-													)}
-												</TableCell>
-												<TableCell className="p-2 border-b">{item.category}</TableCell>
-												<TableCell className="p-2 text-center border-b font-mono font-semibold">
-													{parseFloat(item.quantity).toFixed(2)}
-												</TableCell>
-												{shouldShowDeliverQuantityColumn && (
-													<TableCell className="p-2 text-center border-b w-[120px]">
-														{isEditing ? (
-															<div>
-																<Input
-																	type="number"
-																	value={item.deliveredQuantity ?? '0'}
-																	onChange={(event) => handleActualQuantityChange && handleActualQuantityChange(item.id, event.target.value)}
-																	className={`max-w-[100px] text-center font-mono font-semibold ${itemErrors[item.id] ? 'border-red-500' : ''}`}
-																	step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
-																	min="0"
-																	max="999999.99"
-																	onKeyDown={(event) => handleActualQuantityKeyDown(event, item.id)}
-																	disabled={!canEdit}
-																/>
-																{itemErrors[item.id] && (
-																	<p className="text-xs text-red-500 mt-1">{itemErrors[item.id]}</p>
-																)}
-															</div>
-														) : (
-															<span className="font-mono font-semibold">{parseFloat(item.deliveredQuantity ?? '0').toFixed(2)}</span>
-														)}
-													</TableCell>
-												)}
-												<TableCell className="p-2 text-center border-b font-mono">{item.unit}</TableCell>
-												<TableCell className="p-2 text-right border-b font-mono font-semibold">¥{parseFloat(item.price).toFixed(2)}</TableCell>
-												<TableCell className="p-2 text-right border-b font-mono font-semibold">
-													{(parseFloat(item.discountRate) * 100).toFixed(0)}%
-												</TableCell>
-												<TableCell className="p-2 text-right border-b font-mono font-semibold">¥{parseFloat(item.actualPrice).toFixed(2)}</TableCell>
-												<TableCell className="p-2 text-right border-b font-mono font-semibold">
-													¥{isEditing
-														? (parseFloat(item.actualPrice) * parseFloat(item.deliveredQuantity ?? '0')).toFixed(2)
-														: parseFloat(item.deliveredQuantity ?? '0') > 0 ? (parseFloat(item.actualPrice) * parseFloat(item.deliveredQuantity ?? '0')).toFixed(2) : parseFloat(item.total).toFixed(2)
-													 }
-												</TableCell>
-												{shouldShowInspectMenu(orderDetail.orderStatus as OrderStatus, tenantType) && (
-													<TableCell className="p-2 text-right border-b">
-														{actualStatus === 'SIGN' || actualStatus === 'RETURN' || actualStatus === 'EXCHANGE' ? (
-															<Badge variant="outline" className={`rounded-full ${
-																actualStatus === 'SIGN' ? "bg-green-50 text-green-600 border-green-200" :
-																actualStatus === 'RETURN' ? "bg-red-50 text-red-600 border-red-200" :
-																"bg-orange-50 text-orange-600 border-orange-200"
-															}`}>
-																{actualStatus === 'SIGN' ? "已签收" : actualStatus === 'RETURN' ? "已退货" : "已换货"}
-															</Badge>
-														) : actualStatus === 'PENDING' && canEdit ? (
-															<DropdownMenu>
-																<DropdownMenuTrigger asChild>
-																	<Button variant="outline" size="sm">
-																		...
-																		<ChevronDownIcon className="ml-1 h-4 w-4" />
-																	</Button>
-																</DropdownMenuTrigger>
-																<DropdownMenuContent align="end">
-																	<DropdownMenuItem onClick={() => handleOperation(item.id, OperationType.SIGN)} className="cursor-pointer text-xs">
-																		签收
-																	</DropdownMenuItem>
-																	<DropdownMenuItem onClick={() => handleOperation(item.id, OperationType.RETURN)} className="cursor-pointer text-xs">
-																		退货
-																	</DropdownMenuItem>
-																	<DropdownMenuItem onClick={() => handleOperation(item.id, OperationType.EXCHANGE)} className="cursor:pointer text-xs">
-																		换货
-																	</DropdownMenuItem>
-																</DropdownMenuContent>
-															</DropdownMenu>
-														) : (
-															<Badge variant="outline" className="rounded-full bg-gray-50 text-gray-500 border-gray-200">
-																不可操作
-															</Badge>
-														)}
-													</TableCell>
-												)}
-											</TableRow>
-
-											{itemReturnExchanges.length > 0 && itemReturnExchanges.map((record) => {
-												if (record.operationType === OperationType.SIGN) {
-													return null;
-												}
-
-												return (
-													<TableRow key={`${item.id}-${record.operationType}-${record.quantity}`} className="bg-red-50">
-														<TableCell colSpan={2} className="py-1 text-center border-b">
-															<span className="text-xs font-medium text-red-600">
-																{record.operationType === OperationType.RETURN ? '退货' : '换货'}: {record.reason}
-															</span>
-														</TableCell>
-														<TableCell className="text-center py-1 border-b" colSpan={shouldShowDeliverQuantityColumn ? 2 : 1}>
-															<span className="text-xs font-mono font-medium text-red-600">
-																-{record.quantity}
-															</span>
-														</TableCell>
-														<TableCell className="text-center py-1 border-b">
-															<span className="text-xs font-mono text-red-600">{record.unit}</span>
-														</TableCell>
-														<TableCell className="text-right py-1 border-b" colSpan={4}>
-															<span className="text-xs font-mono font-medium text-red-600">
-																{record.operationType === OperationType.RETURN
-																	? `-¥${(parseFloat(item.actualPrice) * record.quantity).toFixed(2)}`
-																	: ''}
-															</span>
-														</TableCell>
-														{shouldShowInspectMenu(orderDetail.orderStatus as OrderStatus, tenantType) && (
-															<TableCell className="py-1 border-b" />
-														)}
-													</TableRow>
-												);
-											})}
-										</Fragment>
-									);
-								})}
-							</TableBody>
-						</Table>
-					</div>
-				</div>
-			</CardContent>
-		</Card>
-
-				{/* 订单分类统计 */}
-				<Card>
-					<CardHeader>
-						<CardTitle>分类汇总</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-2">
-							{getCategorySummary().map((item, index) => (
-								<div key={index} className="border rounded-md p-3">
-									<p className="text-sm">{item.category}</p>
-									<div className="flex justify-between mt-2">
-										<span className="text-xs font-mono font-semibold">¥{item.total}</span>
+							<Card className="mt-4">
+								<CardHeader>
+									<CardTitle>分类汇总</CardTitle>
+								</CardHeader>
+								<CardContent>
+									<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-2">
+										{getCategorySummary().map((item, index) => (
+											<div key={index} className="border rounded-md p-3">
+												<p className="text-sm">{item.category}</p>
+												<div className="flex justify-between mt-2">
+													<span className="text-xs font-mono font-semibold">¥{item.total}</span>
+												</div>
+											</div>
+										))}
 									</div>
-								</div>
-							))}
-						</div>
-					</CardContent>
-				</Card>
+								</CardContent>
+							</Card>
+						</TabsContent>
+						<TabsContent value="exchange" className="mt-4">
+							<ExchangeListSection
+								tenantType={tenantType}
+								orderStatus={orderDetail?.orderStatus as OrderStatus}
+								beginInspecting={beginInspecting}
+								onBeginInspect={handleBeginInspect}
+								allExchangeItemsCompleted={allExchangeItemsCompleted}
+								onDeliverToMarket={handleDeliverToMarket}
+								exchangeItems={exchangeItems}
+								loadingExchangeReturn={loadingExchangeReturn}
+								handleExchangeStatusChange={handleExchangeStatusChange}
+								updateLocalActualQuantity={updateLocalActualQuantity}
+								handleOperation={handleOperation}
+								canPerformExchangeAction={canPerformExchangeAction}
+								getExchangeStatusLabel={getExchangeStatusLabel}
+								getExchangeStatusVariant={getExchangeStatusVariant}
+							/>
+						</TabsContent>
 
-				<Card>
-					<CardHeader>
-						<div className="flex items-center justify-between">
-							<CardTitle>退换货记录</CardTitle>
-							<div className="flex gap-2">
-								{tenantType.toLowerCase() === TenantType.MARKET &&
-								 orderDetail?.orderStatus === OrderStatus.EXCHANGE_DELIVERING && (
-									<AlertDialog>
-										<AlertDialogTrigger asChild>
-											<Button
-												variant="default"
-												size="sm"
-												className="bg-blue-600 hover:bg-blue-500 text-white"
-												disabled={beginInspecting}
-											>
-												{beginInspecting ? "处理中..." : "开始验收"}
-											</Button>
-										</AlertDialogTrigger>
-										<AlertDialogContent>
-											<AlertDialogHeader>
-												<AlertDialogTitle className="text-sm font-semibold">确认开始验收?</AlertDialogTitle>
-												<AlertDialogDescription className="text-xs">
-													确认后，订单状态更新为"验收中"，表示您已开始验收该订单的商品。
-												</AlertDialogDescription>
-											</AlertDialogHeader>
-											<AlertDialogFooter>
-												<AlertDialogCancel className="text-xs">取消</AlertDialogCancel>
-												<AlertDialogAction
-													onClick={handleBeginInspect}
-													className="bg-blue-600 hover:bg-blue-500 text-white text-xs"
-													disabled={beginInspecting}
-												>
-													{beginInspecting ? "处理中..." : "确认"}
-												</AlertDialogAction>
-											</AlertDialogFooter>
-										</AlertDialogContent>
-									</AlertDialog>
-								)}
-								{allExchangeItemsCompleted && tenantType.toLowerCase() === TenantType.PROVIDER && (
-									<Button
-										onClick={handleDeliverToMarket}
-										className="bg-green-600 hover:bg-green-500 text-white"
-										size="sm"
-									>
-										确定交付到市场
-									</Button>
-								)}
-								{tenantType.toLowerCase() === TenantType.PROVIDER &&
-								 orderDetail?.orderStatus === 'EXCHANGE_REQUESTED' &&
-								 exchangeItems.length > 0 && (
-									<Button
-										onClick={handleConfirmExchange}
-										className="bg-blue-600 hover:bg-blue-500 text-white"
-										size="sm"
-										disabled={startingExchange}
-									>
-										{startingExchange ? "处理中..." : "确定换货"}
-									</Button>
-								)}
-							</div>
-						</div>
-					</CardHeader>
-					<CardContent>
-						{allExchangeItemsCompleted && tenantType.toLowerCase() === TenantType.PROVIDER && (
-							<div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-								<p className="text-sm text-green-800">
-									所有换货商品都已完成，可以点击上方按钮确认交付到市场。
-								</p>
-							</div>
-						)}
-						<ExchangeItemsTable
-							items={exchangeItems}
-							loading={loadingExchangeReturn}
-							tenantType={tenantType}
-							orderStatus={orderDetail?.orderStatus}
-							onStatusChange={handleExchangeStatusChange}
-							onUpdateActualQuantity={updateLocalActualQuantity}
-							onOperation={(itemId, operationType) => {
-								handleOperation(itemId, operationType as OperationType);
-							}}
-							canPerformAction={canPerformExchangeAction}
-							getStatusLabel={getExchangeStatusLabel}
-							getStatusVariant={getExchangeStatusVariant}
-						/>
+						<TabsContent value="return" className="mt-4">
+							<ReturnListSection returnRecords={returnRecords} orderItems={orderItems} />
+						</TabsContent>
+					</Tabs>
 					</CardContent>
 				</Card>
 				
@@ -1972,244 +1788,4 @@ const productStatusSummary = useMemo(() => {
 	</div>
 
 	);
-} 
-
-function ActionToolbar({ actions }: { actions: ActionDescriptor[] }) {
-	if (!actions.length) {
-		return null;
-	}
-
-	return (
-		<div className="flex flex-wrap items-center justify-end gap-2">
-			{actions.map((action) =>
-				action.type === "dialog" ? (
-					<ActionDialogButton key={action.key} action={action} />
-				) : (
-					<RegularActionButton key={action.key} action={action} />
-				)
-			)}
-		</div>
-	);
-}
-
-function ActionDialogButton({ action }: { action: DialogActionDescriptor }) {
-	const triggerDisabled = Boolean(action.disabled || action.loading);
-	const triggerClasses = cn("h-8 px-3 text-xs", action.className);
-	const confirmClasses = cn(
-		action.dialog.confirmClassName ?? action.className,
-		!(action.dialog.confirmClassName || action.className) && "bg-primary text-white hover:bg-primary/90"
-	);
-	const confirmLabel = action.dialog.confirmLabel ?? "确认";
-	const cancelLabel = action.dialog.cancelLabel ?? "取消";
-
-	return (
-		<AlertDialog>
-			<AlertDialogTrigger asChild>
-				<Button
-					variant={action.variant}
-					size={action.size ?? "sm"}
-					className={triggerClasses}
-					disabled={triggerDisabled}
-				>
-					<ButtonContent action={action} />
-				</Button>
-			</AlertDialogTrigger>
-			<AlertDialogContent>
-				<AlertDialogHeader>
-					<AlertDialogTitle className="text-sm font-semibold">{action.dialog.title}</AlertDialogTitle>
-					{action.dialog.description && (
-						<AlertDialogDescription className="text-xs">
-							{action.dialog.description}
-						</AlertDialogDescription>
-					)}
-				</AlertDialogHeader>
-				{action.dialog.body}
-				<AlertDialogFooter>
-					<AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
-					<AlertDialogAction
-						onClick={action.onConfirm}
-						className={confirmClasses}
-						disabled={triggerDisabled}
-					>
-						{action.loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-						{action.loading ? "处理中..." : confirmLabel}
-					</AlertDialogAction>
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
-	);
-}
-
-function RegularActionButton({ action }: { action: ButtonActionDescriptor }) {
-	const disabled = Boolean(action.disabled || action.loading);
-	return (
-		<Button
-			variant={action.variant}
-			size={action.size ?? "sm"}
-			className={cn("h-8 px-3 text-xs", action.className)}
-			onClick={action.onClick}
-			disabled={disabled}
-		>
-			<ButtonContent action={action} />
-		</Button>
-	);
-}
-
-function ButtonContent({ action }: { action: BaseActionDescriptor }) {
-	return (
-		<>
-			{action.loading ? (
-				<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-			) : action.icon ? (
-				<span className="mr-2 flex items-center">{action.icon}</span>
-			) : null}
-			<span>{action.label}</span>
-		</>
-	);
-}
-
-function createSettlementSummary({
-	originalTotal,
-	discountTotal,
-	returnMoney,
-	actualTotal,
-}: {
-	originalTotal: string;
-	discountTotal: string;
-	returnMoney: string;
-	actualTotal: string;
-}): ReactNode {
-	const formatMoney = (value: string) => {
-		const parsed = parseFloat(value);
-		return Number.isFinite(parsed) ? parsed.toFixed(2) : "0.00";
-	};
-
-	const netTotal = parseFloat(actualTotal) - parseFloat(returnMoney);
-
-	return (
-		<>
-			<Separator />
-			<div className="mt-4 space-y-1 text-sm text-muted-foreground">
-				<p>
-					原价: <span className="font-semibold font-mono ml-2">¥{formatMoney(originalTotal)}</span>
-				</p>
-				<p className="text-red-600">
-					折扣: <span className="font-semibold font-mono ml-2">-¥{formatMoney(discountTotal)}</span>
-				</p>
-				<p className="text-red-600">
-					退款: <span className="font-semibold font-mono ml-2">-¥{formatMoney(returnMoney)}</span>
-				</p>
-				<p>
-					实收: <span className="font-semibold font-mono ml-2">¥{Number.isFinite(netTotal) ? netTotal.toFixed(2) : "0.00"}</span>
-				</p>
-			</div>
-			<Separator />
-		</>
-	);
-}
-
-
-function buildCompletionAction({
-	tenant,
-	status,
-	returnExchangeRecords,
-	orderItems,
-	completeAcceptance,
-	showRejectConfirmation,
-	productStatusSummary,
-	requestCustomerExchange,
-	requestingCustomerExchange,
-}: {
-	tenant: TenantType;
-	status: OrderStatus;
-	returnExchangeRecords: ReturnExchangeItem[];
-	orderItems: OrderItem[];
-	completeAcceptance: () => void;
-	showRejectConfirmation: () => void;
-	productStatusSummary: { totalItems: number; hasExchange: boolean; allInspected: boolean };
-	requestCustomerExchange: () => void;
-	requestingCustomerExchange: boolean;
-}): ActionDescriptor | null {
-	const requireAllProcessedStatuses = new Set<OrderStatus>([
-		OrderStatus.MARKET_INSPECTING,
-		OrderStatus.EXCHANGE_INSPECTING,
-		OrderStatus.CUSTOMER_INSPECTING,
-	]);
-
-const requireAllProcessed = requireAllProcessedStatuses.has(status);
-let allProcessed = true;
-
-if (tenant === TenantType.CUSTOMER && status === OrderStatus.CUSTOMER_INSPECTING) {
-	allProcessed = productStatusSummary.allInspected;
-} else if (requireAllProcessed) {
-	const processedCountMatch =
-		orderItems.length > 0 &&
-		returnExchangeRecords.length > 0 &&
-		returnExchangeRecords.length === orderItems.length;
-	allProcessed = processedCountMatch;
-}
-
-if (!allProcessed) {
-	return null;
-}
-
-	if (
-		tenant === TenantType.MARKET &&
-		(status === OrderStatus.MARKET_INSPECTING || status === OrderStatus.EXCHANGE_INSPECTING)
-	) {
-		return {
-			key: "market-complete-acceptance",
-			type: "button",
-			label: "完成验收",
-			className: "h-8 px-2 text-xs bg-green-700 text-white hover:bg-green-600",
-			onClick: completeAcceptance,
-		};
-	}
-
-		if (tenant === TenantType.CUSTOMER) {
-			if (status === OrderStatus.CUSTOMER_INSPECTING) {
-				if (productStatusSummary.hasExchange) {
-					return {
-						key: "customer-request-exchange",
-						type: "dialog",
-						label: requestingCustomerExchange ? "提交中..." : "申请换货",
-						className: "h-8 px-3 text-xs bg-orange-600 text-white hover:bg-orange-500",
-						dialog: {
-							title: "确认申请换货?",
-							description: "确认后，系统将通知市场处理换货申请。",
-						},
-						onConfirm: requestCustomerExchange,
-						disabled: requestingCustomerExchange,
-						loading: requestingCustomerExchange,
-					};
-				}
-
-				// Show complete acceptance button only when all items are inspected and none are exchanged
-				if (productStatusSummary.allInspected && !productStatusSummary.hasExchange) {
-					return {
-						key: "customer-complete-acceptance",
-						type: "dialog",
-						label: "完成验收",
-						className: "h-8 px-3 text-xs bg-green-700 text-white hover:bg-green-600",
-						dialog: {
-							title: "确认完成验收?",
-							description: "确认后，订单状态将更新为\"已完成\"。",
-						},
-						onConfirm: completeAcceptance,
-					};
-				}
-			}
-
-		if (status === OrderStatus.RETURN_REQUESTED) {
-			return {
-				key: "customer-reject-after-sale",
-				type: "button",
-				label: "拒绝供应商售后",
-				className: "h-8 px-2 text-xs bg-red-700 text-white hover:bg-red-600",
-				onClick: showRejectConfirmation,
-			};
-		}
-	}
-
-	return null;
 }

@@ -82,8 +82,8 @@ export function useOrderActions(
       setProcessing(true);
 
       // 调用后端 API /api/v1/orders/{order_code}/preparing
-      const response = await fetch(`/api/orders/${orderCode}/preparing`, {
-        method: 'PATCH',
+      const response = await fetch(`/api/orders/${orderCode}/start-preparing`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -145,7 +145,7 @@ export function useOrderActions(
 
       const apiUrl = hasExchangeStatus
         ? `/api/orders/${orderCode}/exchange-request`
-        : `/api/orders/${orderCode}/accept`;
+        : `/api/orders/${orderCode}/complete-inspection`;
 
       const response = await fetch(apiUrl, {
         method: 'PATCH',
@@ -318,7 +318,7 @@ export function useOrderActions(
         apiPath = `/api/orders/${orderCode}/begin-inspect-order`;
       }
       if (tenantLower === TenantType.CUSTOMER) {
-        apiPath = `/api/orders/${orderCode}/inspect`;
+        apiPath = `/api/orders/${orderCode}/begin-inspect-order`;
       }
 
       const payload = {
@@ -327,7 +327,7 @@ export function useOrderActions(
 
       // 调用后端 API /api/v1/orders/{order_code}/begin-inspect-order 或 begin-exchange-inspect-order
       const response = await fetch(apiPath, {
-        method: 'PATCH',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },

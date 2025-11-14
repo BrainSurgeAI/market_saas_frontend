@@ -13,7 +13,7 @@ export function useOrderCalculations(
       .reduce((acc, record) => {
         const item = orderItems.find(item => item.id === record.id);
         if (!item) return acc;
-        return acc + parseFloat(item.actualPrice) * record.quantity;
+        return acc + parseFloat(item.discountedUnitPrice) * record.quantity;
       }, 0)
       .toFixed(2);
   }, [returnExchangeRecords, orderItems]);
@@ -26,7 +26,7 @@ export function useOrderCalculations(
   // 计算实际总额
   const calculateActualTotal = (items: OrderItem[]) => {
     return items.reduce((sum, item) => {
-      const actualTotal = parseFloat(item.actualPrice) * parseFloat(item.acceptedQuantity);
+      const actualTotal = parseFloat(item.discountedUnitPrice) * parseFloat(item.acceptedQuantity);
       return isNaN(actualTotal) ? sum : sum + actualTotal;
     }, 0).toFixed(2);
   };
@@ -61,7 +61,7 @@ export function useOrderCalculations(
       }
 
       if (parseFloat(item.deliveredQuantity ?? '0') > 0) {
-        summary[item.category].total += parseFloat(item.actualPrice) * parseFloat(item.deliveredQuantity);
+        summary[item.category].total += parseFloat(item.discountedUnitPrice) * parseFloat(item.deliveredQuantity);
       } else {
         summary[item.category].total += parseFloat(item.total);
       }

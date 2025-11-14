@@ -9,7 +9,9 @@ export function useOrderOperations(
   setOrderItems: (items: OrderItem[]) => void,
   returnExchangeRecords: ReturnExchangeItem[],
   setReturnExchangeRecords: (records: ReturnExchangeItem[]) => void,
-  user: any
+  user: any,
+  orderStatus?: string,
+  tenantType?: string
 ) {
   const { toast } = useToast();
   
@@ -43,7 +45,7 @@ export function useOrderOperations(
       return false;
     }
 
-    const maxQuantity = parseFloat(item.actualQuantity);
+    const maxQuantity = parseFloat(item.deliveredQuantity || '0');
     if (numValue > maxQuantity) {
       setQuantityError(`数量不能超过实际数量 ${maxQuantity}`);
       return false;
@@ -98,7 +100,7 @@ export function useOrderOperations(
     if (checked) {
       const item = orderItems.find(item => item.id === operatingProductId);
       if (item) {
-        setOperatingQuantity(item.actualQuantity);
+        setOperatingQuantity(item.deliveredQuantity || '0');
         setQuantityError('');
       }
     }
@@ -118,10 +120,19 @@ export function useOrderOperations(
     setReasonError('');
 
     if (type === 'SIGN') {
-      setOperatingQuantity(item.actualQuantity);
-      setTimeout(() => {
-        setShowConfirmDialog(true);
-      }, 0);
+      // 在 MARKET_INSPECTING 和 CUSTOMER_INSPECTING 状态下，签收操作需要显示对话框让用户输入数量
+      const shouldShowDialog = orderStatus === 'MARKET_INSPECTING' || orderStatus === 'CUSTOMER_INSPECTING';
+      if (shouldShowDialog) {
+        setOperatingQuantity(item.deliveredQuantity || '0');
+        setTimeout(() => {
+          setShowOperationDialog(true);
+        }, 0);
+      } else {
+        setOperatingQuantity(item.deliveredQuantity || '0');
+        setTimeout(() => {
+          setShowConfirmDialog(true);
+        }, 0);
+      }
     } else {
       setTimeout(() => {
         setShowOperationDialog(true);
@@ -150,8 +161,8 @@ export function useOrderOperations(
     let actualQuantity = parseFloat(operatingQuantity);
     if (operationType === 'EXCHANGE') {
       // 换货操作：计算换货数量 = 客户需求量 - (实际到货量 - 坏货数量)
-      const customerQuantity = parseFloat(item.quantity || '0');
-      const actualDeliveryQuantity = parseFloat(item.actualQuantity || '0');
+      const customerQuantity = parseFloat(item.orderedQty || '0');
+      const actualDeliveryQuantity = parseFloat(item.deliveredQuantity || '0');
       const damagedQuantity = parseFloat(operatingQuantity || '0');
       actualQuantity = Math.max(0, customerQuantity - (actualDeliveryQuantity - damagedQuantity));
     }
@@ -204,22 +215,41 @@ export function useOrderOperations(
         const currentOrderRecords = records.filter(record => record.orderId === orderCode);
         setReturnExchangeRecords(currentOrderRecords);
 
-        // 如果是换货操作，更新商品的实际数量：实际供货量 - 坏货量
-        if (operationType === 'EXCHANGE') {
-          const damagedQuantity = parseFloat(operatingQuantity || '0');
-          const updatedOrderItems = orderItems.map(orderItem => {
-            if (orderItem.id === operatingProductId) {
-              const currentActualQuantity = parseFloat(orderItem.actualQuantity || '0');
-              const newActualQuantity = Math.max(0, currentActualQuantity - damagedQuantity);
+        // 更新 orderItems 中的相关字段
+        const updatedOrderItems = orderItems.map(orderItem => {
+          if (orderItem.id === operatingProductId) {
+            if (operationType === 'SIGN') {
+              // 签收操作：根据租户类型和订单状态更新相应的字段
+              const updatedItem: any = {
+                ...orderItem,
+                acceptedQuantity: operatingQuantity
+              };
+              
+              // MARKET租户在MARKET_INSPECTING状态下，更新marketInspectedQuantity
+              if (tenantType?.toLowerCase() === 'market' && orderStatus === 'MARKET_INSPECTING') {
+                updatedItem.marketInspectedQuantity = operatingQuantity;
+              }
+              
+              // CUSTOMER租户在CUSTOMER_INSPECTING状态下，更新customerInspectedQuantity
+              if (tenantType?.toLowerCase() === 'customer' && orderStatus === 'CUSTOMER_INSPECTING') {
+                updatedItem.customerInspectedQuantity = operatingQuantity;
+              }
+              
+              return updatedItem;
+            } else if (operationType === 'EXCHANGE') {
+              // 换货操作：更新商品的实际数量：实际供货量 - 坏货量
+              const damagedQuantity = parseFloat(operatingQuantity || '0');
+              const currentDeliveredQuantity = parseFloat(orderItem.deliveredQuantity || '0');
+              const newDeliveredQuantity = Math.max(0, currentDeliveredQuantity - damagedQuantity);
               return {
                 ...orderItem,
-                actualQuantity: newActualQuantity.toString()
+                deliveredQuantity: newDeliveredQuantity.toString()
               };
             }
-            return orderItem;
-          });
-          setOrderItems(updatedOrderItems);
-        }
+          }
+          return orderItem;
+        });
+        setOrderItems(updatedOrderItems);
 
         toast({
           title: '操作成功',

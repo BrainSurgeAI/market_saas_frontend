@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { fetchRemoteData } from '@/lib/api-utils';
 
-export async function PATCH(
+export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ order_code: string }> }
 ) {
@@ -11,8 +11,8 @@ export async function PATCH(
 
   try {
     const response = await fetchRemoteData({
-      endpoint: `/orders/${order_code}/begin-inspect-order`,
-      method: 'PATCH',
+      endpoint: `/orders/${order_code}/start-inspection`,
+      method: 'POST',
       needToken: true,
       revalidate: 0,
     });

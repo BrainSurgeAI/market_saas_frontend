@@ -48,7 +48,7 @@ export function useOrderEditing(orderItems: OrderItem[], setOrderItems: (items: 
     const updatedItems = orderItems.map(item => {
       if (item.id === id) {
         const deliveredQuantity = value;
-        const actualPrice = parseFloat(item.actualPrice);
+        const actualPrice = parseFloat(item.discountedUnitPrice);
 
         const total = (deliveredQuantity && !isNaN(parseFloat(deliveredQuantity)) && !isNaN(actualPrice))
           ? (parseFloat(deliveredQuantity) * actualPrice).toFixed(2)

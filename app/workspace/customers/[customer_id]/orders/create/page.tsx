@@ -44,6 +44,27 @@ interface ValidationError {
   message: string;
 }
 
+interface CreateOrderItemPayload {
+  categoryId: number;
+  productCode: string;
+  orderedQty: string;
+  remark: string | null;
+  processingServices: {
+    type: string;
+    description?: string;
+  }[];
+}
+
+interface CreateOrderPayload {
+  deliveryInfo: {
+    deliveryDate: string;
+    address: string;
+    contactName: string;
+    contactPhone: string;
+  };
+  items: CreateOrderItemPayload[];
+}
+
 export default function CreateOrderPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -255,12 +276,26 @@ export default function CreateOrderPage() {
         return;
       }
 
+      const requestPayload: CreateOrderPayload = {
+        deliveryInfo: orderWithDelivery.deliveryInfo,
+        items: pendingOrder.items.map((item) => ({
+          categoryId: item.categoryId,
+          productCode: item.productCode ?? item.productId,
+          orderedQty: Number(item.quantity).toFixed(2),
+          remark: item.customNote?.trim() ? item.customNote : null,
+          processingServices: (item.processingServices ?? []).map((service) => ({
+            type: service.type,
+            description: service.description,
+          })),
+        })),
+      };
+
       const response = await fetch(`/api/customers/${organization?.nameHash}/orders`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(orderWithDelivery),
+        body: JSON.stringify(requestPayload),
       });
 
       if (!response.ok) {

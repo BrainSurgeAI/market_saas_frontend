@@ -61,10 +61,10 @@ export interface OrderItem {
   categoryId: number;
   category: string;
   unit: string;
-  quantity: string;
+  orderedQty: string;
   price: string;
   discountRate: string;
-  actualPrice: string;
+  discountedUnitPrice: string;
   total: string;
   processingRequirements: string | null;
   remark: string | null;
@@ -72,6 +72,9 @@ export interface OrderItem {
   actualAmount: string;
   status: string;
   deliveredQuantity: string;
+  lastAcceptStatus?: boolean | null;
+  marketInspectedQuantity?: string;
+  customerInspectedQuantity?: string;
 }
 
 export interface ExchangeItem {
@@ -93,31 +96,35 @@ export interface ExchangeItem {
 
 export interface OrderDetail {
   id: number;
-  orderCode: string;
-  customerName: string;
+  orderCode?: string;
+  customerName?: string;
   orderStatus: string;
   totalAmount: string;
   discountAmount: string;
   actualAmount: string;
   deliveryDate: string;
   deliveryAddress: string;
-  contactName: string;
-  contactPhone: string;
+  contactName?: string;
+  contactPhone?: string;
+  receiverName?: string;
+  receiverPhone?: string;
+  shipperName?: string;
+  shipperPhone?: string;
   remark: string | null;
-  createdBy: string;
+  createdBy?: string;
   createdAt: string;
-  confirmBy: string | null;
-  confirmedAt: string | null;
-  cancelBy: string | null;
-  cancelledAt: string | null;
-  afterSaleAt: string | null;
-  rejectBy: string | null;
-  rejectedAt: string | null;
-  rejectReason: string | null;
-  completedBy: string | null;
-  deliveryStaffName: string | null;
-  deliveryStaffPhone: string | null;
-  providerName: string | null;
+  confirmBy?: string | null;
+  confirmedAt?: string | null;
+  cancelBy?: string | null;
+  cancelledAt?: string | null;
+  afterSaleAt?: string | null;
+  rejectBy?: string | null;
+  rejectedAt?: string | null;
+  rejectReason?: string | null;
+  completedBy?: string | null;
+  deliveryStaffName?: string | null;
+  deliveryStaffPhone?: string | null;
+  providerName?: string | null;
 }
 
 export interface ReturnExchangeItem {
@@ -151,17 +158,27 @@ export interface ExchangeReturnRecordWithInput extends ExchangeReturnRecord {
   submitError?: string | null;
 }
 
+export interface OrderInspection {
+  inspectedByType: string;
+  inspectionResult: string;
+  inspectionRound: number;
+}
+
 export interface ApiResponse {
   order: OrderDetail;
   items: OrderItem[];
   receipts: {
     id: number;
-    orderId: string;
-    productId: string;
-    productName: string;
     operationType: string;
-    quantity: number;
-    reason: string;
-    unit: string;
+    status: string;
+    items: {
+      productId: string;
+      productName: string;
+      quantity: string;
+      unit: string;
+      reason: string;
+    }[];
+    createdAt: string;
   }[];
+  inspections?: OrderInspection[];
 }

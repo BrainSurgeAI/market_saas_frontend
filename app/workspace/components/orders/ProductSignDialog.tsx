@@ -153,11 +153,11 @@ export default function ProductSignDialog({
             <div className="grid grid-cols-2 gap-4 p-3 bg-gray-50 rounded-md">
               <div className="text-xs">
                 <span className="text-gray-500">客户需求量：</span>
-                <span className="font-mono font-semibold">{currentItem?.quantity} {currentItem?.unit}</span>
+                <span className="font-mono font-semibold">{currentItem?.orderedQty} {currentItem?.unit}</span>
               </div>
               <div className="text-xs">
                 <span className="text-gray-500">实际到货量：</span>
-                <span className="font-mono font-semibold">{currentItem?.actualQuantity} {currentItem?.unit}</span>
+                <span className="font-mono font-semibold">{currentItem?.deliveredQuantity || '0'} {currentItem?.unit}</span>
               </div>
             </div>
 
@@ -176,7 +176,7 @@ export default function ProductSignDialog({
                     className={`flex-grow font-mono text-red-600 ${quantityError ? 'border-red-500' : ''}`}
                     step="0.01"
                     min="0"
-                    max={currentItem?.actualQuantity || '0'}
+                    max={currentItem?.deliveredQuantity || '0'}
                     placeholder="输入坏货数量"
                   />
                 </div>
@@ -189,11 +189,11 @@ export default function ProductSignDialog({
                   <div className="text-xs space-y-1">
                     <div className="flex justify-between">
                       <span className="text-gray-600">客户需求量：</span>
-                      <span className="font-mono">{currentItem?.quantity} {currentItem?.unit}</span>
+                      <span className="font-mono">{currentItem?.orderedQty} {currentItem?.unit}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">实际到货量：</span>
-                      <span className="font-mono">{currentItem?.actualQuantity} {currentItem?.unit}</span>
+                      <span className="font-mono">{currentItem?.deliveredQuantity || '0'} {currentItem?.unit}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-red-600">坏货数量：</span>
@@ -204,10 +204,10 @@ export default function ProductSignDialog({
                       <span className="text-green-600">需要换货量：</span>
                       <span className="font-mono text-green-600">
                         {(() => {
-                          const quantity = parseFloat(currentItem?.quantity || '0');
-                          const actualQuantity = parseFloat(currentItem?.actualQuantity || '0');
+                          const quantity = parseFloat(currentItem?.orderedQty || '0');
+                          const deliveredQuantity = parseFloat(currentItem?.deliveredQuantity || '0');
                           const damagedQuantity = parseFloat(operatingQuantity || '0');
-                          const exchangeQuantity = Math.max(0, quantity - (actualQuantity - damagedQuantity));
+                          const exchangeQuantity = Math.max(0, quantity - (deliveredQuantity - damagedQuantity));
                           return exchangeQuantity.toFixed(2);
                         })()} {currentItem?.unit}
                       </span>
@@ -216,10 +216,10 @@ export default function ProductSignDialog({
 
                   {/* 当换货数量为0时的提示 */}
                   {(() => {
-                    const quantity = parseFloat(currentItem?.quantity || '0');
-                    const actualQuantity = parseFloat(currentItem?.actualQuantity || '0');
+                    const quantity = parseFloat(currentItem?.orderedQty || '0');
+                    const deliveredQuantity = parseFloat(currentItem?.deliveredQuantity || '0');
                     const damagedQuantity = parseFloat(operatingQuantity || '0');
-                    const exchangeQuantity = Math.max(0, quantity - (actualQuantity - damagedQuantity));
+                    const exchangeQuantity = Math.max(0, quantity - (deliveredQuantity - damagedQuantity));
 
                     const shouldShowHint = exchangeQuantity === 0 && (
                       (tenantType?.toLowerCase() === 'market' && orderStatus === 'MARKET_INSPECTING') ||
@@ -259,7 +259,15 @@ export default function ProductSignDialog({
                     value={operatingQuantity || '0'}
                     onChange={(e) => handleQuantityChange(e.target.value)}
                     className={`flex-grow font-mono ${operationType !== 'SIGN' ? 'text-red-600' : ''} ${quantityError ? 'border-red-500' : ''}`}
-                    step="0.1"
+                    step={(() => {
+                      // 如果是签收操作，且单位是 kg 或 g，则允许小数，否则只允许整数
+                      if (operationType === 'SIGN' && currentItem?.unit) {
+                        const unit = currentItem.unit.toLowerCase();
+                        return (unit === 'kg' || unit === 'g') ? '0.01' : '1';
+                      }
+                      // 退货操作允许小数
+                      return '0.1';
+                    })()}
                     min="0"
                   />
                 </div>
@@ -355,16 +363,16 @@ export default function ProductSignDialog({
               <Separator />
               <p className="text-xs">商品名称: <span className="font-semibold text-gray-800 ml-2">{currentItem?.name}</span></p>
               {operationType === 'SIGN' ? (
-                <p className="text-xs">收货数量: <span className="font-mono font-semibold text-gray-800 ml-2">{currentItem?.actualQuantity}({currentItem?.unit})</span> </p>
+                <p className="text-xs">收货数量: <span className="font-mono font-semibold text-gray-800 ml-2">{operatingQuantity || '0'}({currentItem?.unit})</span> </p>
               ) : operationType === 'EXCHANGE' ? (
                 <Fragment>
                   <p className="text-xs">坏货数量: <span className="font-mono font-semibold text-red-600 ml-2">{operatingQuantity} {currentItem?.unit}</span></p>
                   <p className="text-xs">换货数量: <span className="font-mono font-semibold text-green-600 ml-2">
                     {(() => {
-                      const quantity = parseFloat(currentItem?.quantity || '0');
-                      const actualQuantity = parseFloat(currentItem?.actualQuantity || '0');
+                      const quantity = parseFloat(currentItem?.orderedQty || '0');
+                      const deliveredQuantity = parseFloat(currentItem?.deliveredQuantity || '0');
                       const damagedQuantity = parseFloat(operatingQuantity || '0');
-                      const exchangeQuantity = Math.max(0, quantity - (actualQuantity - damagedQuantity));
+                      const exchangeQuantity = Math.max(0, quantity - (deliveredQuantity - damagedQuantity));
                       return exchangeQuantity.toFixed(2);
                     })()} {currentItem?.unit}
                   </span></p>

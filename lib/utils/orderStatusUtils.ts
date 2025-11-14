@@ -111,6 +111,28 @@ export function shouldShowInspectMenu(status: OrderStatus | string, tenantType: 
 }
 
 /**
+ * 判断是否显示市场接收和客户接收列
+ */
+export function shouldShowReceivedQuantityColumns(status: OrderStatus | string, tenantType: string): boolean {
+  const tenantLower = tenantType.toLowerCase();
+  const statusEnum = status as OrderStatus;
+  
+  // 显示接收数量列的状态
+  const showColumnsStatuses = new Set([
+    OrderStatus.MARKET_INSPECTING,
+    OrderStatus.EXCHANGE_INSPECTING,
+    OrderStatus.CUSTOMER_INSPECTING,
+    OrderStatus.MARKET_ACCEPTED,
+  ]);
+
+  if (tenantLower === TenantType.MARKET || tenantLower === TenantType.CUSTOMER) {
+    return showColumnsStatuses.has(statusEnum);
+  }
+
+  return false;
+}
+
+/**
  * 判断是否显示实际数量列
  */
 export function shouldDisplayActualQuantity(status: OrderStatus | string, tenantType: string): boolean {

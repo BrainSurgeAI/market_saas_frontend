@@ -36,6 +36,7 @@ export interface PriceAnnouncement {
 export interface CartItem {
   //id: number;
   productId: string;
+  productCode?: string;
   name: string;
   quantity: number;
   price: number;
