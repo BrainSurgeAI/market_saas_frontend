@@ -1,21 +1,23 @@
 import { useState, useEffect } from 'react';
-import { OrderDetail, OrderItem, ApiResponse, ReturnExchangeItem, OperationType, OrderInspection } from '@/lib/types/orderStatus';
+import { Order, OrderItem, ApiResponse, ReturnExchangeItem, OperationType, OrderInspection, Delivery, StatusHistoryItem, Receipt, ReceiptItem, OrderDetailData } from '@/lib/types/orderStatus';
 import { shouldEnterEditMode } from '@/lib/utils/orderStatusUtils';
 
 export function useOrderDetails(orderCode: string, orgId: string, tenantType: string) {
-  const [orderDetail, setOrderDetail] = useState<OrderDetail | null>(null);
+  const [orderDetail, setOrderDetail] = useState<Order | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [returnExchangeRecords, setReturnExchangeRecords] = useState<ReturnExchangeItem[]>([]);
-  const [rawReceipts, setRawReceipts] = useState<ApiResponse['receipts']>([]);
+  const [rawReceipts, setRawReceipts] = useState<Receipt[]>([]);
   const [inspections, setInspections] = useState<OrderInspection[]>([]);
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [statusHistory, setStatusHistory] = useState<StatusHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
   // 将 API 返回的操作记录转换为组件内部使用的格式
   const convertApiReceiptToInternalFormat = (
-    receipt: ApiResponse['receipts'][0],
-    receiptItem: ApiResponse['receipts'][0]['items'][0],
+    receipt: Receipt,
+    receiptItem: ReceiptItem,
     itemId: number,
     orderCode: string
   ): ReturnExchangeItem => ({
@@ -46,12 +48,40 @@ export function useOrderDetails(orderCode: string, orgId: string, tenantType: st
           throw new Error(`请求失败: ${response.status}`);
         }
 
-        const responseData: ApiResponse = await response.json();
+        const jsonResponse = await response.json();
+        
+        // 调试：打印API响应
+        console.log('API响应:', jsonResponse);
+        
+        // API路由可能返回两种格式：
+        // 1. 完整格式：{ code: 200, message: "success", data: {...} }
+        // 2. 直接格式：{ order: {...}, items: [...], ... } (API路由已经解包了data)
+        let responseData: OrderDetailData;
+        
+        if ('code' in jsonResponse && 'data' in jsonResponse) {
+          // 完整格式
+          const apiResponse = jsonResponse as ApiResponse;
+          const responseCode = typeof apiResponse.code === 'string' ? parseInt(apiResponse.code, 10) : apiResponse.code;
+          if (isNaN(responseCode) || responseCode !== 200) {
+            console.error('API响应code不是200:', responseCode, '完整响应:', apiResponse);
+            throw new Error(apiResponse.message || '获取订单详情失败');
+          }
+          if (!apiResponse.data) {
+            throw new Error('API响应中缺少data字段');
+          }
+          responseData = apiResponse.data;
+        } else if ('order' in jsonResponse && 'items' in jsonResponse) {
+          // 直接格式（API路由已经解包了data）
+          responseData = jsonResponse as OrderDetailData;
+        } else {
+          console.error('无法识别的API响应格式:', jsonResponse);
+          throw new Error('API响应格式不正确');
+        }
         
         // 处理订单详情，映射字段名
-        const orderDetailData: OrderDetail = {
+        const orderDetailData: Order = {
           ...responseData.order,
-          orderCode: responseData.order.orderCode || orderCode,
+          orderCode: orderCode,
           customerName: responseData.order.customerName || '',
           contactName: responseData.order.contactName || responseData.order.receiverName || '',
           contactPhone: responseData.order.contactPhone || responseData.order.receiverPhone || '',
@@ -60,13 +90,15 @@ export function useOrderDetails(orderCode: string, orgId: string, tenantType: st
         };
         
         setOrderDetail(orderDetailData);
-        setOrderItems(responseData.items);
+        setOrderItems(responseData.items || []);
         
         // 保存原始的 receipts 数据
         setRawReceipts(responseData.receipts || []);
         setInspections(responseData.inspections || []);
+        setDeliveries(responseData.deliveries || []);
+        setStatusHistory(responseData.statusHistory || []);
 
-        const productIdToItemId = new Map(responseData.items.map(item => [item.productId, item.id] as const));
+        const productIdToItemId = new Map((responseData.items || []).map(item => [item.productId, item.id] as const));
 
         // 处理操作记录
         let allReceipts: ReturnExchangeItem[] = [];
@@ -110,17 +142,7 @@ export function useOrderDetails(orderCode: string, orgId: string, tenantType: st
               if (!matchedItem) {
                 return false;
               }
-              const itemStatus = matchedItem.status?.toUpperCase() ?? 'PENDING';
-              if (['SIGN', 'SIGNED'].includes(itemStatus) && record.operationType === 'SIGN') {
-                return true;
-              }
-              if (['RETURN', 'RETURNED'].includes(itemStatus) && record.operationType === 'RETURN') {
-                return true;
-              }
-              if (['EXCHANGE', 'EXCHANGED'].includes(itemStatus) && record.operationType === 'EXCHANGE') {
-                return true;
-              }
-              return false;
+              return true;
             });
 
             allReceipts = [...allReceipts, ...sanitizedLocalRecords];
@@ -139,7 +161,19 @@ export function useOrderDetails(orderCode: string, orgId: string, tenantType: st
           setIsEditing(true);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : '获取订单详情时出错');
+        const errorMessage = err instanceof Error ? err.message : '获取订单详情时出错';
+        console.error('获取订单详情失败:', err);
+        console.error('错误详情:', {
+          orderCode,
+          orgId,
+          tenantType,
+          error: err instanceof Error ? {
+            message: err.message,
+            stack: err.stack,
+            name: err.name
+          } : err
+        });
+        setError(errorMessage);
       } finally {
         setLoading(false);
       }
@@ -159,6 +193,10 @@ export function useOrderDetails(orderCode: string, orgId: string, tenantType: st
     setReturnExchangeRecords,
     rawReceipts,
     inspections,
+    setInspections,
+    deliveries,
+    setDeliveries,
+    statusHistory,
     loading,
     error,
     isEditing,

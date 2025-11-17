@@ -62,19 +62,13 @@ export interface OrderItem {
   category: string;
   unit: string;
   orderedQty: string;
-  price: string;
+  unitPrice: string;
   discountRate: string;
   discountedUnitPrice: string;
-  total: string;
+  netAmount: string;
+  orderedAmount: string;
   processingRequirements: string | null;
   remark: string | null;
-  acceptedQuantity: string;
-  actualAmount: string;
-  status: string;
-  deliveredQuantity: string;
-  lastAcceptStatus?: boolean | null;
-  marketInspectedQuantity?: string;
-  customerInspectedQuantity?: string;
 }
 
 export interface ExchangeItem {
@@ -94,25 +88,26 @@ export interface ExchangeItem {
   updatedAt: string;
 }
 
-export interface OrderDetail {
+export interface Order {
   id: number;
-  orderCode?: string;
-  customerName?: string;
-  orderStatus: string;
-  totalAmount: string;
+  customerName: string;
+  orderedAmount: string;
   discountAmount: string;
-  actualAmount: string;
-  deliveryDate: string;
+  netAmount: string;
   deliveryAddress: string;
+  deliveryDate: string;
+  orderStatus: string;
+  shipperName: string;
+  shipperPhone: string;
+  receiverName: string;
+  receiverPhone: string;
+  createdAt: string;
+  // 以下字段可能在某些场景下存在，但不在基础API响应中
+  orderCode?: string;
   contactName?: string;
   contactPhone?: string;
-  receiverName?: string;
-  receiverPhone?: string;
-  shipperName?: string;
-  shipperPhone?: string;
-  remark: string | null;
+  remark?: string | null;
   createdBy?: string;
-  createdAt: string;
   confirmBy?: string | null;
   confirmedAt?: string | null;
   cancelBy?: string | null;
@@ -158,27 +153,86 @@ export interface ExchangeReturnRecordWithInput extends ExchangeReturnRecord {
   submitError?: string | null;
 }
 
+export interface InspectionItem {
+  orderDetailId: number;
+  inspectedQty?: string; // 第一轮验收使用
+  quantity?: string; // 第二轮验收使用
+  remark?: string;
+}
+
 export interface OrderInspection {
-  inspectedByType: string;
-  inspectionResult: string;
+  inspectionId: number;
   inspectionRound: number;
+  inspectedByType: string;
+  inspectedById?: number;
+  result?: string;
+  inspectedAt?: string;
+  parent_id?: number; // 第二轮验收的父验收ID
+  items: InspectionItem[];
+}
+
+export interface DeliveryItem {
+  id: number;
+  orderDetailId: number;
+  productCode: string;
+  actualQty: string;
+  unitPrice: string;
+  subtotal: string;
+  weightUnit: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Delivery {
+  id: number;
+  assignmentId?: number;
+  parentId?: number | null; // 第二轮配送的父配送ID
+  deliveryRound: number;
+  deliveryType: string;
+  deliveredAt?: string; // 当 deliveryStatus 为 PREPARING 时可能不存在
+  deliveredBy: string;
+  deliveryStatus: string;
+  deliveryContactNumber: string;
+  createdAt: string;
+  updatedAt: string;
+  items: DeliveryItem[];
+}
+
+export interface StatusHistoryItem {
+  toStatus: string;
+  changeReason: string;
+  createdAt: string;
+}
+
+export interface ReceiptItem {
+  productId: string;
+  productName: string;
+  quantity: string;
+  unit: string;
+  reason: string;
+}
+
+export interface Receipt {
+  id: number;
+  operationType: string;
+  status: string;
+  items: ReceiptItem[];
+  createdAt: string;
+}
+
+export interface OrderDetailData {
+  order: Order;
+  items: OrderItem[];
+  receipts: Receipt[];
+  inspections: OrderInspection[];
+  deliveries: Delivery[];
+  statusHistory?: StatusHistoryItem[];
 }
 
 export interface ApiResponse {
-  order: OrderDetail;
-  items: OrderItem[];
-  receipts: {
-    id: number;
-    operationType: string;
-    status: string;
-    items: {
-      productId: string;
-      productName: string;
-      quantity: string;
-      unit: string;
-      reason: string;
-    }[];
-    createdAt: string;
-  }[];
-  inspections?: OrderInspection[];
+  code: number;
+  message: string;
+  data: OrderDetailData;
+  requestId?: string;
+  timestamp?: string;
 }

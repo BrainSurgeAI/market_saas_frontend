@@ -29,7 +29,10 @@ export function useOrderEditing(orderItems: OrderItem[], setOrderItems: (items: 
     const allowDecimal = isUnitAllowingDecimal(item.unit);
     const numericValue = parseFloat(value);
     
-    if (!allowDecimal && value.includes('.')) {
+    // 如果输入为空，不设置错误（允许用户清空输入）
+    if (value === "" || value === null || value === undefined) {
+      // 不设置错误，允许空值
+    } else if (!allowDecimal && value.includes('.')) {
       newErrors[id] = `${item.unit}单位只能输入整数`;
     } else if (isNaN(numericValue)) {
       newErrors[id] = '请输入数字';
@@ -52,12 +55,12 @@ export function useOrderEditing(orderItems: OrderItem[], setOrderItems: (items: 
 
         const total = (deliveredQuantity && !isNaN(parseFloat(deliveredQuantity)) && !isNaN(actualPrice))
           ? (parseFloat(deliveredQuantity) * actualPrice).toFixed(2)
-          : item.total;
+          : item.netAmount;
 
         return {
           ...item,
           deliveredQuantity,
-          total
+          netAmount: total
         };
       }
       return item;

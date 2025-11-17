@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { OrderItem, ReturnExchangeItem, OperationType } from '@/lib/types/orderStatus';
+import { OrderItem, ReturnExchangeItem, OperationType, OrderInspection, InspectionItem } from '@/lib/types/orderStatus';
 import { useToast } from '@/hooks/use-toast';
-import { OrderDetail } from '@/lib/types/orderStatus';
+import { Order } from '@/lib/types/orderStatus';
 
 export function useOrderOperations(
   orderCode: string,
@@ -11,7 +11,10 @@ export function useOrderOperations(
   setReturnExchangeRecords: (records: ReturnExchangeItem[]) => void,
   user: any,
   orderStatus?: string,
-  tenantType?: string
+  tenantType?: string,
+  getActualDeliveredQuantity?: (orderDetailId: number) => string,
+  inspections?: OrderInspection[],
+  setInspections?: (inspections: OrderInspection[]) => void
 ) {
   const { toast } = useToast();
   
@@ -45,9 +48,20 @@ export function useOrderOperations(
       return false;
     }
 
-    const maxQuantity = parseFloat(item.deliveredQuantity || '0');
-    if (numValue > maxQuantity) {
-      setQuantityError(`数量不能超过实际数量 ${maxQuantity}`);
+    // 优先使用 getActualDeliveredQuantity 函数获取实际到货量，如果没有则使用 item.deliveredQuantity
+    const actualDeliveredQty = getActualDeliveredQuantity 
+      ? getActualDeliveredQuantity(id)
+      : (item.deliveredQuantity || '0');
+    const maxQuantity = parseFloat(actualDeliveredQty);
+    
+    // 如果实际到货量为0，不允许输入大于0的值
+    if (maxQuantity === 0 && numValue > 0) {
+      setQuantityError('实际到货量为0，无法签收');
+      return false;
+    }
+    
+    if (maxQuantity > 0 && numValue > maxQuantity) {
+      setQuantityError(`数量不能超过实际数量 ${maxQuantity.toFixed(2)}`);
       return false;
     }
 
@@ -100,7 +114,11 @@ export function useOrderOperations(
     if (checked) {
       const item = orderItems.find(item => item.id === operatingProductId);
       if (item) {
-        setOperatingQuantity(item.deliveredQuantity || '0');
+        // 优先使用 getActualDeliveredQuantity 函数获取实际到货量
+        const actualDeliveredQty = getActualDeliveredQuantity 
+          ? getActualDeliveredQuantity(operatingProductId)
+          : (item.deliveredQuantity || '0');
+        setOperatingQuantity(actualDeliveredQty);
         setQuantityError('');
       }
     }
@@ -119,20 +137,40 @@ export function useOrderOperations(
     setQuantityError('');
     setReasonError('');
 
+    // 获取实际到货量
+    const actualDeliveredQty = getActualDeliveredQuantity 
+      ? getActualDeliveredQuantity(id)
+      : (item.deliveredQuantity || '0');
+
     if (type === 'SIGN') {
-      // 在 MARKET_INSPECTING 和 CUSTOMER_INSPECTING 状态下，签收操作需要显示对话框让用户输入数量
-      const shouldShowDialog = orderStatus === 'MARKET_INSPECTING' || orderStatus === 'CUSTOMER_INSPECTING';
+      // 在 MARKET_INSPECTING、EXCHANGE_INSPECTING 和 CUSTOMER_INSPECTING 状态下，签收操作需要显示对话框让用户输入数量
+      const shouldShowDialog = orderStatus === 'MARKET_INSPECTING' || orderStatus === 'EXCHANGE_INSPECTING' || orderStatus === 'CUSTOMER_INSPECTING';
       if (shouldShowDialog) {
-        setOperatingQuantity(item.deliveredQuantity || '0');
+        setOperatingQuantity(actualDeliveredQty);
         setTimeout(() => {
           setShowOperationDialog(true);
         }, 0);
       } else {
-        setOperatingQuantity(item.deliveredQuantity || '0');
+        setOperatingQuantity(actualDeliveredQty);
         setTimeout(() => {
           setShowConfirmDialog(true);
         }, 0);
       }
+    } else if (type === 'RETURN') {
+      // 在 MARKET_INSPECTING、EXCHANGE_INSPECTING 和 CUSTOMER_INSPECTING 状态下，退货操作自动设置为全部数量
+      const shouldAutoReturnAll = 
+        (tenantType?.toLowerCase() === 'market' && (orderStatus === 'MARKET_INSPECTING' || orderStatus === 'EXCHANGE_INSPECTING')) ||
+        (tenantType?.toLowerCase() === 'customer' && orderStatus === 'CUSTOMER_INSPECTING');
+      
+      if (shouldAutoReturnAll) {
+        // 自动设置为全部数量，不允许用户修改
+        setOperatingQuantity(actualDeliveredQty);
+        setUseFullQuantity(true);
+      }
+      
+      setTimeout(() => {
+        setShowOperationDialog(true);
+      }, 0);
     } else {
       setTimeout(() => {
         setShowOperationDialog(true);
@@ -153,7 +191,7 @@ export function useOrderOperations(
   };
 
   // 处理确认操作
-  const handleConfirmOperation = (orderDetail: OrderDetail) => {
+  const handleConfirmOperation = (orderDetail: Order) => {
     const item = orderItems.find(item => item.id === operatingProductId);
     if (!item || !operationType || !orderDetail) return;
 
@@ -162,7 +200,9 @@ export function useOrderOperations(
     if (operationType === 'EXCHANGE') {
       // 换货操作：计算换货数量 = 客户需求量 - (实际到货量 - 坏货数量)
       const customerQuantity = parseFloat(item.orderedQty || '0');
-      const actualDeliveryQuantity = parseFloat(item.deliveredQuantity || '0');
+      const actualDeliveryQuantity = getActualDeliveredQuantity
+        ? parseFloat(getActualDeliveredQuantity(operatingProductId))
+        : parseFloat(item.deliveredQuantity || '0');
       const damagedQuantity = parseFloat(operatingQuantity || '0');
       actualQuantity = Math.max(0, customerQuantity - (actualDeliveryQuantity - damagedQuantity));
     }
@@ -219,21 +259,11 @@ export function useOrderOperations(
         const updatedOrderItems = orderItems.map(orderItem => {
           if (orderItem.id === operatingProductId) {
             if (operationType === 'SIGN') {
-              // 签收操作：根据租户类型和订单状态更新相应的字段
+              // 签收操作：更新 acceptedQuantity
               const updatedItem: any = {
                 ...orderItem,
                 acceptedQuantity: operatingQuantity
               };
-              
-              // MARKET租户在MARKET_INSPECTING状态下，更新marketInspectedQuantity
-              if (tenantType?.toLowerCase() === 'market' && orderStatus === 'MARKET_INSPECTING') {
-                updatedItem.marketInspectedQuantity = operatingQuantity;
-              }
-              
-              // CUSTOMER租户在CUSTOMER_INSPECTING状态下，更新customerInspectedQuantity
-              if (tenantType?.toLowerCase() === 'customer' && orderStatus === 'CUSTOMER_INSPECTING') {
-                updatedItem.customerInspectedQuantity = operatingQuantity;
-              }
               
               return updatedItem;
             } else if (operationType === 'EXCHANGE') {
@@ -241,15 +271,144 @@ export function useOrderOperations(
               const damagedQuantity = parseFloat(operatingQuantity || '0');
               const currentDeliveredQuantity = parseFloat(orderItem.deliveredQuantity || '0');
               const newDeliveredQuantity = Math.max(0, currentDeliveredQuantity - damagedQuantity);
-              return {
+              
+              // 计算签收数量（实际到货量 - 坏货量）
+              const acceptedQty = newDeliveredQuantity.toString();
+              
+              const updatedItem: any = {
                 ...orderItem,
-                deliveredQuantity: newDeliveredQuantity.toString()
+                deliveredQuantity: newDeliveredQuantity.toString(),
+                acceptedQuantity: acceptedQty
               };
+              
+              return updatedItem;
             }
           }
           return orderItem;
         });
         setOrderItems(updatedOrderItems);
+
+        // 如果是签收操作，更新 inspections 状态
+        if (operationType === 'SIGN' && inspections && setInspections && tenantType) {
+          const currentInspections = [...inspections];
+          const inspectedByType = tenantType.toUpperCase();
+          
+          const inspectionItem: InspectionItem = {
+            orderDetailId: operatingProductId,
+            inspectedQty: operatingQuantity,
+            remark: operatingReason || '签收'
+          };
+          
+          let existingInspectionIndex = -1;
+          
+          if (inspectedByType === 'CUSTOMER') {
+            // CUSTOMER 用户：查找最新的 MARKET inspection，然后查找是否有对应的 CUSTOMER inspection
+            const latestMarketInspection = currentInspections
+              .filter(ins => ins.inspectedByType === 'MARKET' && !ins.parent_id)
+              .sort((a, b) => (b.inspectionRound || 0) - (a.inspectionRound || 0))[0];
+            
+            if (latestMarketInspection) {
+              // 查找是否有 parent_id 等于该 MARKET inspection 的 inspectionId 的 CUSTOMER inspection
+              existingInspectionIndex = currentInspections.findIndex(
+                ins => ins.inspectedByType === 'CUSTOMER' && ins.parent_id === latestMarketInspection.inspectionId
+              );
+            }
+          } else {
+            // MARKET 或 PROVIDER 用户：查找是否有相同 inspectedByType 且没有 parent_id 的 inspection
+            // 查找最新的 round
+            const maxRound = currentInspections
+              .filter(ins => ins.inspectedByType === inspectedByType && !ins.parent_id)
+              .reduce((max, ins) => Math.max(max, ins.inspectionRound || 1), 1);
+            
+            existingInspectionIndex = currentInspections.findIndex(
+              ins => ins.inspectedByType === inspectedByType && 
+                     ins.inspectionRound === maxRound && 
+                     !ins.parent_id
+            );
+          }
+          
+          if (existingInspectionIndex >= 0) {
+            // 更新现有的 inspection，添加或更新 item
+            const existingInspection = currentInspections[existingInspectionIndex];
+            const existingItemIndex = existingInspection.items.findIndex(
+              item => item.orderDetailId === operatingProductId
+            );
+            
+            if (existingItemIndex >= 0) {
+              // 更新现有的 item
+              existingInspection.items[existingItemIndex] = inspectionItem;
+            } else {
+              // 添加新的 item
+              existingInspection.items.push(inspectionItem);
+            }
+            
+            // 更新 result 为 PASS（如果之前是 PENDING）
+            if (existingInspection.result === 'PENDING' || !existingInspection.result) {
+              existingInspection.result = 'PASS';
+            }
+            
+            // 更新 inspectedAt
+            existingInspection.inspectedAt = new Date().toISOString();
+            
+            currentInspections[existingInspectionIndex] = existingInspection;
+          } else {
+            // 创建新的 inspection
+            let newInspection: OrderInspection;
+            
+            if (inspectedByType === 'CUSTOMER') {
+              // CUSTOMER 用户：查找最新的 MARKET inspection
+              const latestMarketInspection = currentInspections
+                .filter(ins => ins.inspectedByType === 'MARKET' && !ins.parent_id)
+                .sort((a, b) => (b.inspectionRound || 0) - (a.inspectionRound || 0))[0];
+              
+              if (latestMarketInspection) {
+                newInspection = {
+                  inspectionId: Date.now(), // 临时ID，实际应该由后端生成
+                  inspectionRound: (latestMarketInspection.inspectionRound || 1) + 1,
+                  inspectedByType: inspectedByType,
+                  inspectedById: user?.id,
+                  result: 'PASS',
+                  inspectedAt: new Date().toISOString(),
+                  parent_id: latestMarketInspection.inspectionId,
+                  items: [inspectionItem]
+                };
+              } else {
+                // 如果没有 MARKET inspection，创建独立的 CUSTOMER inspection
+                const maxRound = currentInspections.length > 0
+                  ? Math.max(...currentInspections.map(ins => ins.inspectionRound || 1))
+                  : 1;
+                newInspection = {
+                  inspectionId: Date.now(),
+                  inspectionRound: maxRound,
+                  inspectedByType: inspectedByType,
+                  inspectedById: user?.id,
+                  result: 'PASS',
+                  inspectedAt: new Date().toISOString(),
+                  items: [inspectionItem]
+                };
+              }
+            } else {
+              // MARKET 或 PROVIDER 用户：创建新的 inspection
+              const maxRound = currentInspections
+                .filter(ins => ins.inspectedByType === inspectedByType && !ins.parent_id)
+                .reduce((max, ins) => Math.max(max, ins.inspectionRound || 1), 1);
+              
+              newInspection = {
+                inspectionId: Date.now(), // 临时ID，实际应该由后端生成
+                inspectionRound: maxRound,
+                inspectedByType: inspectedByType,
+                inspectedById: user?.id,
+                result: 'PASS',
+                inspectedAt: new Date().toISOString(),
+                items: [inspectionItem]
+              };
+            }
+            
+            currentInspections.push(newInspection);
+          }
+          
+          setInspections(currentInspections);
+        }
 
         toast({
           title: '操作成功',

@@ -25,7 +25,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { OrderItem, ReturnExchangeItem, OperationType } from "@/lib/types/orderStatus";
+import { OrderItem, ReturnExchangeItem, OperationType, OrderInspection } from "@/lib/types/orderStatus";
+import { RoundGroupedData, getDeliveredQuantityFromRound, getReceivedQuantityFromRound } from "./order-details/roundGrouping";
 
 interface ProductSignDialogProps {
   // 对话框控制
@@ -66,6 +67,12 @@ interface ProductSignDialogProps {
   // 订单状态
   orderStatus?: string;
   tenantType?: string;
+
+  // 轮数分组数据（用于获取实际到货量）
+  roundGroups?: RoundGroupedData[];
+  
+  // 验收数据（用于CUSTOMER获取实际到货量）
+  inspections?: OrderInspection[];
 }
 
 export default function ProductSignDialog({
@@ -96,9 +103,53 @@ export default function ProductSignDialog({
   orderItems,
   orderStatus,
   tenantType,
+  roundGroups,
+  inspections = [],
 }: ProductSignDialogProps) {
   const currentItem = orderItems.find(item => item.id === operatingProductId);
   const itemRecords = getItemReturnExchangeRecords(operatingProductId);
+
+  // 获取实际到货量
+  // MARKET用户：从deliveries中最近一轮的记录中获取
+  // CUSTOMER用户：从inspections中获取MARKET的验收数量（与商品清单中的发货数量一致）
+  const getActualDeliveredQuantity = (orderDetailId: number): string => {
+    // MARKET用户：从deliveries中最近一轮的记录中获取
+    if (tenantType?.toLowerCase() === 'market') {
+      if (!roundGroups || roundGroups.length === 0) {
+        return "0";
+      }
+      
+      // 找到最新的一轮（isLatest 为 true）
+      const latestRound = roundGroups.find(group => group.isLatest);
+      if (!latestRound || latestRound.deliveries.length === 0) {
+        return "0";
+      }
+      
+      return getDeliveredQuantityFromRound(orderDetailId, latestRound.deliveries);
+    }
+    
+    // CUSTOMER用户：从inspections中获取MARKET的验收数量（与商品清单中的发货数量一致）
+    if (tenantType?.toLowerCase() === 'customer' && inspections && inspections.length > 0) {
+      return getReceivedQuantityFromRound(orderDetailId, "MARKET", inspections);
+    }
+    
+    // 其他情况（PROVIDER等），从deliveries中获取
+    if (!roundGroups || roundGroups.length === 0) {
+      return "0";
+    }
+    
+    // 找到最新的一轮（isLatest 为 true）
+    const latestRound = roundGroups.find(group => group.isLatest);
+    if (!latestRound || latestRound.deliveries.length === 0) {
+      return "0";
+    }
+    
+    return getDeliveredQuantityFromRound(orderDetailId, latestRound.deliveries);
+  };
+
+  const actualDeliveredQuantity = currentItem 
+    ? getActualDeliveredQuantity(currentItem.id)
+    : "0";
 
   const handleDialogClose = () => {
     setShowOperationDialog(false);
@@ -135,17 +186,6 @@ export default function ProductSignDialog({
             <DialogDescription className="text-xs">
               请填写{operationType === 'RETURN' ? '退货' :
                 operationType === 'EXCHANGE' ? '换货' : '签收'}信息
-              {itemRecords.length > 0 && (
-                <Fragment>
-                  <span className="block mt-1 text-red-500 text-xs font-mono">注意：此操作将覆盖该商品之前的退换货记录</span>
-                  {itemRecords.map((record, index) => (
-                    <span key={index} className="block mt-1 text-xs text-gray-500">
-                      之前记录: {record.operationType === 'RETURN' ? '退货' :
-                        record.operationType === 'EXCHANGE' ? '换货' : '签收'} {record.quantity} {record.unit}
-                    </span>
-                  ))}
-                </Fragment>
-              )}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
@@ -157,7 +197,7 @@ export default function ProductSignDialog({
               </div>
               <div className="text-xs">
                 <span className="text-gray-500">实际到货量：</span>
-                <span className="font-mono font-semibold">{currentItem?.deliveredQuantity || '0'} {currentItem?.unit}</span>
+                <span className="font-mono font-semibold">{actualDeliveredQuantity} {currentItem?.unit}</span>
               </div>
             </div>
 
@@ -176,7 +216,7 @@ export default function ProductSignDialog({
                     className={`flex-grow font-mono text-red-600 ${quantityError ? 'border-red-500' : ''}`}
                     step="0.01"
                     min="0"
-                    max={currentItem?.deliveredQuantity || '0'}
+                    max={actualDeliveredQuantity}
                     placeholder="输入坏货数量"
                   />
                 </div>
@@ -193,7 +233,7 @@ export default function ProductSignDialog({
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">实际到货量：</span>
-                      <span className="font-mono">{currentItem?.deliveredQuantity || '0'} {currentItem?.unit}</span>
+                      <span className="font-mono">{actualDeliveredQuantity} {currentItem?.unit}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-red-600">坏货数量：</span>
@@ -205,7 +245,7 @@ export default function ProductSignDialog({
                       <span className="font-mono text-green-600">
                         {(() => {
                           const quantity = parseFloat(currentItem?.orderedQty || '0');
-                          const deliveredQuantity = parseFloat(currentItem?.deliveredQuantity || '0');
+                          const deliveredQuantity = parseFloat(actualDeliveredQuantity);
                           const damagedQuantity = parseFloat(operatingQuantity || '0');
                           const exchangeQuantity = Math.max(0, quantity - (deliveredQuantity - damagedQuantity));
                           return exchangeQuantity.toFixed(2);
@@ -217,12 +257,12 @@ export default function ProductSignDialog({
                   {/* 当换货数量为0时的提示 */}
                   {(() => {
                     const quantity = parseFloat(currentItem?.orderedQty || '0');
-                    const deliveredQuantity = parseFloat(currentItem?.deliveredQuantity || '0');
+                    const deliveredQuantity = parseFloat(actualDeliveredQuantity);
                     const damagedQuantity = parseFloat(operatingQuantity || '0');
                     const exchangeQuantity = Math.max(0, quantity - (deliveredQuantity - damagedQuantity));
 
                     const shouldShowHint = exchangeQuantity === 0 && (
-                      (tenantType?.toLowerCase() === 'market' && orderStatus === 'MARKET_INSPECTING') ||
+                      (tenantType?.toLowerCase() === 'market' && (orderStatus === 'MARKET_INSPECTING' || orderStatus === 'EXCHANGE_INSPECTING')) ||
                       (tenantType?.toLowerCase() === 'customer' && orderStatus === 'CUSTOMER_INSPECTING')
                     );
 
@@ -252,40 +292,57 @@ export default function ProductSignDialog({
                 <Label htmlFor="quantity" className="col-span-4 text-sm">
                   {operationType === 'RETURN' ? '退货' : '签收'}数量 ({currentItem?.unit || ''})
                 </Label>
-                <div className="col-span-4 flex items-center space-x-2">
-                  <Input
-                    id="quantity"
-                    type="number"
-                    value={operatingQuantity || '0'}
-                    onChange={(e) => handleQuantityChange(e.target.value)}
-                    className={`flex-grow font-mono ${operationType !== 'SIGN' ? 'text-red-600' : ''} ${quantityError ? 'border-red-500' : ''}`}
-                    step={(() => {
-                      // 如果是签收操作，且单位是 kg 或 g，则允许小数，否则只允许整数
-                      if (operationType === 'SIGN' && currentItem?.unit) {
-                        const unit = currentItem.unit.toLowerCase();
-                        return (unit === 'kg' || unit === 'g') ? '0.01' : '1';
-                      }
-                      // 退货操作允许小数
-                      return '0.1';
-                    })()}
-                    min="0"
-                  />
-                </div>
-                {quantityError && (
-                  <p className="text-xs text-red-500 col-span-4">{quantityError}</p>
+                {/* 在 MARKET_INSPECTING、EXCHANGE_INSPECTING 或 CUSTOMER_INSPECTING 状态下，退货操作自动退货全部，不显示输入框 */}
+                {operationType === 'RETURN' && 
+                 ((tenantType?.toLowerCase() === 'market' && (orderStatus === 'MARKET_INSPECTING' || orderStatus === 'EXCHANGE_INSPECTING')) ||
+                  (tenantType?.toLowerCase() === 'customer' && orderStatus === 'CUSTOMER_INSPECTING')) ? (
+                  <div className="col-span-4 p-3 bg-blue-50 rounded-md border border-blue-200">
+                    <div className="text-xs text-blue-800">
+                      <p className="font-medium">退货全部数量</p>
+                      <p className="mt-1 font-mono text-base">
+                        {operatingQuantity || '0'} {currentItem?.unit || ''}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="col-span-4 flex items-center space-x-2">
+                      <Input
+                        id="quantity"
+                        type="number"
+                        value={operatingQuantity || '0'}
+                        onChange={(e) => handleQuantityChange(e.target.value)}
+                        className={`flex-grow font-mono ${operationType !== 'SIGN' ? 'text-red-600' : ''} ${quantityError ? 'border-red-500' : ''}`}
+                        step={(() => {
+                          // 如果是签收操作，且单位是 kg 或 g，则允许小数，否则只允许整数
+                          if (operationType === 'SIGN' && currentItem?.unit) {
+                            const unit = currentItem.unit.toLowerCase();
+                            return (unit === 'kg' || unit === 'g') ? '0.01' : '1';
+                          }
+                          // 退货操作允许小数
+                          return '0.1';
+                        })()}
+                        min="0"
+                        max={actualDeliveredQuantity}
+                      />
+                    </div>
+                    {quantityError && (
+                      <p className="text-xs text-red-500 col-span-4">{quantityError}</p>
+                    )}
+                    {/* 全选复选框 */}
+                    <div className="flex items-center space-x-2 col-span-4">
+                      <Checkbox
+                        id="useFullQuantity"
+                        checked={useFullQuantity}
+                        onCheckedChange={(checked) => handleUseFullQuantity(checked === true)}
+                      />
+                      <label
+                        htmlFor="useFullQuantity"
+                        className="text-xs leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                      >全选</label>
+                    </div>
+                  </>
                 )}
-                {/* 全选复选框 */}
-                <div className="flex items-center space-x-2 col-span-4">
-                  <Checkbox
-                    id="useFullQuantity"
-                    checked={useFullQuantity}
-                    onCheckedChange={(checked) => handleUseFullQuantity(checked === true)}
-                  />
-                  <label
-                    htmlFor="useFullQuantity"
-                    className="text-xs leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >全选</label>
-                </div>
               </div>
             )}
 
@@ -370,7 +427,7 @@ export default function ProductSignDialog({
                   <p className="text-xs">换货数量: <span className="font-mono font-semibold text-green-600 ml-2">
                     {(() => {
                       const quantity = parseFloat(currentItem?.orderedQty || '0');
-                      const deliveredQuantity = parseFloat(currentItem?.deliveredQuantity || '0');
+                      const deliveredQuantity = parseFloat(actualDeliveredQuantity);
                       const damagedQuantity = parseFloat(operatingQuantity || '0');
                       const exchangeQuantity = Math.max(0, quantity - (deliveredQuantity - damagedQuantity));
                       return exchangeQuantity.toFixed(2);

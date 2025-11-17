@@ -218,8 +218,8 @@ export function ExchangeOrderPage({ orderCode, orgId, tenantType }: ExchangeOrde
       productCode: item.productId,
       productName: item.name,
       quantity: requestedQuantity,
-      price: parseFloat(item.price),
-      totalAmount: requestedQuantity * parseFloat(item.price),
+      price: parseFloat(item.unitPrice),
+      totalAmount: requestedQuantity * parseFloat(item.unitPrice),
       status: 'PENDING' as const, // 这里需要根据实际状态映射
       shippedAt: null,
       receivedAt: null,

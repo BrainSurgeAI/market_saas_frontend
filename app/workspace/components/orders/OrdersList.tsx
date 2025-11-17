@@ -23,10 +23,10 @@ import {
 } from "@/components/ui/pagination";
 import { OrderOverview } from "@/app/workspace/types";
 import { getStatusVariant, translateOrderStatus } from "@/lib/utils";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { Provider } from "@/app/workspace/markets/[market_id]/orders/page";
 import { Button } from "@/components/ui/button";
-import { Search, HelpCircle } from "lucide-react";
+import { Search, HelpCircle, Calendar, MapPin, DollarSign, Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -328,7 +328,7 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 	};
 
 	// 添加更新订单的方法
-	const updateOrder = (orderCode: string, updates: Partial<OrderOverview>) => {
+	const updateOrder = useCallback((orderCode: string, updates: Partial<OrderOverview>) => {
 		setOrders(prevOrders =>
 			prevOrders.map(order =>
 				order.orderCode === orderCode
@@ -345,7 +345,19 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 				return newSet;
 			});
 		}
-	};
+	}, []);
+
+	// 将updateOrder方法暴露到window对象，供父组件调用
+	useEffect(() => {
+		if (typeof window !== 'undefined') {
+			window.updateOrderInList = updateOrder;
+		}
+		return () => {
+			if (typeof window !== 'undefined') {
+				delete window.updateOrderInList;
+			}
+		};
+	}, [updateOrder]);
 
 	// 处理点击指派按钮的逻辑
 	const handleAssignButtonClick = (orderCode: string, e: React.MouseEvent) => {
@@ -371,7 +383,35 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 				<CardHeader>
 					<CardTitle></CardTitle>
 					{/* 添加搜索框和状态筛选下拉菜单 */}
-					<div className="flex items-center space-x-2">
+					{/* 移动端布局 */}
+					<div className="block md:hidden space-y-2">
+						<div className="relative">
+							<Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+							<Input
+								type="search"
+								placeholder="搜索订单编号..."
+								className="pl-8 text-sm"
+								value={searchQuery}
+								onChange={(e) => setSearchQuery(e.target.value)}
+							/>
+						</div>
+						<Select value={statusFilter} onValueChange={setStatusFilter}>
+							<SelectTrigger className="text-sm w-full">
+								<SelectValue placeholder="筛选订单状态" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectGroup>
+									{statusOptions.map((option) => (
+										<SelectItem key={option.value} value={option.value} className="text-sm">
+											{option.label}
+										</SelectItem>
+									))}
+								</SelectGroup>
+							</SelectContent>
+						</Select>
+					</div>
+					{/* 桌面端布局 */}
+					<div className="hidden md:flex items-center space-x-2">
 						<div className="relative flex-1">
 							<Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
 							<Input
@@ -417,98 +457,217 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 						</div>
 					) : (
 						<>
-							<Table>
-								<TableHeader className="text-xs font-semibold bg-gray-100 text-gray-900">
-									<TableRow>
-										<TableHead className="w-[250px]">#订单编号</TableHead>
-										<TableHead>送货地址</TableHead>
-										<TableHead>送货日期</TableHead>
-										<TableHead>状态</TableHead>
-										<TableHead className="text-left">下单金额(元)</TableHead>
-										<TableHead className="text-left">
-											<div className="flex items-center gap-1">
-												<span>实际金额(元)</span>
-												<TooltipProvider>
-													<Tooltip>
-														<TooltipTrigger asChild>
-															<HelpCircle className="h-3.5 w-3.5 text-gray-500 cursor-help" />
-														</TooltipTrigger>
-														<TooltipContent>
-															<p>订单完成后显示实际金额</p>
-														</TooltipContent>
-													</Tooltip>
-												</TooltipProvider>
+							{/* 移动端卡片布局 */}
+							<div className="block md:hidden space-y-3">
+								{filteredOrders.map((order) => (
+									<Card
+										key={order.orderCode}
+										className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+										onClick={() => handleOrderClick(order.orderCode)}
+									>
+										<div className="space-y-3">
+											{/* 订单编号和状态 */}
+											<div className="flex items-start justify-between">
+												<div className="flex items-start gap-2 flex-1">
+													<Package className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+													<div className="flex-1">
+														<h3 className="font-mono font-semibold text-sm text-gray-900">
+															#{order.orderCode}
+														</h3>
+													</div>
+												</div>
+												<div className="ml-2 flex-shrink-0">
+													{order.orderStatus === "EXCHANGE_REQUESTED" && order.afterSaleAt ? (
+														<TooltipProvider>
+															<Tooltip 
+																onOpenChange={(open) => {
+																	if (open && order.afterSaleAt) {
+																		handleTooltipOpen(order.orderCode, order.afterSaleAt);
+																	} else {
+																		handleTooltipClose();
+																	}
+																}}
+															>
+																<TooltipTrigger asChild>
+																	<div>
+																		<Badge variant={getStatusVariant(order.orderStatus)} className="rounded-full text-xs">
+																			{translateOrderStatus(order.orderStatus)}
+																		</Badge>
+																	</div>
+																</TooltipTrigger>
+																<TooltipContent className="bg-gray-800 text-white text-xs px-3 py-1">
+																	<p>
+																		处理剩余时间: {countdowns[order.orderCode] || (order.afterSaleAt && calculateAfterSaleRemainingTime(order.afterSaleAt))}
+																	</p>
+																</TooltipContent>
+															</Tooltip>
+														</TooltipProvider>
+													) : (
+														<Badge variant={getStatusVariant(order.orderStatus)} className="rounded-full text-xs">
+															{translateOrderStatus(order.orderStatus)}
+														</Badge>
+													)}
+												</div>
 											</div>
-										</TableHead>
-										{providers && providers.length > 0 && (
-											<TableHead className="text-right">操作</TableHead>
-										)}
-									</TableRow>
-								</TableHeader>
-								<TableBody>
-									{filteredOrders.map((order) => (
-										<TableRow
-											key={order.orderCode}
-											className="cursor-pointer hover:bg-gray-50 text-xs"
-											onClick={() => handleOrderClick(order.orderCode)}>
-											<TableCell className="font-mono">#{order.orderCode}</TableCell>
-											<TableCell className="max-w-[200px] truncate" title={order.deliveryAddress}>
-												{order.deliveryAddress.length > 15 ? `${order.deliveryAddress.slice(0, 30)}...` : order.deliveryAddress}
-											</TableCell>
-											<TableCell>
-												{format(new Date(order.deliveryDate), "yyyy年MM月dd日")}
-											</TableCell>
-											<TableCell>
-												{order.orderStatus === "EXCHANGE_REQUESTED" && order.afterSaleAt ? (
-													<TooltipProvider>
-														<Tooltip 
-															onOpenChange={(open) => {
-																if (open && order.afterSaleAt) {
-																	handleTooltipOpen(order.orderCode, order.afterSaleAt);
-																} else {
-																	handleTooltipClose();
-																}
-															}}
-														>
-															<TooltipTrigger asChild>
-																<div>
-																	<Badge variant={getStatusVariant(order.orderStatus)} className="rounded-full">
-																		{translateOrderStatus(order.orderStatus)}
-																	</Badge>
-																</div>
-															</TooltipTrigger>
-															<TooltipContent className="bg-gray-800 text-white text-xs px-3 py-1">
-																<p>
-																	处理剩余时间: {countdowns[order.orderCode] || (order.afterSaleAt && calculateAfterSaleRemainingTime(order.afterSaleAt))}
-																</p>
-															</TooltipContent>
-														</Tooltip>
-													</TooltipProvider>
-												) : (
-													<Badge variant={getStatusVariant(order.orderStatus)} className="rounded-full">
-														{translateOrderStatus(order.orderStatus)}
-													</Badge>
-												)}
-											</TableCell>
-											<TableCell className="text-left font-mono">
-												￥{order.totalAmount}
-											</TableCell>
-											<TableCell className="text-left font-mono">
-												￥{order.actualAmount}
-											</TableCell>
+
+											{/* 送货信息 */}
+											<div className="space-y-2">
+												<div className="flex items-start gap-2">
+													<MapPin className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
+													<div className="flex-1">
+														<div className="text-xs text-gray-500">送货地址</div>
+														<div className="text-sm text-gray-900 mt-0.5">{order.deliveryAddress}</div>
+													</div>
+												</div>
+												<div className="flex items-start gap-2">
+													<Calendar className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
+													<div className="flex-1">
+														<div className="text-xs text-gray-500">送货日期</div>
+														<div className="text-sm text-gray-900 mt-0.5">
+															{format(new Date(order.deliveryDate), "yyyy年MM月dd日")}
+														</div>
+													</div>
+												</div>
+											</div>
+
+											{/* 金额信息 */}
+											<div className="grid grid-cols-2 gap-2 border-t pt-2">
+												<div className="bg-gray-50 p-2 rounded">
+													<div className="text-xs text-gray-500">下单金额</div>
+													<div className="font-mono font-semibold mt-1 text-sm">￥{order.totalAmount}</div>
+												</div>
+												<div className="bg-gray-50 p-2 rounded">
+													<div className="flex items-center gap-1 text-xs text-gray-500">
+														<span>实际金额</span>
+														<TooltipProvider>
+															<Tooltip>
+																<TooltipTrigger asChild>
+																	<HelpCircle className="h-3 w-3 text-gray-400 cursor-help" />
+																</TooltipTrigger>
+																<TooltipContent>
+																	<p className="text-xs">订单完成后显示实际金额</p>
+																</TooltipContent>
+															</Tooltip>
+														</TooltipProvider>
+													</div>
+													<div className="font-mono font-semibold mt-1 text-sm text-blue-600">￥{order.actualAmount}</div>
+												</div>
+											</div>
+
+											{/* 操作按钮 */}
 											{providers && providers.length > 0 && (
-												<TableCell className="text-right">
+												<div className="flex justify-end border-t pt-2">
 													{order.orderStatus === "PENDING" && !order.assignedTo && !assignedOrders.has(order.orderCode) && (
-														<Button size="sm" variant="outline" onClick={(e) => handleAssignButtonClick(order.orderCode, e)}>
+														<Button 
+															size="sm" 
+															variant="outline" 
+															onClick={(e) => handleAssignButtonClick(order.orderCode, e)}
+														>
 															指派
 														</Button>
 													)}
-												</TableCell>
+												</div>
+											)}
+										</div>
+									</Card>
+								))}
+							</div>
+
+							{/* 桌面端表格布局 */}
+							<div className="hidden md:block">
+								<Table>
+									<TableHeader className="text-xs font-semibold bg-gray-100 text-gray-900">
+										<TableRow>
+											<TableHead className="w-[250px]">#订单编号</TableHead>
+											<TableHead>送货地址</TableHead>
+											<TableHead>送货日期</TableHead>
+											<TableHead>状态</TableHead>
+											<TableHead className="text-left">下单金额(元)</TableHead>
+											<TableHead className="text-left">
+												<div className="flex items-center gap-1">
+													<span>实际金额(元)</span>
+													<TooltipProvider>
+														<Tooltip>
+															<TooltipTrigger asChild>
+																<HelpCircle className="h-3.5 w-3.5 text-gray-500 cursor-help" />
+															</TooltipTrigger>
+															<TooltipContent>
+																<p>订单完成后显示实际金额</p>
+															</TooltipContent>
+														</Tooltip>
+													</TooltipProvider>
+												</div>
+											</TableHead>
+											{providers && providers.length > 0 && (
+												<TableHead className="text-right">操作</TableHead>
 											)}
 										</TableRow>
-									))}
-								</TableBody>
-							</Table>
+									</TableHeader>
+									<TableBody>
+										{filteredOrders.map((order) => (
+											<TableRow
+												key={order.orderCode}
+												className="cursor-pointer hover:bg-gray-50 text-xs"
+												onClick={() => handleOrderClick(order.orderCode)}>
+												<TableCell className="font-mono">#{order.orderCode}</TableCell>
+												<TableCell className="max-w-[200px] truncate" title={order.deliveryAddress}>
+													{order.deliveryAddress.length > 15 ? `${order.deliveryAddress.slice(0, 30)}...` : order.deliveryAddress}
+												</TableCell>
+												<TableCell>
+													{format(new Date(order.deliveryDate), "yyyy年MM月dd日")}
+												</TableCell>
+												<TableCell>
+													{order.orderStatus === "EXCHANGE_REQUESTED" && order.afterSaleAt ? (
+														<TooltipProvider>
+															<Tooltip 
+																onOpenChange={(open) => {
+																	if (open && order.afterSaleAt) {
+																		handleTooltipOpen(order.orderCode, order.afterSaleAt);
+																	} else {
+																		handleTooltipClose();
+																	}
+																}}
+															>
+																<TooltipTrigger asChild>
+																	<div>
+																		<Badge variant={getStatusVariant(order.orderStatus)} className="rounded-full">
+																			{translateOrderStatus(order.orderStatus)}
+																		</Badge>
+																	</div>
+																</TooltipTrigger>
+																<TooltipContent className="bg-gray-800 text-white text-xs px-3 py-1">
+																	<p>
+																		处理剩余时间: {countdowns[order.orderCode] || (order.afterSaleAt && calculateAfterSaleRemainingTime(order.afterSaleAt))}
+																	</p>
+																</TooltipContent>
+															</Tooltip>
+														</TooltipProvider>
+													) : (
+														<Badge variant={getStatusVariant(order.orderStatus)} className="rounded-full">
+															{translateOrderStatus(order.orderStatus)}
+														</Badge>
+													)}
+												</TableCell>
+												<TableCell className="text-left font-mono">
+													￥{order.totalAmount}
+												</TableCell>
+												<TableCell className="text-left font-mono">
+													￥{order.actualAmount}
+												</TableCell>
+												{providers && providers.length > 0 && (
+													<TableCell className="text-right">
+														{order.orderStatus === "PENDING" && !order.assignedTo && !assignedOrders.has(order.orderCode) && (
+															<Button size="sm" variant="outline" onClick={(e) => handleAssignButtonClick(order.orderCode, e)}>
+																指派
+															</Button>
+														)}
+													</TableCell>
+												)}
+											</TableRow>
+										))}
+									</TableBody>
+								</Table>
+							</div>
 							<div className="mt-6">
 								<Pagination>
 									<PaginationContent>

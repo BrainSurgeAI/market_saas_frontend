@@ -14,7 +14,7 @@ export async function PATCH(
     logger.debug(JSON.stringify(payload));
 
     const response = await fetchRemoteData({
-      endpoint: `/orders/${order_code}/update-exchange-item-actual`,
+      endpoint: `/orders/${order_code}/exchange-items/${payload.orderDetailId}`,
       method: 'PATCH',
       body: payload,
       needToken: true,

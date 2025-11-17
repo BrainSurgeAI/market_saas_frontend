@@ -2,8 +2,9 @@
 
 import { Fragment, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronDownIcon, Loader2, AlertCircle } from "lucide-react";
+import { ChevronDownIcon, Loader2, AlertCircle, Package, Calendar, DollarSign } from "lucide-react";
 import { format } from "date-fns";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -207,7 +208,149 @@ export function ExchangeItemsTable({
 
   return (
     <>
-      <div className="overflow-x-auto">
+      {/* 移动端卡片布局 */}
+      <div className="block md:hidden space-y-3">
+        {items.map((item) => (
+          <Card key={item.id} className={`p-4 ${statusColorMap[item.status]}`}>
+            <div className="space-y-3">
+              {/* 商品信息 */}
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-start gap-2">
+                    <Package className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-sm text-gray-900">{item.productName}</h3>
+                      <p className="text-xs text-gray-500 mt-1">编号: {item.productCode}</p>
+                    </div>
+                  </div>
+                </div>
+                <Badge variant={getStatusVariant(item.status)} className="text-xs flex-shrink-0">
+                  {item.status === ExchangeItemStatus.PENDING ? "待确认" : getStatusLabel(item.status)}
+                </Badge>
+              </div>
+
+              {/* 数量信息 */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-gray-50 p-2 rounded">
+                  <div className="text-xs text-gray-500">换货数量</div>
+                  <div className="font-mono font-semibold mt-1 text-sm">{item.quantity}</div>
+                </div>
+                <div className="bg-gray-50 p-2 rounded">
+                  <div className="text-xs text-gray-500">实际换货量</div>
+                  {editingItemId === item.id ? (
+                    <div className="flex items-center gap-1 mt-1">
+                      <Input
+                        type="number"
+                        value={editingActualQuantity}
+                        onChange={(e) => setEditingActualQuantity(e.target.value)}
+                        className="h-7 text-xs flex-1"
+                        step="0.01"
+                        min="0"
+                        autoFocus
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        onClick={() => handleSaveEditing(item.id)}
+                      >
+                        ✓
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        onClick={handleCancelEditing}
+                      >
+                        ✕
+                      </Button>
+                    </div>
+                  ) : (
+                    <div
+                      className={`font-mono font-semibold mt-1 text-sm ${
+                        ((item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
+                         (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING'))
+                          ? "cursor-pointer hover:text-blue-600" 
+                          : ""
+                      }`}
+                      onClick={() => {
+                        const canEdit = 
+                          (item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
+                          (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING');
+                        if (canEdit) {
+                          handleStartEditing(item.id, item.actualQuantity || 0);
+                        }
+                      }}
+                    >
+                      {item.actualQuantity || 
+                        ((item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
+                         (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING')
+                          ? '点击编辑' 
+                          : '-')}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 价格信息 */}
+              <div className="grid grid-cols-2 gap-2 border-t pt-2">
+                <div>
+                  <div className="text-xs text-gray-500">单价</div>
+                  <div className="font-mono font-semibold mt-1 text-sm">¥{item.price.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">总金额</div>
+                  <div className="font-mono font-semibold mt-1 text-sm text-blue-600">¥{item.totalAmount.toFixed(2)}</div>
+                </div>
+              </div>
+
+              {/* 时间信息 */}
+              {(item.shippedAt || item.receivedAt) && (
+                <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2">
+                  {item.shippedAt && (
+                    <div className="flex items-center gap-1 text-gray-600">
+                      <Calendar className="h-3 w-3" />
+                      <span>发货: {format(new Date(item.shippedAt), "MM-dd HH:mm")}</span>
+                    </div>
+                  )}
+                  {item.receivedAt && (
+                    <div className="flex items-center gap-1 text-gray-600">
+                      <Calendar className="h-3 w-3" />
+                      <span>收货: {format(new Date(item.receivedAt), "MM-dd HH:mm")}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 操作按钮 */}
+              <div className="flex justify-end border-t pt-2">
+                {orderStatus === 'EXCHANGE_REQUESTED' ? (
+                  <Badge variant="outline" className="rounded-full bg-gray-50 text-gray-500 border-gray-200 text-xs">
+                    待确认
+                  </Badge>
+                ) : (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_DELIVERING') ? (
+                  <Badge variant="outline" className="rounded-full bg-gray-50 text-gray-500 border-gray-200 text-xs">
+                    -
+                  </Badge>
+                ) : (
+                  <ExchangeItemOperationMenu
+                    item={item}
+                    tenantType={tenantType}
+                    orderStatus={orderStatus}
+                    canPerformAction={canPerformAction}
+                    onActionClick={handleActionClick}
+                    onOperation={onOperation}
+                    getActionLabel={getActionLabel}
+                  />
+                )}
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {/* 桌面端表格布局 */}
+      <div className="hidden md:block overflow-x-auto">
         <div className="relative" style={{ maxHeight: "600px", overflowY: "auto", zIndex: 40 }}>
           <Table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
             <colgroup>
@@ -286,10 +429,26 @@ export function ExchangeItemsTable({
                         </div>
                       ) : (
                         <span
-                          className={(item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ? "cursor-pointer hover:bg-gray-100 px-2 py-1 rounded" : ""}
-                          onClick={() => (item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') && handleStartEditing(item.id, item.actualQuantity || 0)}
+                          className={
+                            (item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
+                            (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING')
+                              ? "cursor-pointer hover:bg-gray-100 px-2 py-1 rounded" 
+                              : ""
+                          }
+                          onClick={() => {
+                            const canEdit = 
+                              (item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
+                              (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING');
+                            if (canEdit) {
+                              handleStartEditing(item.id, item.actualQuantity || 0);
+                            }
+                          }}
                         >
-                          {item.actualQuantity || ((item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ? '点击编辑' : '-')}
+                          {item.actualQuantity || 
+                            ((item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
+                             (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING')
+                              ? '点击编辑' 
+                              : '-')}
                         </span>
                       )}
                     </TableCell>
@@ -320,6 +479,11 @@ export function ExchangeItemsTable({
                       {orderStatus === 'EXCHANGE_REQUESTED' ? (
                         <Badge variant="outline" className="rounded-full bg-gray-50 text-gray-500 border-gray-200 text-xs">
                           待确认
+                        </Badge>
+                      ) : (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_DELIVERING') ? (
+                        // MARKET用户在EXCHANGE_DELIVERING状态下不显示操作菜单，因为还没有开始验收
+                        <Badge variant="outline" className="rounded-full bg-gray-50 text-gray-500 border-gray-200 text-xs">
+                          -
                         </Badge>
                       ) : (
                         <ExchangeItemOperationMenu
@@ -442,7 +606,12 @@ function ExchangeItemOperationMenu({
   const availableActions = useMemo(() => {
     const actions: Array<{ key: string; label: string; variant?: "destructive" }> = [];
 
-    // MARKET用户在EXCHANGE_INSPECTING状态下显示签收、退货、换货选项
+    // MARKET用户在EXCHANGE_DELIVERING状态下不显示操作菜单，因为还没有开始验收
+    if (tenant === TenantType.MARKET && orderStatus === 'EXCHANGE_DELIVERING') {
+      return actions; // 返回空数组，不显示任何操作
+    }
+
+    // MARKET用户在EXCHANGE_INSPECTING状态下显示签收、退货、换货选项（和商品清单一样）
     if (tenant === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING') {
       actions.push({ key: "sign", label: "签收" });
       actions.push({ key: "return", label: "退货", variant: "destructive" });
@@ -459,7 +628,9 @@ function ExchangeItemOperationMenu({
       }
     }
 
-    if (tenant === TenantType.MARKET) {
+    // MARKET用户在EXCHANGE_DELIVERING状态下不显示操作菜单（已在前面提前返回）
+    // 这里只处理其他状态下的MARKET用户操作
+    if (tenant === TenantType.MARKET && orderStatus !== 'EXCHANGE_DELIVERING') {
       if (canPerformAction(item, "receive")) {
         actions.push({ key: "receive", label: "确认收货" });
       }

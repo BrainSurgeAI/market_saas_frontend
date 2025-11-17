@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { OrderDetail, OrderItem, OrderStatus, TenantType, DeliveryPerson, OperationType } from '@/lib/types/orderStatus';
+import { Order, OrderItem, OrderStatus, TenantType, DeliveryPerson, OperationType } from '@/lib/types/orderStatus';
 import { useToast } from '@/hooks/use-toast';
 
 export function useOrderActions(
@@ -8,8 +8,8 @@ export function useOrderActions(
   tenantType: string,
   user: any,
   params: any,
-  orderDetail: OrderDetail | null,
-  setOrderDetail: (detail: OrderDetail) => void,
+  orderDetail: Order | null,
+  setOrderDetail: (detail: Order) => void,
   returnExchangeRecords: any[],
   orderItems: OrderItem[]
 ) {

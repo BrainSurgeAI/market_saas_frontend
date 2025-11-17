@@ -117,7 +117,12 @@ export function shouldShowReceivedQuantityColumns(status: OrderStatus | string, 
   const tenantLower = tenantType.toLowerCase();
   const statusEnum = status as OrderStatus;
   
-  // 显示接收数量列的状态
+  // PROVIDER和MARKET用户在任何订单状态下都应该显示市场接收和客户接收列
+  if (tenantLower === TenantType.PROVIDER || tenantLower === TenantType.MARKET) {
+    return true;
+  }
+  
+  // 显示接收数量列的状态（用于CUSTOMER用户）
   const showColumnsStatuses = new Set([
     OrderStatus.MARKET_INSPECTING,
     OrderStatus.EXCHANGE_INSPECTING,
@@ -125,7 +130,7 @@ export function shouldShowReceivedQuantityColumns(status: OrderStatus | string, 
     OrderStatus.MARKET_ACCEPTED,
   ]);
 
-  if (tenantLower === TenantType.MARKET || tenantLower === TenantType.CUSTOMER) {
+  if (tenantLower === TenantType.CUSTOMER) {
     return showColumnsStatuses.has(statusEnum);
   }
 

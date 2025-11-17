@@ -70,13 +70,22 @@ export default function ProviderOrdersPage() {
 				throw new Error(`指派订单失败: ${response.status}, ${errorText}`);
 			}
 
-			// 更新本地订单列表，将指派的订单的assignedTo设为非空值，这样按钮就会隐藏
+			// 尝试从响应中获取更新后的订单数据
+			let responseData;
+			try {
+				responseData = await response.json();
+			} catch {
+				responseData = null;
+			}
+
+			// 更新本地订单列表，将指派的订单的assignedTo设为非空值，状态更新为ASSIGNED
 			const selectedProviderObj = providers.find(p => p.id === selectedProvider);
 
 			// 使用OrdersList组件暴露的updateOrderInList方法更新订单
 			if (typeof window !== 'undefined' && window.updateOrderInList) {
 				window.updateOrderInList(currentOrderCode, {
-					assignedTo: selectedProviderObj?.name || '已指派'
+					assignedTo: selectedProviderObj?.name || '已指派',
+					orderStatus: responseData?.orderStatus || 'ASSIGNED' // 更新订单状态为已指派
 				});
 			}
 

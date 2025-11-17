@@ -68,6 +68,7 @@ export function ProcurementPage({ user, organization, userRole }: ProcurementPag
 
 	const [selectedCartItemId, setSelectedCartItemId] = useState<string | null>(null);
 	const [showQuantityDialog, setShowQuantityDialog] = useState(false);
+	const [showMobileCart, setShowMobileCart] = useState(false);
 
 	// 在state区域添加一个新的状态变量
 	const [activeCategroyId, setActiveCategroyId] = useState<string>("all");
@@ -767,9 +768,21 @@ export function ProcurementPage({ user, organization, userRole }: ProcurementPag
 	}, [cartItems, organization.nameHash]);
 
 	return (
-		<div className="container mx-auto py-4">
+		<div className="container mx-auto py-4 px-4 md:px-6">
 			<div className="flex flex-col space-y-4">
-				<div className="flex justify-between items-center">
+				{/* 移动端顶部布局 */}
+				<div className="block md:hidden space-y-2">
+					<div>
+						<h3 className="text-lg font-semibold">商品采购</h3>
+						<p className="text-xs text-gray-500 mt-1">欢迎回来，{user.name}</p>
+					</div>
+					<div className="flex items-center text-xs text-gray-500">
+						<Calendar className="h-3.5 w-3.5 mr-1" />
+						<span>今日: {new Date().toLocaleDateString()}</span>
+					</div>
+				</div>
+				{/* 桌面端顶部布局 */}
+				<div className="hidden md:flex justify-between items-center">
 					<div>
 						<h3 className="text-xl font-semibold">商品采购</h3>
 						<p className="text-sm text-gray-500">欢迎回来，{user.name}</p>
@@ -781,8 +794,8 @@ export function ProcurementPage({ user, organization, userRole }: ProcurementPag
 						</div>
 					</div>
 				</div>
-				<div className="flex gap-4">
-					<div className="flex-1">
+				<div className="flex flex-col md:flex-row gap-4">
+					<div className="flex-1 pb-20 md:pb-0">
 						<SearchBar
 							searchTerm={searchTerm}
 							onSearchChange={handleSearchChange}
@@ -804,8 +817,62 @@ export function ProcurementPage({ user, organization, userRole }: ProcurementPag
 						/>
 					</div>
 
-					{/* 采购清单 - 显示在右侧 */}
-					<div className="w-[350px] shrink-0">
+					{/* 采购清单 - 移动端底部浮动，桌面端右侧固定 */}
+					{/* 移动端底部浮动按钮 - 始终显示 */}
+					<div className="block md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 p-3">
+						{cartItems.length > 0 ? (
+							<Button
+								className="w-full bg-primary hover:bg-primary/90 text-white h-12 text-base font-semibold"
+								onClick={() => setShowMobileCart(true)}>
+								<ShoppingCart className="h-5 w-5 mr-2" />
+								采购清单 ({cartItems.length} 项)
+								<span className="ml-auto font-mono">¥{cartTotal.toFixed(2)}</span>
+							</Button>
+						) : (
+							<Button
+								variant="outline"
+								className="w-full h-12 text-base border-gray-300"
+								onClick={() => setShowMobileCart(true)}>
+								<ShoppingCart className="h-5 w-5 mr-2" />
+								查看采购清单
+								<span className="text-xs text-gray-500 ml-2">(空)</span>
+							</Button>
+						)}
+					</div>
+					{/* 移动端购物车对话框 */}
+					<AlertDialog open={showMobileCart} onOpenChange={setShowMobileCart}>
+						<AlertDialogContent className="max-w-[95vw] max-h-[85vh] overflow-hidden flex flex-col">
+							<AlertDialogHeader>
+								<AlertDialogTitle className="text-base font-semibold flex items-center justify-between">
+									<span>采购清单</span>
+									{cartItems.length > 0 && (
+										<Badge className="bg-primary text-white text-xs">
+											{cartItems.length} 项
+										</Badge>
+									)}
+								</AlertDialogTitle>
+							</AlertDialogHeader>
+							<div className="flex-1 overflow-y-auto -mx-6 px-6">
+								{renderCartContent()}
+							</div>
+							{cartItems.length > 0 && (
+								<AlertDialogFooter className="flex-col gap-2 sm:flex-row border-t pt-4">
+									<AlertDialogCancel className="w-full sm:w-auto">取消</AlertDialogCancel>
+									<AlertDialogAction 
+										onClick={() => {
+											setShowMobileCart(false);
+											handleCheckout();
+										}}
+										className="w-full sm:w-auto bg-primary hover:bg-primary/90">
+										确认采购 (¥{cartTotal.toFixed(2)})
+									</AlertDialogAction>
+								</AlertDialogFooter>
+							)}
+						</AlertDialogContent>
+					</AlertDialog>
+
+					{/* 桌面端右侧固定 */}
+					<div className="hidden md:block w-[350px] shrink-0">
 						<Card className="bg-white sticky top-4">
 							<CardHeader className="pb-2 flex flex-row items-center justify-between">
 								<div className="flex items-center">

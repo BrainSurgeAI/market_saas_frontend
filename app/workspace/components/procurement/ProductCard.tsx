@@ -39,7 +39,58 @@ export function ProductCard({ product, onAddToCart, onViewDetail }: ProductCardP
 
 	return (
 		<>
-			<div className={`bg-white rounded-md border border-gray-200 overflow-hidden cursor-pointer transition-all duration-300 
+			{/* 移动端卡片布局 */}
+			<div className={`block md:hidden bg-white rounded-lg border border-gray-200 overflow-hidden cursor-pointer transition-all duration-300 shadow-sm hover:shadow-md
+				${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`} onClick={() => onViewDetail(product)}>
+				<div className="flex gap-3 p-3">
+					{/* 商品图片 */}
+					<div className="relative w-24 h-24 flex-shrink-0 rounded-md overflow-hidden bg-gray-100">
+						{!isLoaded && (
+							<div className="w-full h-full flex items-center justify-center">
+								<div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+							</div>
+						)}
+						<Image
+							src={product.image || "/images/default-product.png"}
+							alt={product.name}
+							fill
+							sizes="96px"
+							className={`object-cover ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+							onLoad={handleImageLoad}
+							onError={handleImageError}
+						/>
+						{hasError && (
+							<div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+								<span className="text-xs text-gray-500">加载失败</span>
+							</div>
+						)}
+					</div>
+					{/* 商品信息 */}
+					<div className="flex-1 min-w-0 flex flex-col justify-between">
+						<div>
+							<h3 className="text-sm font-semibold text-gray-900 line-clamp-2 mb-1">{product.name}</h3>
+							<p className="text-xs text-gray-500">{product.category}</p>
+						</div>
+						<div className="flex items-center justify-between mt-2">
+							<p className="text-base font-mono font-semibold text-primary">
+								¥{typeof product.price === 'number' ? product.price.toFixed(2) : product.price}
+								<span className="text-xs text-gray-500 font-normal">/{product.unit}</span>
+							</p>
+							<Button
+								variant="default"
+								size="sm"
+								className="h-8 px-3 rounded-full bg-primary hover:bg-primary/90 text-white"
+								onClick={handleAddToCart}>
+								<ShoppingCart className="h-4 w-4 mr-1" />
+								<span className="text-xs">加入</span>
+							</Button>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			{/* 桌面端卡片布局 */}
+			<div className={`hidden md:block bg-white rounded-md border border-gray-200 overflow-hidden cursor-pointer transition-all duration-300 
 				${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`} onClick={() => onViewDetail(product)}>
 				<div className="relative">
 					<div className="w-full aspect-square overflow-hidden group relative">
