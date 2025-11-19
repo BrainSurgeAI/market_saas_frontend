@@ -89,6 +89,8 @@ export function RoundProductList({
   const isExchangeInProgress = orderDetail?.orderStatus === "EXCHANGE_IN_PROGRESS";
   const isLatestRound = group.isLatest;
 
+  // group.inspections已经只包含当前轮次的inspections
+
   return (
     <Card className={isLatestRound ? "border-2 border-blue-500 shadow-lg shadow-blue-100" : ""}>
       {showRoundTitle && (
@@ -131,17 +133,9 @@ export function RoundProductList({
             const canEditQuantity = canEdit && canEditThisRound;
 
             // 获取数量显示值
-            // 对于换货配送的轮次，只显示该轮次的验收数据；对于正常配送的轮次，显示所有验收数据
-            const marketReceivedQtyForDisplay = hasExchangeDelivery
-              ? getReceivedQuantityFromRound(item.id, "MARKET", group.inspections)
-              : ((isProvider || isMarket)
-                ? getInspectedQuantityForDisplay(item.id, "MARKET", inspections)
-                : getReceivedQuantityFromRound(item.id, "MARKET", group.inspections));
-            const customerReceivedQtyForDisplay = hasExchangeDelivery
-              ? getReceivedQuantityFromRound(item.id, "CUSTOMER", group.inspections)
-              : ((isProvider || isMarket)
-                ? getInspectedQuantityForDisplay(item.id, "CUSTOMER", inspections)
-                : getReceivedQuantityFromRound(item.id, "CUSTOMER", group.inspections));
+            // 每个轮次都只显示该轮次的验收数据，不累加之前轮次的数据
+            const marketReceivedQtyForDisplay = getReceivedQuantityFromRound(item.id, "MARKET", group.inspections);
+            const customerReceivedQtyForDisplay = getReceivedQuantityFromRound(item.id, "CUSTOMER", group.inspections);
             
             const deliveredQuantityFromRound = isCustomer
               ? getReceivedQuantityFromRound(item.id, "MARKET", group.inspections)
@@ -348,17 +342,9 @@ export function RoundProductList({
                 const canEditThisRound = isProvider && isExchangeInProgress ? isLatestRound : true;
                 const canEditQuantity = canEdit && canEditThisRound;
 
-                // 对于换货配送的轮次，只显示该轮次的验收数据；对于正常配送的轮次，显示所有验收数据
-                const marketReceivedQty = hasExchangeDelivery
-                  ? getReceivedQuantityFromRound(item.id, "MARKET", group.inspections)
-                  : ((isProvider || isMarket)
-                    ? getInspectedQuantityForDisplay(item.id, "MARKET", inspections)
-                    : getReceivedQuantityFromRound(item.id, "MARKET", group.inspections));
-                const customerReceivedQty = hasExchangeDelivery
-                  ? getReceivedQuantityFromRound(item.id, "CUSTOMER", group.inspections)
-                  : ((isProvider || isMarket)
-                    ? getInspectedQuantityForDisplay(item.id, "CUSTOMER", inspections)
-                    : getReceivedQuantityFromRound(item.id, "CUSTOMER", group.inspections));
+                // 每个轮次都只显示该轮次的验收数据，不累加之前轮次的数据
+                const marketReceivedQty = getReceivedQuantityFromRound(item.id, "MARKET", group.inspections);
+                const customerReceivedQty = getReceivedQuantityFromRound(item.id, "CUSTOMER", group.inspections);
                 
                 const deliveredQuantityFromRound = isCustomer
                   ? getReceivedQuantityFromRound(item.id, "MARKET", group.inspections)
@@ -514,18 +500,10 @@ export function RoundProductList({
               const canEditThisRound = isProvider && isExchangeInProgress ? isLatestRound : true;
               const canEditQuantity = canEdit && canEditThisRound;
 
-              // 获取数量显示值
-              // 对于换货配送的轮次，只显示该轮次的验收数据；对于正常配送的轮次，显示所有验收数据
-              const marketReceivedQtyForDisplay = hasExchangeDelivery
-                ? getReceivedQuantityFromRound(item.id, "MARKET", group.inspections)
-                : ((isProvider || isMarket)
-                  ? getInspectedQuantityForDisplay(item.id, "MARKET", inspections)
-                  : getReceivedQuantityFromRound(item.id, "MARKET", group.inspections));
-              const customerReceivedQtyForDisplay = hasExchangeDelivery
-                ? getReceivedQuantityFromRound(item.id, "CUSTOMER", group.inspections)
-                : ((isProvider || isMarket)
-                  ? getInspectedQuantityForDisplay(item.id, "CUSTOMER", inspections)
-                  : getReceivedQuantityFromRound(item.id, "CUSTOMER", group.inspections));
+            // 获取数量显示值
+            // 发货数量、市场接收、客户接收都按对应轮数的deliveries和inspections显示
+            const marketReceivedQtyForDisplay = getReceivedQuantityFromRound(item.id, "MARKET", group.inspections);
+            const customerReceivedQtyForDisplay = getReceivedQuantityFromRound(item.id, "CUSTOMER", group.inspections);
 
               const deliveredQuantityFromRound = isCustomer
                 ? getReceivedQuantityFromRound(item.id, "MARKET", group.inspections)
@@ -722,17 +700,9 @@ export function RoundProductList({
                   const canEditThisRound = isProvider && isExchangeInProgress ? isLatestRound : true;
                   const canEditQuantity = canEdit && canEditThisRound;
 
-                  // 对于换货配送的轮次，只显示该轮次的验收数据；对于正常配送的轮次，显示所有验收数据
-                  const marketReceivedQty = hasExchangeDelivery
-                    ? getReceivedQuantityFromRound(item.id, "MARKET", group.inspections)
-                    : ((isProvider || isMarket)
-                      ? getInspectedQuantityForDisplay(item.id, "MARKET", inspections)
-                      : getReceivedQuantityFromRound(item.id, "MARKET", group.inspections));
-                  const customerReceivedQty = hasExchangeDelivery
-                    ? getReceivedQuantityFromRound(item.id, "CUSTOMER", group.inspections)
-                    : ((isProvider || isMarket)
-                      ? getInspectedQuantityForDisplay(item.id, "CUSTOMER", inspections)
-                      : getReceivedQuantityFromRound(item.id, "CUSTOMER", group.inspections));
+                // 市场接收、客户接收都按对应轮数的inspections显示
+                const marketReceivedQty = getReceivedQuantityFromRound(item.id, "MARKET", group.inspections);
+                const customerReceivedQty = getReceivedQuantityFromRound(item.id, "CUSTOMER", group.inspections);
 
                   const deliveredQuantityFromRound = isCustomer
                     ? getReceivedQuantityFromRound(item.id, "MARKET", group.inspections)

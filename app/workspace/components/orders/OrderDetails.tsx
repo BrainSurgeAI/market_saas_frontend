@@ -1052,7 +1052,8 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 			// 从orderItems中获取价格信息
 			const orderItem = orderItems.find(item => item.id === record.orderDetailId);
 			const price = orderItem ? parseFloat(orderItem.discountedUnitPrice) : 0;
-			const quantity = Number(record.inputQuantity) || Number(record.quantity) || 0;
+			// 对于换货清单，对话框中显示的应该是换货数量（record.quantity），而不是用户输入的数量（record.inputQuantity）
+			const quantity = Number(record.quantity) || 0;
 			const requestedQuantity = Number(record.quantity); // quantity代表供应商需要的换货量
 
 			// 优先使用本地状态中的actualQuantity（用于内联编辑）

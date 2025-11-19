@@ -58,27 +58,12 @@ export function groupByRound(
     const roundDeliveries = deliveries.filter(d => d.deliveryRound === round);
     
     // 获取该轮次的inspections
-    // 1. 没有parent_id且inspectionRound等于round的inspections（独立轮次）
-    // 2. 有parent_id的inspections，如果其父inspection的inspectionRound等于round，也归入这一轮
+    // 直接查找inspectionRound等于round的inspections
     const roundInspections: OrderInspection[] = [];
-    
+
     inspections.forEach(inspection => {
-      if (!inspection.parent_id) {
-        // 没有parent_id的记录，如果inspectionRound等于round，属于这一轮
-        if ((inspection.inspectionRound || 0) === round) {
-          roundInspections.push(inspection);
-        }
-      } else {
-        // 有parent_id的记录，找到父inspection
-        const parentInspection = inspectionMap.get(inspection.parent_id);
-        if (parentInspection && (parentInspection.inspectionRound || 0) === round) {
-          // 父inspection属于这一轮，所以这个子inspection也属于这一轮
-          // 确保父inspection也在这一轮中（如果还没有添加）
-          if (!roundInspections.find(i => i.inspectionId === parentInspection.inspectionId)) {
-            roundInspections.push(parentInspection);
-          }
-          roundInspections.push(inspection);
-        }
+      if ((inspection.inspectionRound || 0) === round) {
+        roundInspections.push(inspection);
       }
     });
 
@@ -307,7 +292,7 @@ export function getReceivedQuantityFromRound(
   if (inspections.length === 0) {
     return "0";
   }
-  
+
   inspections.forEach(inspection => {
     if (inspection.inspectedByType?.toUpperCase() === inspectedByType && inspection.items) {
       inspection.items.forEach(item => {
@@ -319,7 +304,7 @@ export function getReceivedQuantityFromRound(
       });
     }
   });
-  
+
   return totalQuantity.toFixed(2);
 }
 

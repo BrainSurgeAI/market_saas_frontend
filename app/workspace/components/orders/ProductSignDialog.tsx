@@ -193,7 +193,16 @@ export default function ProductSignDialog({
             <div className="grid grid-cols-2 gap-4 p-3 bg-gray-50 rounded-md">
               <div className="text-xs">
                 <span className="text-gray-500">客户需求量：</span>
-                <span className="font-mono font-semibold">{currentItem?.orderedQty} {currentItem?.unit}</span>
+                <span className="font-mono font-semibold">
+                  {(() => {
+                    // 对于换货操作，显示换货数量；否则显示原始下单数量
+                    if (operationType === 'EXCHANGE') {
+                      const exchangeRecord = itemRecords.find(record => record.operationType === 'EXCHANGE');
+                      return exchangeRecord ? exchangeRecord.quantity : (currentItem?.orderedQty || 0);
+                    }
+                    return currentItem?.orderedQty || 0;
+                  })()} {currentItem?.unit}
+                </span>
               </div>
               <div className="text-xs">
                 <span className="text-gray-500">实际到货量：</span>
