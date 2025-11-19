@@ -31,6 +31,7 @@ interface ExchangeListSectionProps {
   getExchangeStatusVariant: (status: ExchangeItemStatus) => "default" | "secondary" | "destructive" | "outline";
   onCompleteAcceptance?: () => void;
   getReceivedQuantity?: (itemId: number) => string | number | undefined;
+  updateLocalActualQuantity?: (itemId: number, actualQuantity: number) => void;
 }
 
 export function ExchangeListSection({
@@ -49,6 +50,7 @@ export function ExchangeListSection({
   getExchangeStatusVariant,
   onCompleteAcceptance,
   getReceivedQuantity,
+  updateLocalActualQuantity,
 }: ExchangeListSectionProps) {
   const tenantLower = tenantType.toLowerCase();
 

@@ -799,10 +799,10 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 					break;
 				}
 				case TenantType.MARKET: {
-					const apiUrl = orderItems.some((item: OrderItem) => item.status === 'EXCHANGED') ? `/api/orders/${orderCode}/exchange-request` : `/api/orders/${orderCode}/accept`;
+					const apiUrl = hasExchangedItems ? `/api/orders/${orderCode}/exchange-request` : `/api/orders/${orderCode}/accept`;
 
 					const targetItems = orderDetail?.orderStatus === OrderStatus.EXCHANGE_INSPECTING
-						? orderItems.filter((item: OrderItem) => item.status === 'EXCHANGED')
+						? (hasExchangedItems ? orderItems : [])
 						: orderItems;
 					const payload: MarketInspectRequest = buildPayload(targetItems);
 					response = await fetch(apiUrl, {
@@ -925,7 +925,27 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 
 	const tenantEnum = tenantType.toLowerCase() as TenantType;
 	const orderStatus = orderDetail?.orderStatus as OrderStatus | undefined;
-	const hasExchangedItems = orderItems.some((item) => item.status?.toUpperCase() === "EXCHANGED");
+	// 判断是否有换货：先看 afterSales 是否为空，空则表示无换货
+	// 如果非空，则判断 inspections 中最大轮数的 inspectionId 和 afterSales 中对应的 inspectionId 的记录是否是 "operationType": "EXCHANGE"
+	const hasExchangedItems = (() => {
+		if (!rawReceipts || rawReceipts.length === 0) {
+			return false;
+		}
+
+		// 找到inspections中最大轮数的inspectionId
+		const maxInspectionRound = Math.max(...(inspections || []).map(inspection => inspection.inspectionRound));
+		const latestInspection = (inspections || []).find(inspection => inspection.inspectionRound === maxInspectionRound);
+
+		if (!latestInspection) {
+			return false;
+		}
+
+		// 检查afterSales中是否有对应的inspectionId且operationType为EXCHANGE的记录
+		return rawReceipts.some(afterSale =>
+			afterSale.inspectionId === latestInspection.inspectionId &&
+			afterSale.operationType === 'EXCHANGE'
+		);
+	})();
 	const shouldShowMarketExchangeConfirmation =
 		tenantEnum === TenantType.MARKET &&
 		orderStatus === OrderStatus.EXCHANGE_REQUESTED &&

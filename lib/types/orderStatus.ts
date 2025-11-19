@@ -214,6 +214,7 @@ export interface ReceiptItem {
 
 export interface Receipt {
   id: number;
+  inspectionId?: number;
   operationType: string;
   status: string;
   items: ReceiptItem[];
@@ -223,7 +224,7 @@ export interface Receipt {
 export interface OrderDetailData {
   order: Order;
   items: OrderItem[];
-  receipts: Receipt[];
+  afterSales: Receipt[];
   inspections: OrderInspection[];
   deliveries: Delivery[];
   statusHistory?: StatusHistoryItem[];

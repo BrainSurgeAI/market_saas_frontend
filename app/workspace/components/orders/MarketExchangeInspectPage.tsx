@@ -91,7 +91,7 @@ export function MarketExchangeInspectPage({ orderCode, orgId, tenantType }: Mark
 					(record) => record.productId === item.productId && record.operationType === OperationType.EXCHANGE
 				);
 
-				if (!exchangeRecords.length && item.status !== "EXCHANGED") {
+				if (!exchangeRecords.length) {
 					return null;
 				}
 

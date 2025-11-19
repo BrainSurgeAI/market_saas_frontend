@@ -92,8 +92,8 @@ export function useOrderDetails(orderCode: string, orgId: string, tenantType: st
         setOrderDetail(orderDetailData);
         setOrderItems(responseData.items || []);
         
-        // 保存原始的 receipts 数据
-        setRawReceipts(responseData.receipts || []);
+        // 保存原始的 afterSales 数据
+        setRawReceipts(responseData.afterSales || []);
         setInspections(responseData.inspections || []);
         setDeliveries(responseData.deliveries || []);
         setStatusHistory(responseData.statusHistory || []);
@@ -103,15 +103,15 @@ export function useOrderDetails(orderCode: string, orgId: string, tenantType: st
         // 处理操作记录
         let allReceipts: ReturnExchangeItem[] = [];
 
-        // 处理 API 返回的 receipts（新格式：每个 receipt 包含多个 items）
-        if (responseData.receipts && Array.isArray(responseData.receipts)) {
-          responseData.receipts.forEach(receipt => {
-            if (receipt.items && Array.isArray(receipt.items)) {
-              receipt.items.forEach(receiptItem => {
+        // 处理 API 返回的 afterSales（新格式：每个 afterSales 包含多个 items）
+        if (responseData.afterSales && Array.isArray(responseData.afterSales)) {
+          responseData.afterSales.forEach(afterSale => {
+            if (afterSale.items && Array.isArray(afterSale.items)) {
+              afterSale.items.forEach(receiptItem => {
                 const itemId = productIdToItemId.get(receiptItem.productId);
                 if (itemId !== undefined) {
                   const formattedReceipt = convertApiReceiptToInternalFormat(
-                    receipt,
+                    afterSale,
                     receiptItem,
                     itemId,
                     orderCode

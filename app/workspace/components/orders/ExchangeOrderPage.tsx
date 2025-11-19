@@ -58,7 +58,7 @@ export function ExchangeOrderPage({ orderCode, orgId, tenantType }: ExchangeOrde
           (record) => record.productId === item.productId && record.operationType === OperationType.EXCHANGE
         );
 
-        if (!records.length && item.status !== "EXCHANGED") {
+        if (!records.length) {
           return null;
         }
 

@@ -375,8 +375,8 @@ export function ExchangeItemsTable({
             >
               <TableRow className="text-xs font-semibold bg-black text-white">
                 <TableHead className="text-left p-3 border-b">商品名称</TableHead>
-                <TableHead className="text-center p-3 border-b">换货数量</TableHead>
-                <TableHead className="text-center p-3 border-b">实际换货量</TableHead>
+                <TableHead className="text-center p-3 border-b">需换货</TableHead>
+                <TableHead className="text-center p-3 border-b">发货量</TableHead>
                 <TableHead className="text-right p-3 border-b">单价</TableHead>
                 <TableHead className="text-right p-3 border-b">总金额</TableHead>
                 <TableHead className="text-center p-3 border-b">状态</TableHead>
