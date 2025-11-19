@@ -197,15 +197,6 @@ export function useOrderOperations(
 
     // 计算实际提交的数量
     let actualQuantity = parseFloat(operatingQuantity);
-    if (operationType === 'EXCHANGE') {
-      // 换货操作：计算换货数量 = 客户需求量 - (实际到货量 - 坏货数量)
-      const customerQuantity = parseFloat(item.orderedQty || '0');
-      const actualDeliveryQuantity = getActualDeliveredQuantity
-        ? parseFloat(getActualDeliveredQuantity(operatingProductId))
-        : parseFloat(item.deliveredQuantity || '0');
-      const damagedQuantity = parseFloat(operatingQuantity || '0');
-      actualQuantity = Math.max(0, customerQuantity - (actualDeliveryQuantity - damagedQuantity));
-    }
 
     const operationRecord: ReturnExchangeItem = {
       orderId: orderCode,
