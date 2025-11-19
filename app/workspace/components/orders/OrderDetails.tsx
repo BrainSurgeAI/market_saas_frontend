@@ -1034,6 +1034,19 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 	// 转换退换货记录为ExchangeItem格式，用于ExchangeItemsTable
 	const [localExchangeItems, setLocalExchangeItems] = useState<ExchangeItem[]>([]);
 
+	// 确定当前显示的轮数
+	const currentRound = useMemo(() => {
+		if (!deliveries || deliveries.length === 0) return 1;
+
+		// 对于EXCHANGE_INSPECTING状态，当前轮数是最大轮数
+		if (orderDetail?.orderStatus === OrderStatus.EXCHANGE_INSPECTING) {
+			return Math.max(...deliveries.map(d => d.deliveryRound || 1));
+		}
+
+		// 默认返回1
+		return 1;
+	}, [deliveries, orderDetail?.orderStatus]);
+
 	const exchangeItems = useMemo(() => {
 		return exchangeRecords.map((record) => {
 			// 从orderItems中获取价格信息
@@ -1049,7 +1062,7 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 			return {
 				id: record.orderDetailId,
 				returnExchangeId: record.orderDetailId, // 使用orderDetailId作为returnExchangeId
-				productCode: record.productName, // 这里假设productName就是productCode，或者需要从其他地方获取
+				productCode: record.productId || orderItem?.productId || '', // 使用record.productId或orderItem.productId
 				productName: record.productName,
 				quantity: quantity,
 				requestedQuantity: requestedQuantity,
@@ -1059,13 +1072,14 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 				status: record.status === 'COMPLETED' ? ExchangeItemStatus.COMPLETED :
 						record.status === 'PROGRESSED' ? ExchangeItemStatus.SHIPPED : // PROGRESS表示供应商已操作过换货
 						record.status === 'PENDING' ? ExchangeItemStatus.PENDING :
-						ExchangeItemStatus.PENDING, // 默认状态映射
-				shippedAt: record.processedAt || null,
-				receivedAt: record.actualQuantity ? record.processedAt : null,
+						ExchangeItemStatus.PENDING,
+				unit: record.unit || 'kg',
+				reason: record.reason,
+				processedAt: record.processedAt,
 				createdAt: orderDetail?.createdAt || new Date().toISOString(),
 				updatedAt: record.processedAt || new Date().toISOString(),
-			};
-		}) satisfies ExchangeItem[];
+			} satisfies ExchangeItem;
+		});
 	}, [exchangeRecords, orderItems, orderDetail, localExchangeItems]);
 
 	// 更新本地实际数量的函数
@@ -1148,11 +1162,8 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 		const descriptors: ActionDescriptor[] = [];
 
 		// 计算shouldShowMarketExchangeConfirmation
-		// MARKET用户在EXCHANGE_REQUESTED状态下不显示确认换货按钮
-		const shouldShowMarketExchangeConfirmation = tenantType.toLowerCase() === TenantType.MARKET &&
-			status === OrderStatus.MARKET_INSPECTING &&
-			hasExchangedItems &&
-			!isEditing;
+		// MARKET用户在MARKET_INSPECTING状态下不显示确认换货按钮
+		const shouldShowMarketExchangeConfirmation = false; // 暂时禁用这个按钮
 
 		// 构建策略上下文
 		const strategyContext: OrderStrategyContext = {
@@ -1383,6 +1394,7 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 								isUnitAllowingDecimal={isUnitAllowingDecimal}
 								roundGroups={roundGroups}
 								inspections={inspections}
+								receipts={rawReceipts}
 							/>
 
 							<Card className="mt-4">
@@ -1413,10 +1425,13 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 								onDeliverToMarket={handleDeliverToMarket}
 								exchangeItems={exchangeItems}
 								loadingExchangeReturn={loadingExchangeReturn}
+								inspections={inspections}
+								currentRound={currentRound}
+								afterSales={rawReceipts}
 								handleExchangeStatusChange={handleExchangeStatusChange}
 								updateLocalActualQuantity={updateLocalActualQuantity}
 								handleOperation={handleOperation}
-								canPerformExchangeAction={canPerformExchangeAction}
+								canPerformAction={canPerformExchangeAction}
 								getExchangeStatusLabel={getExchangeStatusLabel}
 								getExchangeStatusVariant={getExchangeStatusVariant}
 								onCompleteAcceptance={completeAcceptance}

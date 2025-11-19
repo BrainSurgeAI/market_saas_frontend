@@ -26,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { ExchangeItem } from "@/lib/types/orderStatus";
+import type { ExchangeItem, OrderInspection } from "@/lib/types/orderStatus";
 import { ExchangeItemStatus, TenantType } from "@/lib/types/orderStatus";
 
 interface ExchangeItemsTableProps {
@@ -34,6 +34,9 @@ interface ExchangeItemsTableProps {
   loading?: boolean;
   tenantType: string;
   orderStatus?: string;
+  inspections?: OrderInspection[];
+  currentRound?: number; // 当前显示的轮数
+  afterSales?: any[]; // afterSales数据，用于获取换货数量
   onStatusChange: (itemId: number, newStatus: ExchangeItemStatus, reason?: string) => Promise<void>;
   onUpdateActualQuantity?: (itemId: number, actualQuantity: number) => void;
   onOperation?: (itemId: number, operationType: 'SIGN' | 'RETURN' | 'EXCHANGE') => void;
@@ -55,6 +58,9 @@ export function ExchangeItemsTable({
   loading = false,
   tenantType,
   orderStatus,
+  inspections = [],
+  currentRound = 1,
+  afterSales = [],
   onStatusChange,
   onUpdateActualQuantity,
   onOperation,
@@ -62,6 +68,50 @@ export function ExchangeItemsTable({
   getStatusLabel,
   getStatusVariant,
 }: ExchangeItemsTableProps) {
+
+  // 获取指定轮次的接收数量
+  const getReceivedQuantityForRound = (itemId: number, inspectedByType: string, round: number) => {
+    if (!inspections) return "-";
+
+    // 查找指定轮次的验收记录
+    const roundInspection = inspections.find(inspection =>
+      inspection.inspectionRound === round &&
+      inspection.inspectedByType === inspectedByType
+    );
+
+    if (!roundInspection) return "-";
+
+    // 查找对应的商品验收记录
+    const itemInspection = roundInspection.items.find(item => item.orderDetailId === itemId);
+
+    if (!itemInspection) return "-";
+
+    // 返回验收数量（优先使用inspectedQty，如果没有则使用quantity）
+    return itemInspection.inspectedQty || itemInspection.quantity || "-";
+  };
+
+  // 获取换货数量（从上一轮的afterSales数据中获取）
+  const getExchangeQuantity = (itemId: number, productId: string) => {
+    if (currentRound === 1) {
+      // 第一轮显示原始的下单数量
+      return null; // 返回null表示使用默认的下单数量
+    }
+
+    // 从afterSales中查找换货数量（afterSales总是包含最新的换货记录）
+    const exchangeAfterSales = afterSales.filter(afterSale =>
+      afterSale.operationType === 'EXCHANGE'
+    );
+
+    for (const afterSale of exchangeAfterSales) {
+      const item = afterSale.items?.find((item: any) => item.productId === productId);
+      if (item) {
+        return parseFloat(item.quantity);
+      }
+    }
+
+    return null; // 如果找不到换货记录，返回null
+  };
+
   const [operationDialog, setOperationDialog] = useState<OperationDialogState>({
     itemId: null,
     action: null,
@@ -189,6 +239,28 @@ export function ExchangeItemsTable({
     setEditingActualQuantity("");
   };
 
+  // 获取指定类型的验收数量
+  const getInspectedQuantity = (itemId: number, inspectedByType: string): string | null => {
+    if (!inspections || inspections.length === 0) {
+      return null;
+    }
+
+    // 找到最新的inspection round
+    const maxRound = Math.max(...inspections.map(inspection => inspection.inspectionRound));
+    const latestInspection = inspections.find(inspection =>
+      inspection.inspectionRound === maxRound &&
+      inspection.inspectedByType?.toUpperCase() === inspectedByType.toUpperCase()
+    );
+
+    if (!latestInspection || !latestInspection.items) {
+      return null;
+    }
+
+    // 查找对应的商品验收数量
+    const inspectionItem = latestInspection.items.find(item => item.orderDetailId === itemId);
+    return inspectionItem?.inspectedQty || null;
+  };
+
 
   const statusColorMap: Record<ExchangeItemStatus, string> = {
     [ExchangeItemStatus.PENDING]: "bg-gray-50",
@@ -278,8 +350,8 @@ export function ExchangeItemsTable({
                       </Button>
                     </div>
                   ) : (
-                    ((item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
-                     (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING')) ? (
+                    (item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS' &&
+                     tenantType.toLowerCase() !== TenantType.MARKET) ? (
                       <Input
                         type="number"
                         value={localInputValues[item.id] !== undefined ? localInputValues[item.id] : (item.actualQuantity || "")}
@@ -444,8 +516,12 @@ export function ExchangeItemsTable({
             >
               <TableRow className="text-xs font-semibold bg-black text-white">
                 <TableHead className="text-left p-3 border-b">商品名称</TableHead>
-                <TableHead className="text-center p-3 border-b">需换货</TableHead>
+                <TableHead className="text-center p-3 border-b">
+                  {currentRound === 1 ? '下单数量' : '换货数量'}
+                </TableHead>
                 <TableHead className="text-center p-3 border-b">发货量</TableHead>
+                <TableHead className="text-center p-3 border-b">市场接收</TableHead>
+                <TableHead className="text-center p-3 border-b">客户接收</TableHead>
                 <TableHead className="text-right p-3 border-b">单价</TableHead>
                 <TableHead className="text-right p-3 border-b">总金额</TableHead>
                 <TableHead className="text-center p-3 border-b">状态</TableHead>
@@ -465,7 +541,10 @@ export function ExchangeItemsTable({
                       </div>
                     </TableCell>
                     <TableCell className="p-3 text-center border-b font-mono font-semibold">
-                      {item.quantity}
+                      {(() => {
+                        const exchangeQty = getExchangeQuantity(item.id, item.productCode);
+                        return exchangeQty !== null ? exchangeQty : item.quantity;
+                      })()}
                     </TableCell>
                     <TableCell className="p-3 text-center border-b font-mono">
                       {editingItemId === item.id ? (
@@ -497,8 +576,8 @@ export function ExchangeItemsTable({
                           </Button>
                         </div>
                       ) : (
-                        ((item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
-                         (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING')) ? (
+                        (item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS' &&
+                         tenantType.toLowerCase() === TenantType.PROVIDER) ? (
                           <Input
                             type="number"
                             value={localInputValues[item.id] !== undefined ? localInputValues[item.id] : (item.actualQuantity || "")}
@@ -575,6 +654,14 @@ export function ExchangeItemsTable({
                           item.actualQuantity || '-'
                         )
                       )}
+                    </TableCell>
+                    <TableCell className="p-3 text-center border-b font-mono">
+                      {/* 市场接收 - 显示MARKET类型的当前轮验收数量 */}
+                      {getReceivedQuantityForRound(item.id, 'MARKET', currentRound)}
+                    </TableCell>
+                    <TableCell className="p-3 text-center border-b font-mono">
+                      {/* 客户接收 - 显示CUSTOMER类型的第2轮验收数量 */}
+                      {getReceivedQuantityForRound(item.id, 'CUSTOMER', 2)}
                     </TableCell>
                     <TableCell className="p-3 text-right border-b font-mono">
                       ¥{item.price.toFixed(2)}

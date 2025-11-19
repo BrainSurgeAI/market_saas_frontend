@@ -190,8 +190,13 @@ export function RoundProductList({
                   {/* 数量信息 */}
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div className="bg-gray-50 p-2 rounded">
-                      <div className="text-xs text-gray-500">下单数量</div>
-                      <div className="font-mono font-semibold mt-1">{parseFloat(item.orderedQty).toFixed(2)} {item.unit}</div>
+                      <div className="text-xs text-gray-500">{hasExchangeDelivery ? '换货数量' : '下单数量'}</div>
+                      <div className="font-mono font-semibold mt-1">
+                        {hasExchangeDelivery
+                          ? (getExchangeQuantityFromReceipts(item.productId, receipts) || parseFloat(item.orderedQty).toFixed(2))
+                          : parseFloat(item.orderedQty).toFixed(2)
+                        } {item.unit}
+                      </div>
                     </div>
                     {shouldShowDeliverQuantityColumn && (
                       <div className="bg-gray-50 p-2 rounded">
@@ -235,12 +240,6 @@ export function RoundProductList({
                       <div className="bg-gray-50 p-2 rounded">
                         <div className="text-xs text-gray-500">收货量</div>
                         <div className="font-mono font-semibold mt-1">{customerReceivedQtyForCustomer || "-"}</div>
-                      </div>
-                    )}
-                    {hasExchangeDelivery && isProvider && (
-                      <div className="bg-gray-50 p-2 rounded">
-                        <div className="text-xs text-gray-500">换货数量</div>
-                        <div className="font-mono font-semibold mt-1">{getExchangeQuantityFromReceipts(item.productId, receipts) || "-"}</div>
                       </div>
                     )}
                     <div className="bg-gray-50 p-2 rounded">
@@ -300,7 +299,6 @@ export function RoundProductList({
               {shouldShowReceivedQuantityColumn && !isCustomer && <col />}
               {shouldShowReceivedQuantityColumn && !isCustomer && <col />}
               {shouldShowReceivedQuantityColumn && isCustomer && <col />}
-              {hasExchangeDelivery && isProvider && <col />}
               <col className="w-[80px]" />
               <col className="w-[100px]" />
               <col className="w-[120px]" />
@@ -311,12 +309,13 @@ export function RoundProductList({
               <TableRow className="bg-gray-50">
                 <TableHead className="text-left p-3 border-b">商品名称</TableHead>
                 <TableHead className="text-left p-3 border-b">类别</TableHead>
-                <TableHead className="text-center p-3 border-b">下单数量</TableHead>
+                <TableHead className="text-center p-3 border-b">
+                  {hasExchangeDelivery ? '换货数量' : '下单数量'}
+                </TableHead>
                 {shouldShowDeliverQuantityColumn && <TableHead className="text-center p-3 border-b">发货数量</TableHead>}
                 {shouldShowReceivedQuantityColumn && tenantType?.toLowerCase() !== "customer" && <TableHead className="text-center p-3 border-b">市场接收</TableHead>}
                 {shouldShowReceivedQuantityColumn && tenantType?.toLowerCase() !== "customer" && <TableHead className="text-center p-3 border-b">客户接收</TableHead>}
                 {shouldShowReceivedQuantityColumn && tenantType?.toLowerCase() === "customer" && <TableHead className="text-center p-3 border-b">收货量</TableHead>}
-                {hasExchangeDelivery && isProvider && <TableHead className="text-center p-3 border-b">换货数量</TableHead>}
                 <TableHead className="text-center p-3 border-b">单位</TableHead>
                 <TableHead className="text-right p-3 border-b">折扣价</TableHead>
                 <TableHead className="text-right p-3 border-b">小计（折后）</TableHead>
@@ -378,7 +377,10 @@ export function RoundProductList({
                     </TableCell>
                     <TableCell className="p-2 border-b">{item.category}</TableCell>
                     <TableCell className="p-2 text-center border-b font-mono font-semibold">
-                      {parseFloat(item.orderedQty).toFixed(2)}
+                      {hasExchangeDelivery
+                        ? (getExchangeQuantityFromReceipts(item.productId, receipts) || parseFloat(item.orderedQty).toFixed(2))
+                        : parseFloat(item.orderedQty).toFixed(2)
+                      }
                     </TableCell>
                     {shouldShowDeliverQuantityColumn && (
                       <TableCell className="p-2 text-center border-b w-[120px]">
@@ -418,11 +420,6 @@ export function RoundProductList({
                     {shouldShowReceivedQuantityColumn && isCustomer && (
                       <TableCell className="p-2 text-center border-b font-mono font-semibold">
                         {customerReceivedQtyForCustomer || "-"}
-                      </TableCell>
-                    )}
-                    {hasExchangeDelivery && isProvider && (
-                      <TableCell className="p-2 text-center border-b font-mono font-semibold">
-                        {getExchangeQuantityFromReceipts(item.productId, receipts) || "-"}
                       </TableCell>
                     )}
                     <TableCell className="p-2 text-center border-b font-mono">{item.unit}</TableCell>

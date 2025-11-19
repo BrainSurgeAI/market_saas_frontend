@@ -11,7 +11,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { OrderStatus, TenantType, OperationType, ExchangeItemStatus } from "@/lib/types/orderStatus";
+import { OrderStatus, TenantType, OperationType, ExchangeItemStatus, OrderInspection } from "@/lib/types/orderStatus";
 import { ExchangeItemsTable } from "../ExchangeItemsTable";
 import type { ExchangeItem } from "@/lib/types/orderStatus";
 
@@ -24,9 +24,12 @@ interface ExchangeListSectionProps {
   onDeliverToMarket: () => void;
   exchangeItems: ExchangeItem[];
   loadingExchangeReturn: boolean;
+  inspections?: OrderInspection[];
+  currentRound?: number;
+  afterSales?: any[];
   handleExchangeStatusChange: (itemId: number, newStatus: ExchangeItemStatus, reason?: string) => Promise<void>;
   handleOperation: (itemId: number, operationType: OperationType) => void;
-  canPerformExchangeAction: (item: ExchangeItem, action: string) => boolean;
+  canPerformAction: (item: ExchangeItem, action: string) => boolean;
   getExchangeStatusLabel: (status: ExchangeItemStatus) => string;
   getExchangeStatusVariant: (status: ExchangeItemStatus) => "default" | "secondary" | "destructive" | "outline";
   onCompleteAcceptance?: () => void;
@@ -43,9 +46,12 @@ export function ExchangeListSection({
   onDeliverToMarket,
   exchangeItems,
   loadingExchangeReturn,
+  inspections = [],
+  currentRound = 1,
+  afterSales = [],
   handleExchangeStatusChange,
   handleOperation,
-  canPerformExchangeAction,
+  canPerformAction,
   getExchangeStatusLabel,
   getExchangeStatusVariant,
   onCompleteAcceptance,
@@ -97,9 +103,13 @@ export function ExchangeListSection({
           loading={loadingExchangeReturn}
           tenantType={tenantType}
           orderStatus={orderStatus}
+          inspections={inspections}
+          currentRound={currentRound}
+          afterSales={afterSales}
           onStatusChange={handleExchangeStatusChange}
+          onUpdateActualQuantity={updateLocalActualQuantity}
           onOperation={(itemId, operationType) => handleOperation(itemId, operationType as OperationType)}
-          canPerformAction={canPerformExchangeAction}
+          canPerformAction={canPerformAction}
           getStatusLabel={getExchangeStatusLabel}
           getStatusVariant={getExchangeStatusVariant}
           getReceivedQuantity={getReceivedQuantity}
