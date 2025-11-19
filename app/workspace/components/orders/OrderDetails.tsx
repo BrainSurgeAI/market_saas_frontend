@@ -282,61 +282,6 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		setShowRejectConfirmDialog(true);
 	};
 
-	// 处理提交换货申请
-	const [submittingExchangeRequest, setSubmittingExchangeRequest] = useState(false);
-	const handleSubmitExchangeRequest = async () => {
-		if (!orderDetail || !rawReceipts) return;
-
-		// 查找 EXCHANGE 类型的 receipt
-		const exchangeReceipt = rawReceipts.find(r => r.operationType === 'EXCHANGE');
-		if (!exchangeReceipt) return;
-
-		try {
-			setSubmittingExchangeRequest(true);
-
-			// 构建 payload，将 receipt 中的 items 转换为 API 需要的格式
-			const payload = {
-				operateBy: user?.name || '',
-				items: exchangeReceipt.items.map(item => {
-					// 找到对应的 orderItem
-					const orderItem = orderItems.find(oi => oi.productId === item.productId);
-					return {
-						id: orderItem?.id || 0,
-						deliveredQuantity: '0',
-					};
-				}),
-			};
-
-			const response = await fetch(`/api/orders/${orderCode}/exchange-request`, {
-				method: 'PATCH',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify(payload),
-			});
-
-			if (!response.ok) {
-				throw new Error(`提交换货申请失败: ${response.status}`);
-			}
-
-			toast({
-				title: '提交成功',
-				description: '换货申请已提交',
-				variant: 'success',
-			});
-
-			// 刷新页面以获取最新状态
-			window.location.reload();
-		} catch (err) {
-			toast({
-				title: '提交失败',
-				description: err instanceof Error ? err.message : '提交换货申请时发生错误',
-				variant: 'destructive',
-			});
-		} finally {
-			setSubmittingExchangeRequest(false);
-		}
-	};
 
 	// ExchangeItemsTable 相关函数
 	const handleExchangeStatusChange = async (itemId: number, newStatus: ExchangeItemStatus, reason?: string) => {
@@ -946,10 +891,6 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 			afterSale.operationType === 'EXCHANGE'
 		);
 	})();
-	const shouldShowMarketExchangeConfirmation =
-		tenantEnum === TenantType.MARKET &&
-		orderStatus === OrderStatus.EXCHANGE_REQUESTED &&
-		hasExchangedItems;
 
 	// 获取策略实例
 	const orderStrategy = useMemo(() => getOrderStrategy(tenantType), [tenantType]);
@@ -1192,13 +1133,26 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 		}
 	};
 
-	const actionDescriptors = useMemo<ActionDescriptor[]>(() => {
+	const {
+		actionDescriptors,
+		shouldShowMarketExchangeConfirmation,
+	} = useMemo(() => {
 		if (!orderDetail || !orderStatus) {
-			return [];
+			return {
+				actionDescriptors: [],
+				shouldShowMarketExchangeConfirmation: false,
+			};
 		}
 
 		const status = orderStatus;
 		const descriptors: ActionDescriptor[] = [];
+
+		// 计算shouldShowMarketExchangeConfirmation
+		// MARKET用户在EXCHANGE_REQUESTED状态下不显示确认换货按钮
+		const shouldShowMarketExchangeConfirmation = tenantType.toLowerCase() === TenantType.MARKET &&
+			status === OrderStatus.MARKET_INSPECTING &&
+			hasExchangedItems &&
+			!isEditing;
 
 		// 构建策略上下文
 		const strategyContext: OrderStrategyContext = {
@@ -1224,12 +1178,10 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 			processing,
 			beginInspecting,
 			deliveringToCustomer,
-			submittingExchangeRequest,
 			shouldShowMarketExchangeConfirmation,
 			handleBeginExchangeProcessing,
 			handleStartProcessing,
 			handleSaveActualQuantities,
-			handleSubmitExchangeRequest,
 			handleBeginInspect,
 			navigateToMarketExchangePage,
 			deliverToCustomer,
@@ -1258,7 +1210,11 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 		};
 
 		descriptors.push(exportAction);
-		return descriptors;
+
+		return {
+			actionDescriptors: descriptors,
+			shouldShowMarketExchangeConfirmation,
+		};
 	}, [
 		orderDetail,
 		orderStatus,
@@ -1269,33 +1225,6 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 		inspectionProgress,
 		rawReceipts,
 		isEditing,
-		savingChanges,
-		hasErrors,
-		actualTotal,
-		discountTotal,
-		originalTotal,
-		returnMoney,
-		tenantType,
-		startingExchange,
-		processing,
-		beginInspecting,
-		deliveringToCustomer,
-		submittingExchangeRequest,
-		shouldShowMarketExchangeConfirmation,
-		handleBeginExchangeProcessing,
-		handleStartProcessing,
-		handleSaveActualQuantities,
-		handleSubmitExchangeRequest,
-		handleBeginInspect,
-		navigateToMarketExchangePage,
-		deliverToCustomer,
-		completeAcceptance,
-		showRejectConfirmation,
-		requestCustomerExchange,
-		requestingCustomerExchange,
-		completeOrder,
-		exportingExcel,
-		exportToExcel,
 	]);
 
 	if (loading) {

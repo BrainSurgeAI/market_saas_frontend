@@ -73,6 +73,8 @@ export function ExchangeItemsTable({
   // 内联编辑状态
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editingActualQuantity, setEditingActualQuantity] = useState<string>("");
+  // 本地输入状态，用于直接输入模式
+  const [localInputValues, setLocalInputValues] = useState<Record<number, string>>({});
 
   const getActionNextStatus = (action: string): ExchangeItemStatus | null => {
     const statusMap: Record<string, ExchangeItemStatus> = {
@@ -160,8 +162,17 @@ export function ExchangeItemsTable({
 
   const handleSaveEditing = async (itemId: number) => {
     const quantity = parseFloat(editingActualQuantity);
+    const item = items.find(i => i.id === itemId);
+
     if (isNaN(quantity) || quantity < 0) {
-      return; // 无效输入，不保存
+      alert('请输入有效数字');
+      return;
+    }
+
+    // 验证输入值不能小于换货数量
+    if (item && quantity < item.quantity) {
+      alert(`数量不能小于换货数量 ${item.quantity}`);
+      return;
     }
 
     // 调用父组件的更新函数
@@ -177,6 +188,7 @@ export function ExchangeItemsTable({
     setEditingItemId(null);
     setEditingActualQuantity("");
   };
+
 
   const statusColorMap: Record<ExchangeItemStatus, string> = {
     [ExchangeItemStatus.PENDING]: "bg-gray-50",
@@ -266,28 +278,85 @@ export function ExchangeItemsTable({
                       </Button>
                     </div>
                   ) : (
-                    <div
-                      className={`font-mono font-semibold mt-1 text-sm ${
-                        ((item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
-                         (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING'))
-                          ? "cursor-pointer hover:text-blue-600" 
-                          : ""
-                      }`}
-                      onClick={() => {
-                        const canEdit = 
-                          (item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
-                          (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING');
-                        if (canEdit) {
-                          handleStartEditing(item.id, item.actualQuantity || 0);
-                        }
-                      }}
-                    >
-                      {item.actualQuantity || 
-                        ((item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
-                         (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING')
-                          ? '点击编辑' 
-                          : '-')}
-                    </div>
+                    ((item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
+                     (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING')) ? (
+                      <Input
+                        type="number"
+                        value={localInputValues[item.id] !== undefined ? localInputValues[item.id] : (item.actualQuantity || "")}
+                        onChange={(e) => {
+                          setLocalInputValues(prev => ({
+                            ...prev,
+                            [item.id]: e.target.value
+                          }));
+                        }}
+                        onBlur={() => {
+                          const value = localInputValues[item.id];
+                          if (value !== undefined) {
+                            // 内联验证
+                            const numValue = parseFloat(value);
+                            let error = "";
+
+                            if (isNaN(numValue)) {
+                              error = "请输入有效数字";
+                            } else if (numValue < 0) {
+                              error = "数量不能为负数";
+                            } else if (numValue < item.quantity) {
+                              error = `数量不能小于换货数量 ${item.quantity}`;
+                            }
+
+                            if (!error && onUpdateActualQuantity) {
+                              onUpdateActualQuantity(item.id, numValue);
+                              setLocalInputValues(prev => {
+                                const newState = { ...prev };
+                                delete newState[item.id];
+                                return newState;
+                              });
+                            } else if (error) {
+                              // 显示错误提示
+                              alert(error);
+                            }
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const value = localInputValues[item.id];
+                            if (value !== undefined) {
+                              // 内联验证
+                              const numValue = parseFloat(value);
+                              let error = "";
+
+                              if (isNaN(numValue)) {
+                                error = "请输入有效数字";
+                              } else if (numValue < 0) {
+                                error = "数量不能为负数";
+                              } else if (numValue < item.quantity) {
+                                error = `数量不能小于换货数量 ${item.quantity}`;
+                              }
+
+                              if (!error && onUpdateActualQuantity) {
+                                onUpdateActualQuantity(item.id, numValue);
+                                setLocalInputValues(prev => {
+                                  const newState = { ...prev };
+                                  delete newState[item.id];
+                                  return newState;
+                                });
+                              } else if (error) {
+                                // 显示错误提示
+                                alert(error);
+                              }
+                            }
+                          }
+                        }}
+                        className="w-20 h-7 text-xs text-center font-mono"
+                        step="0.01"
+                        min={item.quantity}
+                        placeholder="输入数量"
+                      />
+                    ) : (
+                      <div className="font-mono font-semibold mt-1 text-sm">
+                        {item.actualQuantity || '-'}
+                      </div>
+                    )
                   )}
                 </div>
               </div>
@@ -392,7 +461,7 @@ export function ExchangeItemsTable({
                     <TableCell className="p-3 border-b font-medium">
                       <div>
                         <p className="truncate">{item.productName}</p>
-                        <p className="text-xs text-muted-foreground mt-1">编号: {item.productCode}</p>
+                      
                       </div>
                     </TableCell>
                     <TableCell className="p-3 text-center border-b font-mono font-semibold">
@@ -407,7 +476,7 @@ export function ExchangeItemsTable({
                             onChange={(e) => setEditingActualQuantity(e.target.value)}
                             className="w-20 h-7 text-xs"
                             step="0.01"
-                            min="0"
+                            min={item.quantity}
                             autoFocus
                           />
                           <Button
@@ -428,28 +497,83 @@ export function ExchangeItemsTable({
                           </Button>
                         </div>
                       ) : (
-                        <span
-                          className={
-                            (item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
-                            (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING')
-                              ? "cursor-pointer hover:bg-gray-100 px-2 py-1 rounded" 
-                              : ""
-                          }
-                          onClick={() => {
-                            const canEdit = 
-                              (item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
-                              (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING');
-                            if (canEdit) {
-                              handleStartEditing(item.id, item.actualQuantity || 0);
-                            }
-                          }}
-                        >
-                          {item.actualQuantity || 
-                            ((item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
-                             (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING')
-                              ? '点击编辑' 
-                              : '-')}
-                        </span>
+                        ((item.status === ExchangeItemStatus.PENDING && orderStatus === 'EXCHANGE_IN_PROGRESS') ||
+                         (tenantType.toLowerCase() === TenantType.MARKET && orderStatus === 'EXCHANGE_INSPECTING')) ? (
+                          <Input
+                            type="number"
+                            value={localInputValues[item.id] !== undefined ? localInputValues[item.id] : (item.actualQuantity || "")}
+                            onChange={(e) => {
+                              setLocalInputValues(prev => ({
+                                ...prev,
+                                [item.id]: e.target.value
+                              }));
+                            }}
+                            onBlur={() => {
+                              const value = localInputValues[item.id];
+                              if (value !== undefined) {
+                                // 内联验证
+                                const numValue = parseFloat(value);
+                                let error = "";
+
+                                if (isNaN(numValue)) {
+                                  error = "请输入有效数字";
+                                } else if (numValue < 0) {
+                                  error = "数量不能为负数";
+                                } else if (numValue < item.quantity) {
+                                  error = `数量不能小于换货数量 ${item.quantity}`;
+                                }
+
+                                if (!error && onUpdateActualQuantity) {
+                                  onUpdateActualQuantity(item.id, numValue);
+                                  setLocalInputValues(prev => {
+                                    const newState = { ...prev };
+                                    delete newState[item.id];
+                                    return newState;
+                                  });
+                                } else if (error) {
+                                  // 显示错误提示
+                                  alert(error);
+                                }
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const value = localInputValues[item.id];
+                                if (value !== undefined) {
+                                  // 内联验证
+                                  const numValue = parseFloat(value);
+                                  let error = "";
+
+                                  if (isNaN(numValue)) {
+                                    error = "请输入有效数字";
+                                  } else if (numValue < 0) {
+                                    error = "数量不能为负数";
+                                  } else if (numValue < item.quantity) {
+                                    error = `数量不能小于换货数量 ${item.quantity}`;
+                                  }
+
+                                  if (!error && onUpdateActualQuantity) {
+                                    onUpdateActualQuantity(item.id, numValue);
+                                    setLocalInputValues(prev => {
+                                      const newState = { ...prev };
+                                      delete newState[item.id];
+                                      return newState;
+                                    });
+                                  } else if (error) {
+                                    // 显示错误提示
+                                    alert(error);
+                                  }
+                                }
+                              }
+                            }}
+                            className="w-20 h-7 text-xs text-center"
+                            step="0.01"
+                            min={item.quantity}
+                            placeholder="输入数量"
+                          />
+                        ) : (
+                          item.actualQuantity || '-'
+                        )
                       )}
                     </TableCell>
                     <TableCell className="p-3 text-right border-b font-mono">
