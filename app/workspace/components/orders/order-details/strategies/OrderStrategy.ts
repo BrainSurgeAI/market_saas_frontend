@@ -13,6 +13,7 @@ export interface OrderStrategyContext {
     marketInspectionResult: string | null;
     customerInspectionResult: string | null;
   };
+  currentInspectionResult: string | null; // 当前验收结果（基于API返回的data字段）
   rawReceipts?: Receipt[];
   deliveries?: Delivery[];
   orderCode?: string;

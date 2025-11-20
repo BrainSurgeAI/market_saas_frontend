@@ -59,6 +59,7 @@ export function buildCompletionAction({
   deliveries,
   receipts,
   orderCode,
+  currentInspectionResult,
 }: {
   tenant: TenantType;
   status: OrderStatus;
@@ -77,6 +78,7 @@ export function buildCompletionAction({
   deliveries?: Delivery[];
   receipts?: Receipt[];
   orderCode?: string;
+  currentInspectionResult: string | null;
 }): ActionDescriptor | null {
   const requireAllProcessedStatuses = new Set<OrderStatus>([
     OrderStatus.MARKET_INSPECTING,
@@ -134,6 +136,48 @@ export function buildCompletionAction({
     allProcessed = processedCountMatch;
   }
 
+  // 基于API返回的验收结果来决定显示什么按钮
+  if (currentInspectionResult) {
+    if (currentInspectionResult === 'PENDING') {
+      // 验收还未完成，不显示按钮
+      return null;
+    } else if (currentInspectionResult === 'PASS' || currentInspectionResult === 'PARTIAL') {
+      // 显示"完成验收"按钮
+      return {
+        key: "complete-acceptance",
+        type: "button",
+        label: "完成验收",
+        className: "h-8 px-2 text-xs bg-green-700 text-white hover:bg-green-600",
+        onClick: completeAcceptance,
+      };
+    } else if (currentInspectionResult === 'REJECTED') {
+      // 显示"取消订单"按钮
+      return {
+        key: "reject-order",
+        type: "button",
+        label: "取消订单",
+        className: "h-8 px-2 text-xs bg-red-700 text-white hover:bg-red-600",
+        onClick: showRejectConfirmation,
+      };
+    } else if (currentInspectionResult === 'EXCHANGE') {
+      // 显示"申请换货"按钮
+      return {
+        key: "request-exchange",
+        type: "dialog",
+        label: requestingCustomerExchange ? "提交中..." : "申请换货",
+        className: "h-8 px-3 text-xs bg-orange-600 text-white hover:bg-orange-500",
+        dialog: {
+          title: "确认申请换货?",
+          description: "确认后，系统将通知供应商处理换货申请。",
+        },
+        onConfirm: requestCustomerExchange,
+        disabled: requestingCustomerExchange,
+        loading: requestingCustomerExchange,
+      };
+    }
+  }
+
+  // 如果没有验收结果，保持原来的逻辑作为后备
   if (!allProcessed) {
     return null;
   }

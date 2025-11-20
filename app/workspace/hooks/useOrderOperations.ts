@@ -14,7 +14,8 @@ export function useOrderOperations(
   tenantType?: string,
   getActualDeliveredQuantity?: (orderDetailId: number) => string,
   inspections?: OrderInspection[],
-  setInspections?: (inspections: OrderInspection[]) => void
+  setInspections?: (inspections: OrderInspection[]) => void,
+  onInspectionResult?: (result: string) => void
 ) {
   const { toast } = useToast();
   
@@ -211,8 +212,12 @@ export function useOrderOperations(
 
 
     // 提交到服务器（等待响应）
-    submitOperationToServer(operationRecord).then((success) => {
-      if (success) {
+    submitOperationToServer(operationRecord).then((result) => {
+      if (result.success) {
+        // 如果有验收结果回调，调用它
+        if (result.data && onInspectionResult) {
+          onInspectionResult(result.data);
+        }
         // ✅ 只有服务器返回成功，才更新本地状态
         // 从 sessionStorage 获取现有记录
         const existingRecordsString = sessionStorage.getItem('returnExchangeItems');
@@ -420,7 +425,7 @@ export function useOrderOperations(
   };
 
   // 提交操作到服务器
-  const submitOperationToServer = async (operationRecord: ReturnExchangeItem): Promise<boolean> => {
+  const submitOperationToServer = async (operationRecord: ReturnExchangeItem): Promise<{ success: boolean; data?: string }> => {
     try {
       // 调用后端 API /api/v1/orders/{order_code}/inspect-sub-orders
       const response = await fetch(`/api/orders/${orderCode}/inspect-sub-orders`, {
@@ -438,12 +443,18 @@ export function useOrderOperations(
         throw new Error(`提交操作记录失败: ${response.status}`);
       }
 
+      const responseData = await response.json();
+
       // 调试日志 - 只在开发环境启用
       if (process.env.NODE_ENV === 'development') {
         console.log(`[DEBUG] Successfully submitted operation for item ${operationRecord.id}:`, operationRecord);
+        console.log(`[DEBUG] API response data:`, responseData);
       }
 
-      return true; // 表示提交成功
+      return {
+        success: true,
+        data: responseData.data // 返回验收结果
+      };
     } catch (error) {
       console.error('提交操作记录到服务器时出错:', error);
       toast({
@@ -452,7 +463,7 @@ export function useOrderOperations(
         variant: 'destructive',
         duration: 5000,
       });
-      return false; // 表示提交失败
+      return { success: false };
     }
   };
 

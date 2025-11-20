@@ -133,6 +133,9 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 	const [loadingExchangeReturn, setLoadingExchangeReturn] = useState(false);
 	const [exchangeReturnError, setExchangeReturnError] = useState<string | null>(null);
 
+	// 当前验收结果状态（基于inspect-sub-orders API返回的data字段）
+	const [currentInspectionResult, setCurrentInspectionResult] = useState<string | null>(null);
+
 	// 按轮数分组数据（需要先定义，因为 useOrderCalculations 依赖它）
 	const roundGroups = useMemo(() => {
 		// CUSTOMER 用户：如果订单状态不是 MARKET_DELIVERING 或 EXCHANGE_NEW_DELIVERING，不按轮数分组
@@ -194,7 +197,8 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 		tenantType,
 		getActualDeliveredQuantity,
 		inspections,
-		setInspections
+		setInspections,
+		setCurrentInspectionResult
 	);
 	const {
 		operatingProductId,
@@ -905,7 +909,19 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 	// receipts只包含退换货记录（RETURN和EXCHANGE），不包含SIGN记录
 	// 构建退换货记录映射
 	const receiptMap = returnExchangeRecords.reduce<Record<number, OperationType | undefined>>((acc, record) => {
-		acc[record.id] = record.operationType;
+		// 对于验收操作创建的记录（没有inspectionId或inspectionId为空），直接包含
+		// 对于有inspectionId的记录，检查是否与最新轮inspection相关
+		if (inspections && inspections.length > 0 && record.inspectionId) {
+			const maxInspectionRound = Math.max(...inspections.map(inspection => inspection.inspectionRound));
+			const latestInspection = inspections.find(inspection => inspection.inspectionRound === maxInspectionRound);
+
+			if (latestInspection && record.inspectionId === latestInspection.inspectionId) {
+				acc[record.id] = record.operationType;
+			}
+		} else {
+			// 如果没有inspections数据，或者记录没有inspectionId（验收操作创建的记录），直接包含
+			acc[record.id] = record.operationType;
+		}
 		return acc;
 	}, {});
 
@@ -1173,6 +1189,7 @@ const productStatusSummary: ProductStatusSummary = useMemo(() => {
 			returnExchangeRecords,
 			productStatusSummary,
 			inspectionProgress,
+			currentInspectionResult,
 			rawReceipts,
 			inspections,
 			deliveries,

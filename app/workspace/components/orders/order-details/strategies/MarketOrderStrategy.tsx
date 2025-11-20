@@ -99,6 +99,7 @@ export class MarketOrderStrategy implements OrderStrategy {
       deliveries: context.deliveries,
       receipts: context.rawReceipts,
       orderCode: context.orderCode,
+      currentInspectionResult: context.currentInspectionResult,
     });
     if (completionAction) {
       descriptors.push(completionAction);
