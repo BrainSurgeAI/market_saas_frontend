@@ -103,6 +103,8 @@ interface ProviderDeliverRequest {
 type MarketInspectRequest = ItemQuantityPayload[];
 
 export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetailProps) {
+	console.log('❌ STANDARD COMPONENT LOADED - THIS SHOULD NOT HAPPEN:', { orderCode, orgId, tenantType });
+
 	const params = useParams();
 	const router = useRouter();
 	const { toast } = useToast();
@@ -110,6 +112,27 @@ export default function OrderDetail({ orderCode, orgId, tenantType }: OrderDetai
 
 	// 使用提取的 Hooks
 	const orderDetailsData = useOrderDetails(orderCode, orgId, tenantType);
+
+	// 检查是否是PROVIDER格式数据
+	if ((orderDetailsData as any).__isProviderFormat) {
+		console.warn('OrderDetails组件收到PROVIDER格式数据，重定向到PROVIDER组件');
+		return (
+			<div className="container mx-auto py-6">
+				<div className="flex flex-col items-center py-12">
+					<p className="text-sm text-red-500 mb-4">
+						检测到PROVIDER格式数据，但当前使用的是标准组件。请刷新页面。
+					</p>
+					<button
+						onClick={() => window.location.reload()}
+						className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+					>
+						刷新页面
+					</button>
+				</div>
+			</div>
+		);
+	}
+
 	const {
 		orderDetail,
 		setOrderDetail,

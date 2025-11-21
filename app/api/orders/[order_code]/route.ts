@@ -52,6 +52,9 @@ export async function GET(_request: NextRequest,
 	{ params }: { params: Promise<{  order_code: string }> }
 ) {
 	const { order_code } = await params;
+
+	logger.info(`Fetching order details for: ${order_code}`);
+
 	const response = await fetchRemoteData({
 		endpoint: `/orders/${order_code}`,
 		method: 'GET',
@@ -63,6 +66,23 @@ export async function GET(_request: NextRequest,
 		return NextResponse.json({ error: response.error }, { status: response.status });
 	}
 
-	return NextResponse.json(response.data.data);
+	// 检查响应数据
+	const remoteData = response.data;
+	
+
+	if (!remoteData || typeof remoteData !== 'object') {
+		logger.error(`Invalid remote data for order ${order_code}:`, remoteData);
+		return NextResponse.json({ error: 'Invalid response from remote API' }, { status: 502 });
+	}
+
+	// 对于PROVIDER格式，后端直接返回data字段
+	const responseData = remoteData.data || remoteData;
+
+	if (!responseData) {
+		logger.error(`No data returned for order ${order_code}`);
+		return NextResponse.json({ error: 'No data available' }, { status: 404 });
+	}
+
+	return NextResponse.json(responseData);
 }
 

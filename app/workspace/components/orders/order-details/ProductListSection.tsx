@@ -22,8 +22,8 @@ interface ProductListSectionProps {
   shouldShowInspectMenu: boolean;
   shouldShowStatusColumn: boolean;
   handleActualQuantityChange?: (id: number, value: string) => void;
-  handleActualQuantityKeyDown: (event: React.KeyboardEvent<HTMLInputElement>, id: number) => void;
-  handleOperation: (id: number, type: OperationType) => void;
+  handleActualQuantityKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>, id: number) => void;
+  handleOperation?: (id: number, type: OperationType) => void;
   productStatusSummary: ProductStatusSummary;
   isUnitAllowingDecimal: (unit: string) => boolean;
   roundGroups?: RoundGroupedData[];
@@ -208,7 +208,7 @@ export function ProductListSection({
                             step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
                             min="0"
                             max="999999.99"
-                            onKeyDown={(event) => handleActualQuantityKeyDown(event, item.id)}
+                            onKeyDown={(event) => handleActualQuantityKeyDown?.(event, item.id)}
                             disabled={!canEdit}
                           />
                           {itemErrors[item.id] && <p className="text-xs text-red-500 mt-1">{itemErrors[item.id]}</p>}
@@ -264,7 +264,7 @@ export function ProductListSection({
                 </div>
 
                 {/* 操作按钮 */}
-                {shouldShowInspectMenu && (
+                {shouldShowInspectMenu && handleOperation && (
                   <div className="flex justify-end border-t pt-2">
                     {actualStatus === "PENDING" && canEdit ? (
                       <DropdownMenu>
@@ -409,16 +409,24 @@ export function ProductListSection({
                       <TableCell className="p-2 text-center border-b w-[120px]">
                         {isEditing ? (
                           <div>
+                            {/* 调试信息 */}
+                            <div className="text-xs text-gray-500 mb-1">
+                              canEdit: {String(canEdit)}, isEditing: {String(isEditing)}
+                            </div>
                             <Input
                               type="number"
                               value={(item as OrderItem & { deliveredQuantity?: string }).deliveredQuantity || ""}
-                              onChange={(event) => handleActualQuantityChange?.(item.id, event.target.value)}
+                              onChange={(event) => {
+                                console.log('Input onChange:', item.id, event.target.value);
+                                handleActualQuantityChange?.(item.id, event.target.value);
+                              }}
                               className={`max-w-[100px] text-center font-mono font-semibold ${itemErrors[item.id] ? "border-red-500" : ""}`}
                               step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
                               min="0"
                               max="999999.99"
-                              onKeyDown={(event) => handleActualQuantityKeyDown(event, item.id)}
+                              onKeyDown={(event) => handleActualQuantityKeyDown?.(event, item.id)}
                               disabled={!canEdit}
+                              placeholder="输入数量"
                             />
                             {itemErrors[item.id] && <p className="text-xs text-red-500 mt-1">{itemErrors[item.id]}</p>}
                           </div>
@@ -452,7 +460,7 @@ export function ProductListSection({
                     <TableCell className="p-2 text-right border-b font-mono font-semibold">
                       ¥{(parseFloat(item.discountedUnitPrice) * subtotalQuantity).toFixed(2)}
                     </TableCell>
-                    {shouldShowInspectMenu && (
+                    {shouldShowInspectMenu && handleOperation && (
                       <TableCell className="p-2 text-right border-b">
                         {actualStatus === "PENDING" && canEdit ? (
                           <DropdownMenu>

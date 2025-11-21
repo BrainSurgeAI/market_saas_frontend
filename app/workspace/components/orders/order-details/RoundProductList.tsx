@@ -22,8 +22,8 @@ interface RoundProductListProps {
   shouldShowInspectMenu: boolean;
   shouldShowStatusColumn: boolean;
   handleActualQuantityChange?: (id: number, value: string) => void;
-  handleActualQuantityKeyDown: (event: React.KeyboardEvent<HTMLInputElement>, id: number) => void;
-  handleOperation: (id: number, type: OperationType) => void;
+  handleActualQuantityKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>, id: number) => void;
+  handleOperation?: (id: number, type: OperationType) => void;
   productStatusSummary: ProductStatusSummary;
   isUnitAllowingDecimal: (unit: string) => boolean;
   inspections?: any[];
@@ -132,6 +132,7 @@ export function RoundProductList({
             const canEditThisRound = isProvider && isExchangeInProgress ? isLatestRound : true;
             const canEditQuantity = canEdit && canEditThisRound;
 
+
             // 获取数量显示值
             // 每个轮次都只显示该轮次的验收数据，不累加之前轮次的数据
             const marketReceivedQtyForDisplay = getReceivedQuantityFromRound(item.id, "MARKET", group.inspections);
@@ -217,15 +218,15 @@ export function RoundProductList({
                           <div className="mt-1">
                             <Input
                               type="number"
-                              value={(item as OrderItem & { deliveredQuantity?: string }).deliveredQuantity || ""}
+                              value={(item as OrderItem & { deliveredQuantity?: string }).deliveredQuantity ?? ""}
                               onChange={(event) => handleActualQuantityChange?.(item.id, event.target.value)}
                               className={`w-full text-center font-mono font-semibold text-sm ${itemErrors[item.id] ? "border-red-500" : ""}`}
                               step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
                               min="0"
                               max="999999.99"
-                              onKeyDown={(event) => handleActualQuantityKeyDown(event, item.id)}
+                              onKeyDown={(event) => handleActualQuantityKeyDown?.(event, item.id)}
                               disabled={!canEditQuantity}
-                              placeholder="0.00"
+                              placeholder="输入数量"
                             />
                             {itemErrors[item.id] && <p className="text-xs text-red-500 mt-1">{itemErrors[item.id]}</p>}
                           </div>
@@ -265,7 +266,7 @@ export function RoundProductList({
                   </div>
 
                   {/* 操作按钮 */}
-                  {shouldShowInspectMenu && (
+                  {shouldShowInspectMenu && handleOperation && (
                     <div className="flex justify-end">
                       {actualStatus === "PENDING" && canEdit ? (
                         <DropdownMenu>
@@ -314,7 +315,7 @@ export function RoundProductList({
               <col className="w-[80px]" />
               <col className="w-[100px]" />
               <col className="w-[120px]" />
-              {shouldShowInspectMenu && <col className="w-[100px]" />}
+              {shouldShowInspectMenu && handleOperation && <col className="w-[100px]" />}
               {shouldShowStatusColumn && <col className="w-[100px]" />}
             </colgroup>
             <TableHeader>
@@ -331,7 +332,7 @@ export function RoundProductList({
                 <TableHead className="text-center p-3 border-b">单位</TableHead>
                 <TableHead className="text-right p-3 border-b">折扣价</TableHead>
                 <TableHead className="text-right p-3 border-b">小计（折后）</TableHead>
-                {shouldShowInspectMenu && <TableHead className="text-right p-3 border-b">操作</TableHead>}
+                {shouldShowInspectMenu && handleOperation && <TableHead className="text-right p-3 border-b">操作</TableHead>}
                 {shouldShowStatusColumn && <TableHead className="text-center p-3 border-b">状态</TableHead>}
               </TableRow>
             </TableHeader>
@@ -373,6 +374,7 @@ export function RoundProductList({
                 const shouldShowInput = isEditing && canEditQuantity;
                 const forceShowInput = isProvider && isExchangeInProgress && isLatestRound && canEdit && !isEditing;
 
+
                 return (
                   <TableRow key={item.id} className="text-xs text-gray-700">
                     <TableCell className="p-2 border-b">
@@ -403,7 +405,7 @@ export function RoundProductList({
                               step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
                               min="0"
                               max="999999.99"
-                              onKeyDown={(event) => handleActualQuantityKeyDown(event, item.id)}
+                              onKeyDown={(event) => handleActualQuantityKeyDown?.(event, item.id)}
                               disabled={!canEditQuantity}
                               placeholder="0.00"
                             />
@@ -436,7 +438,7 @@ export function RoundProductList({
                     <TableCell className="p-2 text-right border-b font-mono font-semibold">
                       ¥{(parseFloat(item.discountedUnitPrice) * subtotalQuantity).toFixed(2)}
                     </TableCell>
-                    {shouldShowInspectMenu && (
+                    {shouldShowInspectMenu && handleOperation && (
                       <TableCell className="p-2 text-right border-b">
                         {actualStatus === "PENDING" && canEdit ? (
                           <DropdownMenu>
@@ -581,7 +583,7 @@ export function RoundProductList({
                                 step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
                                 min="0"
                                 max="999999.99"
-                                onKeyDown={(event) => handleActualQuantityKeyDown(event, item.id)}
+                                onKeyDown={(event) => handleActualQuantityKeyDown?.(event, item.id)}
                                 disabled={!canEditQuantity}
                                 placeholder="0.00"
                               />
@@ -623,7 +625,7 @@ export function RoundProductList({
                     </div>
 
                     {/* 操作按钮 */}
-                    {shouldShowInspectMenu && (
+                    {shouldShowInspectMenu && handleOperation && (
                       <div className="flex justify-end">
                         {actualStatus === "PENDING" && canEdit ? (
                           <DropdownMenu>
@@ -672,7 +674,7 @@ export function RoundProductList({
                 <col className="w-[80px]" />
                 <col className="w-[100px]" />
                 <col className="w-[120px]" />
-                {shouldShowInspectMenu && <col className="w-[100px]" />}
+                {shouldShowInspectMenu && handleOperation && <col className="w-[100px]" />}
                 {shouldShowStatusColumn && <col className="w-[100px]" />}
               </colgroup>
               <TableHeader>
@@ -689,7 +691,7 @@ export function RoundProductList({
                   <TableHead className="text-center p-3 border-b">单位</TableHead>
                   <TableHead className="text-right p-3 border-b">折扣价</TableHead>
                   <TableHead className="text-right p-3 border-b">小计（折后）</TableHead>
-                  {shouldShowInspectMenu && <TableHead className="text-right p-3 border-b">操作</TableHead>}
+                  {shouldShowInspectMenu && handleOperation && <TableHead className="text-right p-3 border-b">操作</TableHead>}
                   {shouldShowStatusColumn && <TableHead className="text-center p-3 border-b">状态</TableHead>}
                 </TableRow>
               </TableHeader>
@@ -761,7 +763,7 @@ export function RoundProductList({
                                 step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
                                 min="0"
                                 max="999999.99"
-                                onKeyDown={(event) => handleActualQuantityKeyDown(event, item.id)}
+                                onKeyDown={(event) => handleActualQuantityKeyDown?.(event, item.id)}
                                 disabled={!canEditQuantity}
                                 placeholder="0.00"
                               />
@@ -794,7 +796,7 @@ export function RoundProductList({
                       <TableCell className="p-2 text-right border-b font-mono font-semibold">
                         ¥{(parseFloat(item.discountedUnitPrice) * subtotalQuantity).toFixed(2)}
                       </TableCell>
-                      {shouldShowInspectMenu && (
+                      {shouldShowInspectMenu && handleOperation && (
                         <TableCell className="p-2 text-right border-b">
                           {actualStatus === "PENDING" && canEdit ? (
                             <DropdownMenu>

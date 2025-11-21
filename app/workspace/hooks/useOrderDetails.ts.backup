@@ -53,20 +53,39 @@ export function useOrderDetails(orderCode: string, orgId: string, tenantType: st
         // 调试：打印API响应
         console.log('API响应:', jsonResponse);
         
-        // API路由可能返回两种格式：
+        // API路由可能返回三种格式：
         // 1. 完整格式：{ code: 200, message: "success", data: {...} }
         // 2. 直接格式：{ order: {...}, items: [...], ... } (API路由已经解包了data)
+        // 3. PROVIDER格式：{ createdAt, orderCode, orderStatus, rounds: [...] }
         let responseData: OrderDetailData;
-        
+
+        console.log('useOrderDetails - Raw API response:', jsonResponse);
+
         if ('rounds' in jsonResponse && Array.isArray(jsonResponse.rounds)) {
-          // PROVIDER格式 - 返回特殊标记，让调用方知道这是PROVIDER数据
-          console.log('检测到PROVIDER格式数据，返回特殊标记');
+          // PROVIDER格式 - 返回一个特殊的标记对象
+          console.log('检测到PROVIDER格式数据，返回特殊标记对象');
           return {
+    orderDetail,
+    setOrderDetail,
+    orderItems,
+    setOrderItems,
+    returnExchangeRecords,
+    setReturnExchangeRecords,
+    rawReceipts,
+    inspections,
+    setInspections,
+    deliveries,
+    setDeliveries,
+    statusHistory,
+    loading,
+    error,
+    isEditing,
+    setIsEditing,
+  }
             __isProviderFormat: true,
             __providerData: jsonResponse
           } as any;
-        } else 
-        if ('code' in jsonResponse && 'data' in jsonResponse) {
+        }
           // 完整格式
           const apiResponse = jsonResponse as ApiResponse;
           const responseCode = typeof apiResponse.code === 'string' ? parseInt(apiResponse.code, 10) : apiResponse.code;
@@ -83,6 +102,7 @@ export function useOrderDetails(orderCode: string, orgId: string, tenantType: st
           responseData = jsonResponse as OrderDetailData;
         } else {
           console.error('无法识别的API响应格式:', jsonResponse);
+          console.error('租户类型:', tenantType);
           throw new Error('API响应格式不正确');
         }
         
@@ -200,6 +220,16 @@ export function useOrderDetails(orderCode: string, orgId: string, tenantType: st
     returnExchangeRecords,
     setReturnExchangeRecords,
     rawReceipts,
+    inspections,
+    setInspections,
+    deliveries,
+    setDeliveries,
+    statusHistory,
+    loading,
+    error,
+    isEditing,
+    setIsEditing,
+  }
     inspections,
     setInspections,
     deliveries,

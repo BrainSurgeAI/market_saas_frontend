@@ -71,13 +71,28 @@ export function MarketExchangeInspectPage({ orderCode, orgId, tenantType }: Mark
 	const { user } = useWorkspace();
 	const { toast } = useToast();
 
+	const orderDetailsData = useOrderDetails(orderCode, orgId, tenantType);
+
+	// 检查是否是PROVIDER格式数据
+	if (orderDetailsData && (orderDetailsData as any).__isProviderFormat) {
+		return (
+			<div className="container mx-auto py-6">
+				<div className="flex flex-col items-center py-12">
+					<p className="text-sm text-red-500 mb-4">
+						PROVIDER用户不支持换货验收功能。
+					</p>
+				</div>
+			</div>
+		);
+	}
+
 	const {
 		orderDetail,
 		orderItems,
 		returnExchangeRecords,
 		loading,
 		error,
-	} = useOrderDetails(orderCode, orgId, tenantType);
+	} = orderDetailsData;
 
 	const [formState, setFormState] = useState<FormState>({});
 	const [submitting, setSubmitting] = useState(false);
