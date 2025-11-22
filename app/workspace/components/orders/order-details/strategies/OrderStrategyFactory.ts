@@ -8,6 +8,12 @@ import { CustomerOrderStrategy } from "./CustomerOrderStrategy";
 const strategyCache = new Map<string, OrderStrategy>();
 
 export function getOrderStrategy(tenantType: string): OrderStrategy {
+  // 如果 tenantType 为空或 undefined，默认使用 CUSTOMER 策略，避免崩溃
+  if (!tenantType) {
+    console.warn('getOrderStrategy called with empty tenantType, defaulting to CUSTOMER');
+    tenantType = TenantType.CUSTOMER;
+  }
+
   const tenantLower = tenantType.toLowerCase();
   
   // 检查缓存
