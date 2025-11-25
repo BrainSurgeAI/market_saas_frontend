@@ -31,11 +31,6 @@ export default function OrderDetailPage() {
   const orderCode = params.order_code as string;
   const customerId = params.customer_id as string;
 
-  console.log("🚀 CUSTOMER ROUTE - OrderDetailPage");
-  console.log("🚀 CUSTOMER ROUTE - orderCode:", orderCode);
-  console.log("🚀 CUSTOMER ROUTE - customerId:", customerId);
-  console.log("🚀 CUSTOMER ROUTE - tenantType:", tenantType);
-
   // If tenantType is CUSTOMER, use the dedicated component
   // Also fallback to CustomerOrderDetails if tenantType is missing but we are in customer route
   if (tenantType === "CUSTOMER" || !tenantType) {

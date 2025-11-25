@@ -54,7 +54,13 @@ import {
   RefreshCw,
   AlertCircle,
   Download,
+  Calendar,
+  MapPin,
+  User,
+  Truck,
+  Package,
 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { translateOrderStatus, getStatusVariant } from "@/lib/utils";
 
@@ -125,8 +131,6 @@ export default function CustomerOrderDetails({
 
       const result = await response.json();
       const data = result.data || result;
-      
-      console.log("Fetched customer order data:", data);
 
       // Data validation loose check
       if (!data.details && !data.rounds) {
@@ -135,7 +139,6 @@ export default function CustomerOrderDetails({
 
       setCustomerOrderData(data as CustomerOrderData);
     } catch (err) {
-      console.error("Error fetching customer order details:", err);
       setError(err instanceof Error ? err.message : "获取订单详情失败");
       toast({
         title: "获取失败",
@@ -485,21 +488,14 @@ export default function CustomerOrderDetails({
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => router.back()}
-              className="mr-2"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <h1 className="text-2xl font-bold tracking-tight">
-              CUSTOMER 订单详情
+            <h1 className="text-lg font-bold tracking-tight">
+              订单详情
             </h1>
           </div>
-          <div className="flex items-center gap-2 ml-11">
-            <span className="text-sm text-muted-foreground">
-              {customerOrderData.orderCode}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground flex items-center gap-1">
+              <Calendar className="h-3.5 w-3.5" />
+              {new Date(customerOrderData.deliveryDate).toLocaleDateString()}
             </span>
             <Badge variant={getStatusVariant(customerOrderData.orderStatus)}>
               {translateOrderStatus(customerOrderData.orderStatus)}
@@ -537,64 +533,117 @@ export default function CustomerOrderDetails({
                    完成订单
                </Button>
            )}
-
-           <Button variant="outline" size="icon">
-             <Download className="h-4 w-4" />
-           </Button>
         </div>
       </div>
 
       {/* Order Info Card */}
-      <Card>
+      <Card className="border-none shadow-sm bg-white overflow-hidden rounded-xl">
         <Collapsible
           open={!isOrderInfoCollapsed}
           onOpenChange={(open) => setIsOrderInfoCollapsed(!open)}
         >
-          <CardHeader className="py-4">
-            <CollapsibleTrigger className="flex items-center justify-between w-full">
-              <CardTitle className="text-base font-medium">订单信息</CardTitle>
-              {isOrderInfoCollapsed ? (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              )}
-            </CollapsibleTrigger>
-          </CardHeader>
+          <div className="flex items-center justify-between p-6 cursor-pointer hover:bg-gray-50/50 transition-colors" onClick={() => setIsOrderInfoCollapsed(!isOrderInfoCollapsed)}>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                <Package className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">基本信息</h2>
+                <p className="text-xs text-gray-500">
+                  {customerOrderData.orderCode}
+                </p>
+              </div>
+            </div>
+            {isOrderInfoCollapsed ? (
+              <ChevronRight className="h-5 w-5 text-gray-400" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-gray-400" />
+            )}
+          </div>
+          
           <CollapsibleContent>
-            <CardContent className="pb-6 pt-0">
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">创建时间</p>
-                  <p className="text-sm font-medium">
-                    {new Date(customerOrderData.createdAt).toLocaleString()}
-                  </p>
+            <div className="px-6 pb-8 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-y-8 gap-x-12">
+                <div className="flex gap-4">
+                  <div className="mt-1">
+                    <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+                      <Calendar className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="space-y-3 mt-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-0.5 font-medium">创建时间</p>
+                        <p className="text-sm text-gray-500">
+                          {new Date(customerOrderData.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">配送日期</p>
-                  <p className="text-sm font-medium">
-                    {new Date(customerOrderData.deliveryDate).toLocaleDateString()}
-                  </p>
+
+                <div className="flex gap-4">
+                  <div className="mt-1">
+                    <div className="p-2.5 rounded-xl bg-violet-50 text-violet-600 ring-1 ring-violet-100">
+                      <User className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-violet-600/80 uppercase tracking-wide">配送中心</p>
+                    <div className="space-y-3 mt-2">
+                      <div>
+                        <p className="text-sm text-gray-500">
+                          {customerOrderData.customerName}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">客户名称</p>
-                  <p className="text-sm font-medium">
-                    {customerOrderData.customerName}
-                  </p>
+
+                <div className="flex gap-4">
+                  <div className="mt-1">
+                    <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600 ring-1 ring-amber-100">
+                      <Truck className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-amber-600/80 uppercase tracking-wide">配送信息</p>
+                    <div className="space-y-3 mt-2">
+                      <div>
+                        <p className="text-sm text-gray-500">
+                          {customerOrderData.shipperName ? (
+                            <span className="flex items-center gap-2">
+                              {customerOrderData.shipperName}
+                              <span className="text-muted-foreground text-xs font-normal bg-gray-100 px-1.5 py-0.5 rounded-md">
+                                {customerOrderData.shipperPhone}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 italic text-sm">未分配</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">配送员</p>
-                  <p className="text-sm font-medium">
-                    {customerOrderData.shipperName || "-"} ({customerOrderData.shipperPhone || "-"})
-                  </p>
-                </div>
-                <div className="space-y-1 md:col-span-2">
-                  <p className="text-xs text-muted-foreground">配送地址</p>
-                  <p className="text-sm font-medium">
-                    {customerOrderData.deliveryAddress}
-                  </p>
+
+                <div className="flex gap-4">
+                  <div className="mt-1">
+                    <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+                      <MapPin className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-emerald-600/80 uppercase tracking-wide">收货地址</p>
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-500 leading-relaxed">
+                        {customerOrderData.deliveryAddress}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </CardContent>
+            </div>
           </CollapsibleContent>
         </Collapsible>
       </Card>
@@ -607,63 +656,130 @@ export default function CustomerOrderDetails({
         </TabsList>
 
         <TabsContent value="products" className="mt-4">
-            {/* If we are in INSPECTING state, show inspection view (from activeRound) */}
-            {/* Otherwise, show details list (from details) */}
-            {/* However, user requested 'Product List' tab to use 'details' data specifically */}
-            {/* And 'Delivery Rounds' tab (renamed to Inspection Sheet) to use 'rounds' */}
-            {/* But if we are inspecting, we need to operate on items. Where should we do that? */}
-            {/* Usually operations happen on the 'Product List' or 'Inspection' tab. */}
-            {/* If 'details' is just a list of what was ordered, maybe operations should happen in 'rounds' tab? */}
-            {/* Or maybe 'details' should be used for display when NOT inspecting, and rounds for inspecting? */}
-            {/* User said: "商品清单tab的表格用details中的数据" - this implies simple list display */}
-            {/* And "配送轮次tab改名叫验收单，用rounds里的数据" - this implies where inspection happens or history is shown */}
-            
-            {/* Let's implement details view for products tab */}
-          <Card>
-            <CardHeader className="py-4">
-              <CardTitle className="text-base">商品清单</CardTitle>
+          <Card className="border-none shadow-none bg-transparent">
+            <CardHeader className="px-0 pt-0 pb-4">
+              <CardTitle className="text-lg font-semibold"></CardTitle>
             </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>商品名称</TableHead>
-                    <TableHead>单价/单位</TableHead>
-                    <TableHead className="text-center">下单量</TableHead>
-                    <TableHead className="text-center">金额</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {customerOrderData.details?.map((item, index) => (
-                    <TableRow key={`o_${item.id}_${index}`}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{item.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.productId}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        ¥{item.unitPrice} / {item.unit}
-                      </TableCell>
-                      <TableCell className="text-center font-mono">
-                        {item.orderedQty}
-                      </TableCell>
-                      <TableCell className="text-center font-mono">
-                         ¥{item.orderedAmount}
-                      </TableCell>
+            <CardContent className="px-0">
+              {/* Desktop View */}
+              <div className="hidden md:block rounded-xl border bg-white overflow-hidden shadow-sm">
+                <Table>
+                  <TableHeader className="bg-gray-50/50">
+                    <TableRow>
+                      <TableHead className="w-[40%] pl-6">商品信息</TableHead>
+                      <TableHead className="w-[20%]">单价/单位</TableHead>
+                      <TableHead className="w-[20%] text-center">下单量</TableHead>
+                      <TableHead className="w-[20%] text-right pr-6">订购金额</TableHead>
                     </TableRow>
-                  ))}
-                  {(!customerOrderData.details || customerOrderData.details.length === 0) && (
-                      <TableRow>
-                          <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                              暂无商品明细
-                          </TableCell>
+                  </TableHeader>
+                  <TableBody>
+                    {customerOrderData.details?.map((item, index) => (
+                      <TableRow key={`o_${item.id}_${index}`} className="hover:bg-gray-50/50 transition-colors">
+                        <TableCell className="pl-6 py-4">
+                          <div className="flex items-center gap-4">
+                            <Avatar className="h-12 w-12 border border-gray-100 shadow-md rounded-lg">
+                              <AvatarImage src={item.imageUrl || ""} alt={item.name} className="object-cover" />
+                              <AvatarFallback className="bg-primary/5 text-primary text-xs rounded-lg font-medium shadow-inner">
+                                {item.name ? item.name.slice(0, 2) : "无"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col gap-1">
+                              <p className="font-semibold text-gray-900 line-clamp-1">{item.name}</p>
+                              <div className="flex items-center gap-2">
+                                <span className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-mono">
+                                  SKU: {item.productId}
+                                </span>
+                                {item.category && (
+                                  <span className="text-xs text-gray-500">{item.category}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium font-mono text-gray-900">¥{item.unitPrice}</span>
+                            <span className="text-xs text-gray-500">/ {item.unit}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="secondary" className="font-mono font-medium bg-blue-50 text-blue-700 hover:bg-blue-50">
+                            x {item.orderedQty}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right pr-6">
+                          <span className="font-bold font-mono text-gray-900">¥{item.orderedAmount}</span>
+                        </TableCell>
                       </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                    ))}
+                    {(!customerOrderData.details || customerOrderData.details.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-12 text-gray-500 bg-gray-50/30">
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center">
+                              <span className="text-2xl">📦</span>
+                            </div>
+                            <p>暂无商品明细</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile View */}
+              <div className="grid grid-cols-1 gap-4 md:hidden">
+                {customerOrderData.details?.map((item, index) => (
+                  <div key={`m_${item.id}_${index}`} className="bg-white rounded-xl p-4 border shadow-sm space-y-3">
+                    <div className="flex items-start gap-3">
+                      <Avatar className="h-16 w-16 border border-gray-100 shadow-md rounded-lg shrink-0">
+                        <AvatarImage src={item.imageUrl || ""} alt={item.name} className="object-cover" />
+                        <AvatarFallback className="bg-primary/5 text-primary text-sm rounded-lg font-medium shadow-inner">
+                          {item.name ? item.name.slice(0, 2) : "无"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start gap-2">
+                          <h3 className="font-semibold text-gray-900 line-clamp-2 text-sm">{item.name}</h3>
+                          <span className="font-bold text-gray-900 font-mono shrink-0">¥{item.orderedAmount}</span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-2 items-center">
+                          <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[10px] font-mono">
+                            {item.productId}
+                          </span>
+                          {item.category && (
+                            <span className="text-xs text-gray-500 border-l pl-2">{item.category}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-gray-500 uppercase tracking-wider">单价</span>
+                        <span className="text-sm font-medium">¥{item.unitPrice} <span className="text-gray-400 text-xs font-normal">/ {item.unit}</span></span>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className="text-[10px] text-gray-500 uppercase tracking-wider">数量</span>
+                        <Badge variant="secondary" className="font-mono font-medium bg-blue-50 text-blue-700 hover:bg-blue-50 mt-0.5">
+                          x {item.orderedQty}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {(!customerOrderData.details || customerOrderData.details.length === 0) && (
+                  <div className="text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="h-12 w-12 rounded-full bg-gray-50 flex items-center justify-center">
+                        <span className="text-2xl">📦</span>
+                      </div>
+                      <p className="text-sm">暂无商品明细</p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

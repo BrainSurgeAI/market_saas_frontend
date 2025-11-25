@@ -24,6 +24,7 @@ export interface CustomerOrderDetail {
   discountRate: string;
   discountedUnitPrice: string;
   id: number;
+  imageUrl: string | null;
   name: string;
   netAmount: string;
   orderedAmount: string;
