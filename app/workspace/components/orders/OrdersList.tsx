@@ -449,13 +449,13 @@ export default function OrdersList({ org_id, redirectUrl, handleAssignClick, use
 											{/* 订购金额 */}
 											<div className="md:block flex justify-between items-center md:justify-end">
 												<span className="md:hidden text-xs font-semibold text-gray-500">订购金额</span>
-												<div className="font-bold text-sm text-gray-900 md:text-right">¥{order.totalAmount}</div>
+												<div className="font-bold text-sm font-mono text-gray-900 md:text-right">¥{order.totalAmount}</div>
 											</div>
 
 											{/* 结算金额 */}
 											<div className="md:block flex justify-between items-center md:justify-end">
 												<span className="md:hidden text-xs font-semibold text-gray-500">结算金额</span>
-												<div className="font-bold text-sm text-gray-900 md:text-right">¥{order.actualAmount}</div>
+												<div className="font-bold text-sm font-mono text-gray-900 md:text-right">¥{order.actualAmount}</div>
 											</div>
 
 											{/* 配送日期 */}

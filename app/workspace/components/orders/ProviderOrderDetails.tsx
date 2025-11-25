@@ -835,18 +835,9 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
       {/* 头部导航 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.back()}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            返回
-          </Button>
           <div>
-            <h1 className="text-2xl font-semibold">PROVIDER 订单详情</h1>
+            <h1 className="text-xl font-semibold">订单详情</h1>
             <div className="flex items-center gap-2 mt-1">
-              <p className="text-sm text-muted-foreground">{providerOrderData.orderCode}</p>
               <Badge variant={getStatusVariant(providerOrderData.orderStatus)}>
                 {translateOrderStatus(providerOrderData.orderStatus)}
               </Badge>
@@ -931,7 +922,7 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
             <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">订单编号</p>
+              <p className="text-sm font-medium text-muted-foreground">订单号</p>
               <p className="text-sm">{providerOrderData.orderCode}</p>
             </div>
             <div>
@@ -1006,10 +997,10 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold text-base text-foreground">{item.name}</span>
+                              <span className="font-semibold text-sm text-foreground">{item.name}</span>
                             </div>
                             <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <span>编码: {item.productId}</span>
+                              <span>SKU: {item.productId}</span>
                               <span>分类: {item.category}</span>
                               <span>规格: {item.unit}</span>
                             </div>
@@ -1022,7 +1013,7 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
                             {/* 需求量 */}
                             <div className="text-center">
                               <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">需求量</div>
-                              <div className="text-lg font-bold text-foreground bg-muted/50 rounded-md px-3 py-2 border">
+                              <div className="text-medium font-bold font-mono text-foreground bg-muted/50 rounded-md px-3 py-2 border">
                                 {item.orderedQty} {item.unit}
                               </div>
                             </div>
@@ -1044,7 +1035,7 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
                                       type="number"
                                       value={(item as any).deliveredQuantity || ""}
                                       onChange={(event) => handleActualQuantityChange(item.id, item.round || 1, event.target.value)}
-                                      className={`w-24 text-center font-mono font-semibold text-lg ${itemErrors[item.id] ? "border-red-500" : ""}`}
+                                      className={`w-24 text-center font-mono font-semibold text-medium ${itemErrors[item.id] ? "border-red-500" : ""}`}
                                       step={true ? "0.01" : "1"}
                                       min="0"
                                       max="999999.99"

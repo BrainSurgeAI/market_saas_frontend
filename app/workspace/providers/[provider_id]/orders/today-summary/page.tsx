@@ -47,7 +47,7 @@ export default async function TodaySummaryPage({
   
   try {
     const response = await fetchRemoteData({
-      endpoint: `/providers/${providerId}/orders/today-summary`,
+      endpoint: `/orders/preparation-summary`,
       method: 'GET',
       tags: [`provider-${providerId}-today-summary`],
       revalidate: 0, // 不缓存，每次获取最新数据

@@ -68,9 +68,9 @@ import {
 
 // Provider interface extracted from page
 export interface Provider {
-	id: string;
-	name: string;
-	businessScope?: string;
+  id: string;
+  name: string;
+  businessScope?: string;
 }
 
 interface MarketOrderDetailsProps {
@@ -140,7 +140,7 @@ export default function MarketOrderDetails({
       const result = await response.json();
       // Check if data is wrapped or direct
       const data = result.data || result;
-      
+
       // Log received data for debugging
       console.log("Fetched market order data:", data);
 
@@ -169,98 +169,98 @@ export default function MarketOrderDetails({
 
   // Fetch Providers Logic
   const fetchProviders = async () => {
-		try {
-			setLoadingProviders(true);
-			const response = await fetch(`/api/markets/${orgId}/providers`, {
-				method: 'GET',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-			});
+    try {
+      setLoadingProviders(true);
+      const response = await fetch(`/api/markets/${orgId}/providers`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-			if (!response.ok) {
-				throw new Error(`请求失败: ${response.status}`);
-			}
+      if (!response.ok) {
+        throw new Error(`请求失败: ${response.status}`);
+      }
 
-			const responseData = await response.json();
+      const responseData = await response.json();
 
-			if (Array.isArray(responseData)) {
-				setProviders(responseData);
-			} else if (responseData.data && Array.isArray(responseData.data)) {
-				setProviders(responseData.data);
-			} else {
-				setProviders([]);
-			}
-		} catch (err) {
-			toast({
-				title: "获取供应商失败",
-				description: err instanceof Error ? err.message : "获取供应商列表时出错",
-				variant: "destructive",
-			});
-		} finally {
-			setLoadingProviders(false);
-		}
-	};
+      if (Array.isArray(responseData)) {
+        setProviders(responseData);
+      } else if (responseData.data && Array.isArray(responseData.data)) {
+        setProviders(responseData.data);
+      } else {
+        setProviders([]);
+      }
+    } catch (err) {
+      toast({
+        title: "获取供应商失败",
+        description: err instanceof Error ? err.message : "获取供应商列表时出错",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
 
   // Open Assign Dialog
   const handleOpenAssignDialog = () => {
-      fetchProviders();
-      setSelectedProvider("");
-      setShowProviderDialog(true);
+    fetchProviders();
+    setSelectedProvider("");
+    setShowProviderDialog(true);
   };
 
   // Handle Assign Order
   const handleAssignOrder = async () => {
-      if (!selectedProvider || assigningOrder) return;
+    if (!selectedProvider || assigningOrder) return;
 
-      try {
-          setAssigningOrder(true);
+    try {
+      setAssigningOrder(true);
 
-          const response = await fetch(`/api/markets/${orgId}/orders/${orderCode}/assign`, {
-              method: 'PATCH',
-              headers: {
-                  'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                  providerId: parseInt(selectedProvider),
-                  confirmedBy: "MARKET_USER" // Should come from real user
-              })
-          });
+      const response = await fetch(`/api/markets/${orgId}/orders/${orderCode}/assign`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          providerId: parseInt(selectedProvider),
+          confirmedBy: "MARKET_USER" // Should come from real user
+        })
+      });
 
-          if (!response.ok) {
-              const errorText = await response.text();
-              throw new Error(`指派订单失败: ${response.status}, ${errorText}`);
-          }
-
-          toast({
-              title: "指派成功",
-              description: `订单 ${orderCode} 已成功指派`,
-              variant: "default", // success variant not standard in shadcn usually, use default
-          });
-
-          setShowProviderDialog(false);
-          fetchMarketOrderDetails(); // Refresh order details
-
-      } catch (err) {
-          toast({
-              title: "指派失败",
-              description: err instanceof Error ? err.message : "指派订单时出错",
-              variant: "destructive",
-          });
-      } finally {
-          setAssigningOrder(false);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`指派订单失败: ${response.status}, ${errorText}`);
       }
+
+      toast({
+        title: "指派成功",
+        description: `订单 ${orderCode} 已成功指派`,
+        variant: "default", // success variant not standard in shadcn usually, use default
+      });
+
+      setShowProviderDialog(false);
+      fetchMarketOrderDetails(); // Refresh order details
+
+    } catch (err) {
+      toast({
+        title: "指派失败",
+        description: err instanceof Error ? err.message : "指派订单时出错",
+        variant: "destructive",
+      });
+    } finally {
+      setAssigningOrder(false);
+    }
   };
 
   // Get selected provider business scope
   const getSelectedProviderBusinessScope = () => {
-		if (!selectedProvider) return [];
+    if (!selectedProvider) return [];
 
-		const provider = providers.find(p => p.id === selectedProvider);
-		if (!provider || !provider.businessScope) return [];
+    const provider = providers.find(p => p.id === selectedProvider);
+    if (!provider || !provider.businessScope) return [];
 
-		return provider.businessScope.split(',');
-	};
+    return provider.businessScope.split(',');
+  };
 
   // State for begin inspecting
   const [isStartingInspection, setIsStartingInspection] = useState(false);
@@ -379,28 +379,28 @@ export default function MarketOrderDetails({
         if (lastRoundIndex >= 0) {
           const lastRound = { ...newRounds[lastRoundIndex] };
           const newItems = lastRound.items.map(item => {
-             if (item.orderDetailId === currentOperatingItem.orderDetailId) {
-                return {
-                    ...item,
-                    inspectionStatus: operationType,
-                    // For SIGN, update acceptedQty with the input quantity
-                    acceptedQty: operationType === "SIGN" ? operationQuantity : item.acceptedQty,
-                    // For RETURN/EXCHANGE, you might also want to update returnQty or exchangeQty if available in the model
-                    // But user specifically asked for 'acceptedQty' cell to show input quantity on Sign
-                };
-             }
-             return item;
+            if (item.orderDetailId === currentOperatingItem.orderDetailId) {
+              return {
+                ...item,
+                inspectionStatus: operationType,
+                // For SIGN, update acceptedQty with the input quantity
+                acceptedQty: operationType === "SIGN" ? operationQuantity : item.acceptedQty,
+                // For RETURN/EXCHANGE, you might also want to update returnQty or exchangeQty if available in the model
+                // But user specifically asked for 'acceptedQty' cell to show input quantity on Sign
+              };
+            }
+            return item;
           });
           lastRound.items = newItems;
           // Update inspection result for the round/order if provided in response data
           if (inspectionResult && inspectionResult !== "PENDING") {
-             setInspectionResult(inspectionResult);
+            setInspectionResult(inspectionResult);
           }
           newRounds[lastRoundIndex] = lastRound;
-          
+
           setMarketOrderData({
-              ...marketOrderData,
-              rounds: newRounds
+            ...marketOrderData,
+            rounds: newRounds
           });
         }
       }
@@ -423,24 +423,24 @@ export default function MarketOrderDetails({
   const handleCompleteAcceptance = async () => {
     try {
       setIsCompletingOrder(true);
-      
+
       // Determine API endpoint based on status
       // If there are exchanged items, we request exchange. Otherwise, accept.
       // Simple logic: if inspection status has EXCHANGE, use exchange-request
-      
+
       const hasExchange = activeRound?.items.some(i => i.inspectionStatus === "EXCHANGE");
-      
+
       // Based on useOrderActions.ts, the API for normal acceptance (MARKET) is /api/orders/{orderCode}/complete-inspection
       // And for exchange it is /api/orders/{orderCode}/exchange-request
-      const apiUrl = hasExchange 
-        ? `/api/orders/${orderCode}/exchange-request` 
+      const apiUrl = hasExchange
+        ? `/api/orders/${orderCode}/exchange-request`
         : `/api/orders/${orderCode}/complete-inspection`;
-      
+
       // Also based on useOrderActions.ts, the payload should contain status:
       // status: hasExchangeStatus ? OrderStatus.EXCHANGE_REQUESTED : OrderStatus.MARKET_ACCEPTED
-      
-      const status = hasExchange 
-        ? "EXCHANGE_REQUESTED" 
+
+      const status = hasExchange
+        ? "EXCHANGE_REQUESTED"
         : "MARKET_ACCEPTED"; // MARKET_ACCEPTED leads to next step (e.g. deliver to customer)
 
       // The payload structure in useOrderActions.ts:
@@ -452,11 +452,11 @@ export default function MarketOrderDetails({
       const response = await fetch(apiUrl, {
         method: "PATCH",
         headers: {
-            "Content-Type": "application/json",
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-            operateBy: "MARKET_USER", // Should be real user
-            status: status
+          operateBy: "MARKET_USER", // Should be real user
+          status: status
         })
       });
 
@@ -469,18 +469,18 @@ export default function MarketOrderDetails({
         description: hasExchange ? "换货申请已提交" : "验收完成",
         variant: "default",
       });
-      
+
       setIsConfirmDialogOpen(false);
       fetchMarketOrderDetails();
 
     } catch (err) {
-        toast({
-            title: "提交失败",
-            description: err instanceof Error ? err.message : "操作失败",
-            variant: "destructive",
-        });
+      toast({
+        title: "提交失败",
+        description: err instanceof Error ? err.message : "操作失败",
+        variant: "destructive",
+      });
     } finally {
-        setIsCompletingOrder(false);
+      setIsCompletingOrder(false);
     }
   };
 
@@ -504,7 +504,7 @@ export default function MarketOrderDetails({
 
       const responseData = await response.json();
       // Assuming the API returns the new status or we can infer it
-      
+
       toast({
         title: "操作成功",
         description: "订单已开始配送至客户",
@@ -527,14 +527,14 @@ export default function MarketOrderDetails({
   const handleBeginInspect = async () => {
     try {
       setIsStartingInspection(true);
-      
+
       // Determine API path based on status
       // Based on old component logic, if EXCAHNGE_NEW_DELIVERING or EXCHANGE_DELIVERING use begin-inspect-order
       // If not, also use begin-inspect-order. It seems the path is consistent.
       // But wait, old code had a check:
       // let apiPath = `/api/orders/${orderCode}/begin-inspect-order`;
       // So the path is NOT start-inspect, but begin-inspect-order.
-      
+
       const response = await fetch(`/api/orders/${orderCode}/begin-inspect-order`, {
         method: "POST",
         headers: {
@@ -542,7 +542,7 @@ export default function MarketOrderDetails({
         },
         // Based on old code, payload needs operateBy
         body: JSON.stringify({
-            operateBy: "MARKET_USER" // Should be real user name
+          operateBy: "MARKET_USER" // Should be real user name
         })
       });
 
@@ -633,74 +633,60 @@ export default function MarketOrderDetails({
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => router.back()}
-              className="mr-2"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <h1 className="text-2xl font-bold tracking-tight">
-              MARKET 订单详情
+            <h1 className="text-lg font-bold tracking-tight">
+              订单详情
             </h1>
           </div>
-          <div className="flex items-center gap-2 ml-11">
-            <span className="text-sm text-muted-foreground">
-              {marketOrderData.orderCode}
-            </span>
+          <div className="flex items-center gap-2">
             <Badge variant={getStatusVariant(marketOrderData.orderStatus)}>
               {translateOrderStatus(marketOrderData.orderStatus)}
             </Badge>
           </div>
         </div>
         <div className="flex gap-2">
-           {/* Action Buttons */}
-           {/* 指派按钮 (PENDING) */}
-           {marketOrderData.orderStatus === "PENDING" && (
-              <Button 
-                onClick={handleOpenAssignDialog}
-                className="bg-primary hover:bg-primary/90"
+          {/* Action Buttons */}
+          {/* 指派按钮 (PENDING) */}
+          {marketOrderData.orderStatus === "PENDING" && (
+            <Button
+              onClick={handleOpenAssignDialog} size="sm"
+              className="bg-primary hover:bg-primary/90"
+            >
+              指派订单
+            </Button>
+          )}
+
+          {/* 开始验收按钮 (SUPPLIER_DELIVERING) */}
+          {(marketOrderData.orderStatus === "SUPPLIER_DELIVERING" ||
+            marketOrderData.orderStatus === "EXCHANGE_DELIVERING" ||
+            marketOrderData.orderStatus === "EXCHANGE_NEW_DELIVERING") && (
+              <Button
+                onClick={() => setIsStartInspectDialogOpen(true)} size="sm"
+                className="bg-blue-600 hover:bg-blue-500"
               >
-                  指派供应商
+                开始验收
               </Button>
-           )}
+            )}
 
-           {/* 开始验收按钮 (SUPPLIER_DELIVERING) */}
-           {(marketOrderData.orderStatus === "SUPPLIER_DELIVERING" || 
-             marketOrderData.orderStatus === "EXCHANGE_DELIVERING" || 
-             marketOrderData.orderStatus === "EXCHANGE_NEW_DELIVERING") && (
-               <Button 
-                onClick={() => setIsStartInspectDialogOpen(true)}
-                className="bg-blue-600 hover:bg-blue-500"
-               >
-                   开始验收
-               </Button>
-           )}
+          {/* 完成验收按钮 */}
+          {(marketOrderData.orderStatus === "MARKET_INSPECTING" || marketOrderData.orderStatus === "EXCHANGE_INSPECTING") && (
+            <Button
+              onClick={() => setIsConfirmDialogOpen(true)} size="sm"
+              disabled={stats.pending > 0 && inspectionResult === "PENDING"}
+            >
+              {marketOrderData.orderStatus === "EXCHANGE_INSPECTING" ? "确认换货验收" : "完成验收"}
+            </Button>
+          )}
 
-           {/* 完成验收按钮 */}
-           {(marketOrderData.orderStatus === "MARKET_INSPECTING" || marketOrderData.orderStatus === "EXCHANGE_INSPECTING") && (
-               <Button 
-                onClick={() => setIsConfirmDialogOpen(true)}
-                disabled={stats.pending > 0 && inspectionResult === "PENDING"}
-               >
-                   {marketOrderData.orderStatus === "EXCHANGE_INSPECTING" ? "确认换货验收" : "完成验收"}
-               </Button>
-           )}
+          {/* 确认发货按钮 (MARKET_ACCEPTED) */}
+          {marketOrderData.orderStatus === "MARKET_ACCEPTED" && (
+            <Button
+              onClick={() => setIsDeliverToCustomerDialogOpen(true)} size="sm"
+              className="bg-blue-600 hover:bg-blue-500"
+            >
+              确认发货
+            </Button>
+          )}
 
-           {/* 确认发货按钮 (MARKET_ACCEPTED) */}
-           {marketOrderData.orderStatus === "MARKET_ACCEPTED" && (
-               <Button 
-                onClick={() => setIsDeliverToCustomerDialogOpen(true)}
-                className="bg-blue-600 hover:bg-blue-500"
-               >
-                   确认发货
-               </Button>
-           )}
-
-           <Button variant="outline" size="icon">
-             <Download className="h-4 w-4" />
-           </Button>
         </div>
       </div>
 
@@ -800,16 +786,16 @@ export default function MarketOrderDetails({
                         {item.orderedQty}
                       </TableCell>
                       <TableCell className="text-center font-mono">
-                         ¥{item.orderedAmount}
+                        ¥{item.orderedAmount}
                       </TableCell>
                     </TableRow>
                   ))}
                   {(!marketOrderData.details || marketOrderData.details.length === 0) && (
-                      <TableRow>
-                          <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                              暂无商品明细
-                          </TableCell>
-                      </TableRow>
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                        暂无商品明细
+                      </TableCell>
+                    </TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -819,169 +805,169 @@ export default function MarketOrderDetails({
 
         {/* Rounds Tab (Inspection View) */}
         <TabsContent value="rounds" className="mt-4">
-             {/* If we are inspecting, we should show the active round here and allow operations */}
-             {activeRound ? (
-                 <Card>
-                    <CardHeader className="py-4">
-                        <div className="flex items-center justify-between">
-                            <CardTitle className="text-base">
-                                {marketOrderData.orderStatus.includes("EXCHANGE") ? "换货验收" : "验收单"} 
-                                (第 {activeRound?.round} 轮)
-                            </CardTitle>
-                            <div className="flex gap-4 text-sm text-muted-foreground">
-                                <span>总计: {stats.total}</span>
-                                <span className="text-green-600">已验: {stats.inspected}</span>
-                                <span className="text-orange-600">待验: {stats.pending}</span>
+          {/* If we are inspecting, we should show the active round here and allow operations */}
+          {activeRound ? (
+            <Card>
+              <CardHeader className="py-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">
+                    {marketOrderData.orderStatus.includes("EXCHANGE") ? "换货验收" : "验收单"}
+                    (第 {activeRound?.round} 轮)
+                  </CardTitle>
+                  <div className="flex gap-4 text-sm text-muted-foreground">
+                    <span>总计: {stats.total}</span>
+                    <span className="text-green-600">已验: {stats.inspected}</span>
+                    <span className="text-orange-600">待验: {stats.pending}</span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>商品名称</TableHead>
+                      <TableHead>单价/单位</TableHead>
+                      <TableHead className="text-center">订购量</TableHead>
+                      <TableHead className="text-center">待验量</TableHead>
+                      <TableHead className="text-center">实收量</TableHead>
+                      <TableHead className="text-center">验收状态</TableHead>
+                      <TableHead className="text-right">操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeRound?.items.map((item, index) => (
+                      <TableRow key={`i_${activeRound.round}_${item.orderDetailId}_${index}`}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{item.productName}</p>
+                            <p className="text-xs text-muted-foreground">{item.productCode}</p>
+                            {item.processingRequirements && (
+                              <Badge variant="secondary" className="mt-1 text-xs scale-90 origin-left">
+                                {item.processingRequirements}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          ¥{item.unitPrice} / {item.unit}
+                        </TableCell>
+                        <TableCell className="text-center font-mono font-medium">
+                          {item.orderedQty}
+                        </TableCell>
+                        <TableCell className="text-center font-mono font-medium">
+                          {item.needToInspectQty}
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-green-600">
+                          {item.acceptedQty || "-"}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {renderStatusBadge(item.inspectionStatus)}
+                          {item.inspectionStatus !== "PENDING" && item.inspectionStatus !== "SIGN" && item.remark && (
+                            <div className="text-xs text-red-500 mt-1 max-w-[150px] mx-auto truncate" title={item.remark.reason}>
+                              {item.remark.reason}
                             </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                         <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>商品名称</TableHead>
-                                    <TableHead>单价/单位</TableHead>
-                                    <TableHead className="text-center">订购量</TableHead>
-                                    <TableHead className="text-center">待验量</TableHead>
-                                    <TableHead className="text-center">实收量</TableHead>
-                                    <TableHead className="text-center">验收状态</TableHead>
-                                    <TableHead className="text-right">操作</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {activeRound?.items.map((item, index) => (
-                                    <TableRow key={`i_${activeRound.round}_${item.orderDetailId}_${index}`}>
-                                        <TableCell>
-                                            <div>
-                                                <p className="font-medium">{item.productName}</p>
-                                                <p className="text-xs text-muted-foreground">{item.productCode}</p>
-                                                {item.processingRequirements && (
-                                                    <Badge variant="secondary" className="mt-1 text-xs scale-90 origin-left">
-                                                        {item.processingRequirements}
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            ¥{item.unitPrice} / {item.unit}
-                                        </TableCell>
-                                        <TableCell className="text-center font-mono font-medium">
-                                            {item.orderedQty}
-                                        </TableCell>
-                                        <TableCell className="text-center font-mono font-medium">
-                                            {item.needToInspectQty}
-                                        </TableCell>
-                                        <TableCell className="text-center font-mono text-green-600">
-                                            {item.acceptedQty || "-"}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            {renderStatusBadge(item.inspectionStatus)}
-                                            {item.inspectionStatus !== "PENDING" && item.inspectionStatus !== "SIGN" && item.remark && (
-                                                <div className="text-xs text-red-500 mt-1 max-w-[150px] mx-auto truncate" title={item.remark.reason}>
-                                                    {item.remark.reason}
-                                                </div>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            {item.inspectionStatus === "PENDING" && 
-                                             (marketOrderData.orderStatus === "MARKET_INSPECTING" || 
-                                              marketOrderData.orderStatus === "EXCHANGE_INSPECTING") && (
-                                              <div className="flex justify-end gap-2">
-                                                <Button
-                                                  size="sm"
-                                                  variant="outline"
-                                                  className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                                  onClick={() => handleOpenOperationDialog(item, "SIGN")}
-                                                  title="签收"
-                                                >
-                                                  <CheckCircle className="h-4 w-4" />
-                                                </Button>
-                                                <Button
-                                                  size="sm"
-                                                  variant="outline"
-                                                  className="h-8 w-8 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                                                  onClick={() => handleOpenOperationDialog(item, "EXCHANGE")}
-                                                  title="换货"
-                                                >
-                                                  <RefreshCw className="h-4 w-4" />
-                                                </Button>
-                                                <Button
-                                                  size="sm"
-                                                  variant="outline"
-                                                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                                  onClick={() => handleOpenOperationDialog(item, "RETURN")}
-                                                  title="退货"
-                                                >
-                                                  <RotateCcw className="h-4 w-4" />
-                                                </Button>
-                                              </div>
-                                            )}
-                                            {item.inspectionStatus !== "PENDING" && 
-                                             (marketOrderData.orderStatus === "MARKET_INSPECTING" || 
-                                              marketOrderData.orderStatus === "EXCHANGE_INSPECTING") && (
-                                                 <Button 
-                                                    variant="ghost" 
-                                                    size="sm" 
-                                                    className="text-xs h-8"
-                                                    onClick={() => {
-                                                        handleOpenOperationDialog(item, item.inspectionStatus as OperationType);
-                                                    }}
-                                                 >
-                                                     修改
-                                                 </Button>
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                 </Card>
-             ) : (
-                 <div className="text-center py-8 text-muted-foreground">
-                     暂无验收单数据
-                 </div>
-             )}
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {item.inspectionStatus === "PENDING" &&
+                            (marketOrderData.orderStatus === "MARKET_INSPECTING" ||
+                              marketOrderData.orderStatus === "EXCHANGE_INSPECTING") && (
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                  onClick={() => handleOpenOperationDialog(item, "SIGN")}
+                                  title="签收"
+                                >
+                                  <CheckCircle className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 w-8 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                                  onClick={() => handleOpenOperationDialog(item, "EXCHANGE")}
+                                  title="换货"
+                                >
+                                  <RefreshCw className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => handleOpenOperationDialog(item, "RETURN")}
+                                  title="退货"
+                                >
+                                  <RotateCcw className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
+                          {item.inspectionStatus !== "PENDING" &&
+                            (marketOrderData.orderStatus === "MARKET_INSPECTING" ||
+                              marketOrderData.orderStatus === "EXCHANGE_INSPECTING") && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs h-8"
+                                onClick={() => {
+                                  handleOpenOperationDialog(item, item.inspectionStatus as OperationType);
+                                }}
+                              >
+                                修改
+                              </Button>
+                            )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              暂无验收单数据
+            </div>
+          )}
 
-             {/* History rounds */}
-             {marketOrderData.rounds && marketOrderData.rounds.length > 1 && (
-                 <div className="mt-8 space-y-4">
-                     <h3 className="text-lg font-semibold">历史验收记录</h3>
-                     {marketOrderData.rounds.slice(0, -1).reverse().map((round) => (
-                         <Card key={round.round}>
-                             <CardHeader className="py-4 bg-muted/50">
-                                 <div className="flex items-center justify-between">
-                                     <div className="flex items-center gap-3">
-                                         <Badge variant="outline" className="bg-background">第 {round.round} 轮</Badge>
-                                         <Badge variant={round.deliveryType === "NORMAL" ? "default" : "secondary"}>
-                                             {round.deliveryType === "NORMAL" ? "正常配送" : "换货配送"}
-                                         </Badge>
-                                     </div>
-                                     <div className="text-sm text-muted-foreground">
-                                         {round.deliveredAt ? new Date(round.deliveredAt).toLocaleString() : "未送达"}
-                                     </div>
-                                 </div>
-                             </CardHeader>
-                             <CardContent className="py-0">
-                                 <Table>
-                                     <TableBody>
-                                         {round.items.map((item) => (
-                                             <TableRow key={`${round.round}-${item.orderDetailId}`}>
-                                                 <TableCell className="w-[40%]">
-                                                     <span className="font-medium">{item.productName}</span>
-                                                 </TableCell>
-                                                 <TableCell className="text-center">配送: {item.needToInspectQty}</TableCell>
-                                                 <TableCell className="text-center">{item.acceptedQty ? `实收: ${item.acceptedQty}` : '-'}</TableCell>
-                                                 <TableCell className="text-right">{renderStatusBadge(item.inspectionStatus)}</TableCell>
-                                             </TableRow>
-                                         ))}
-                                     </TableBody>
-                                 </Table>
-                             </CardContent>
-                         </Card>
-                     ))}
-                 </div>
-             )}
+          {/* History rounds */}
+          {marketOrderData.rounds && marketOrderData.rounds.length > 1 && (
+            <div className="mt-8 space-y-4">
+              <h3 className="text-lg font-semibold">历史验收记录</h3>
+              {marketOrderData.rounds.slice(0, -1).reverse().map((round) => (
+                <Card key={round.round}>
+                  <CardHeader className="py-4 bg-muted/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Badge variant="outline" className="bg-background">第 {round.round} 轮</Badge>
+                        <Badge variant={round.deliveryType === "NORMAL" ? "default" : "secondary"}>
+                          {round.deliveryType === "NORMAL" ? "正常配送" : "换货配送"}
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {round.deliveredAt ? new Date(round.deliveredAt).toLocaleString() : "未送达"}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="py-0">
+                    <Table>
+                      <TableBody>
+                        {round.items.map((item) => (
+                          <TableRow key={`${round.round}-${item.orderDetailId}`}>
+                            <TableCell className="w-[40%]">
+                              <span className="font-medium">{item.productName}</span>
+                            </TableCell>
+                            <TableCell className="text-center">配送: {item.needToInspectQty}</TableCell>
+                            <TableCell className="text-center">{item.acceptedQty ? `实收: ${item.acceptedQty}` : '-'}</TableCell>
+                            <TableCell className="text-right">{renderStatusBadge(item.inspectionStatus)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -990,48 +976,48 @@ export default function MarketOrderDetails({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-                {operationType === "SIGN" && "确认签收"}
-                {operationType === "RETURN" && "申请退货"}
-                {operationType === "EXCHANGE" && "申请换货"}
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
-                    {currentOperatingItem?.productName}
-                </span>
+              {operationType === "SIGN" && "确认签收"}
+              {operationType === "RETURN" && "申请退货"}
+              {operationType === "EXCHANGE" && "申请换货"}
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                {currentOperatingItem?.productName}
+              </span>
             </DialogTitle>
             <DialogDescription>
-                待验收数量: {currentOperatingItem?.needToInspectQty} {currentOperatingItem?.unit}
+              待验收数量: {currentOperatingItem?.needToInspectQty} {currentOperatingItem?.unit}
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-                <Label>数量</Label>
-                <Input 
-                    type="number" 
-                    value={operationQuantity} 
-                    onChange={(e) => setOperationQuantity(e.target.value)}
-                    min="0"
-                    max={currentOperatingItem?.needToInspectQty}
-                />
+              <Label>数量</Label>
+              <Input
+                type="number"
+                value={operationQuantity}
+                onChange={(e) => setOperationQuantity(e.target.value)}
+                min="0"
+                max={currentOperatingItem?.needToInspectQty}
+              />
             </div>
-            
+
             {operationType !== "SIGN" && (
-                <div className="grid gap-2">
-                    <Label>原因说明</Label>
-                    <Textarea 
-                        value={operationReason}
-                        onChange={(e) => setOperationReason(e.target.value)}
-                        placeholder="请输入退换货原因（必填）"
-                    />
-                </div>
+              <div className="grid gap-2">
+                <Label>原因说明</Label>
+                <Textarea
+                  value={operationReason}
+                  onChange={(e) => setOperationReason(e.target.value)}
+                  placeholder="请输入退换货原因（必填）"
+                />
+              </div>
             )}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsOperationDialogOpen(false)}>
-                取消
+              取消
             </Button>
             <Button onClick={handleSubmitOperation} disabled={isSubmittingOperation}>
-                {isSubmittingOperation ? "提交中..." : "确认"}
+              {isSubmittingOperation ? "提交中..." : "确认"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1039,57 +1025,57 @@ export default function MarketOrderDetails({
 
       {/* Start Inspect Confirmation Dialog */}
       <AlertDialog open={isStartInspectDialogOpen} onOpenChange={setIsStartInspectDialogOpen}>
-          <AlertDialogContent>
-              <AlertDialogHeader>
-                  <AlertDialogTitle>确认开始验收?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                      确认后，订单状态更新为"验收中"，表示您已开始验收该订单的商品。
-                  </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                  <AlertDialogCancel>取消</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleBeginInspect} disabled={isStartingInspection}>
-                      {isStartingInspection ? "处理中..." : "确认"}
-                  </AlertDialogAction>
-              </AlertDialogFooter>
-          </AlertDialogContent>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认开始验收?</AlertDialogTitle>
+            <AlertDialogDescription>
+              确认后，订单状态更新为"验收中"，表示您已开始验收该订单的商品。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBeginInspect} disabled={isStartingInspection}>
+              {isStartingInspection ? "处理中..." : "确认"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
       </AlertDialog>
 
       {/* Complete Confirmation Dialog */}
       <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
-          <AlertDialogContent>
-              <AlertDialogHeader>
-                  <AlertDialogTitle>确认完成验收?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                      确定所有商品都已验收无误吗？提交后将无法更改验收结果。
-                      如有退换货申请，将一并提交给供应商处理。
-                  </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                  <AlertDialogCancel>取消</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleCompleteAcceptance} disabled={isCompletingOrder}>
-                      {isCompletingOrder ? "处理中..." : "确认提交"}
-                  </AlertDialogAction>
-              </AlertDialogFooter>
-          </AlertDialogContent>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认完成验收?</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定所有商品都已验收无误吗？提交后将无法更改验收结果。
+              如有退换货申请，将一并提交给供应商处理。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCompleteAcceptance} disabled={isCompletingOrder}>
+              {isCompletingOrder ? "处理中..." : "确认提交"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
       </AlertDialog>
 
       {/* Deliver to Customer Dialog */}
       <AlertDialog open={isDeliverToCustomerDialogOpen} onOpenChange={setIsDeliverToCustomerDialogOpen}>
-          <AlertDialogContent>
-              <AlertDialogHeader>
-                  <AlertDialogTitle>确认发货?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                      确认后，订单状态将更新为"配送中"，表示您已开始向客户配送商品。
-                  </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                  <AlertDialogCancel>取消</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeliverToCustomer} disabled={isDeliveringToCustomer}>
-                      {isDeliveringToCustomer ? "处理中..." : "确认发货"}
-                  </AlertDialogAction>
-              </AlertDialogFooter>
-          </AlertDialogContent>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认发货?</AlertDialogTitle>
+            <AlertDialogDescription>
+              确认后，订单状态将更新为"配送中"，表示您已开始向客户配送商品。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeliverToCustomer} disabled={isDeliveringToCustomer}>
+              {isDeliveringToCustomer ? "处理中..." : "确认发货"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
       </AlertDialog>
 
       {/* Provider Assign Dialog */}

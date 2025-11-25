@@ -13,11 +13,6 @@ export default function OrderDetailPage() {
   
   const tenantType = workspaceOrg?.tenantType || "";
 
-  console.log('🚀 OrderDetailPage - Routing Check');
-  console.log('🚀 OrderDetailPage - orderCode:', params.order_code);
-  console.log('🚀 OrderDetailPage - orgId:', params.market_id);
-  console.log('🚀 OrderDetailPage - tenantType:', tenantType);
-
   // 尝试从 URL 参数中获取 market_id，可能可以作为临时的租户判断依据（虽然不严谨）
   // 但在这个场景下，我们主要依赖 useWorkspace 提供的 tenantType
   
