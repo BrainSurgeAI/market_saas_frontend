@@ -100,8 +100,8 @@ export interface OrderOverview {
   customerAddress: string;
   contactName: string;
   contactPhone: string;
-  marketContactNumber: string;
-  markketContactorName: string;
+  marketContactNumber: string | null;
+  marketContactorName: string | null;
   items?: OrderItem[]; // Making items optional as it's not in the provided JSON sample but might be needed elsewhere
   assignedTo?: string | null;
   afterSaleAt?: string | null;
