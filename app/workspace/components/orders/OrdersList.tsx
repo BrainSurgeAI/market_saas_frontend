@@ -26,7 +26,7 @@ import { getStatusVariant, translateOrderStatus } from "@/lib/utils";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Provider } from "@/app/workspace/markets/[market_id]/orders/page";
 import { Button } from "@/components/ui/button";
-import { Search, HelpCircle, Calendar, MapPin, DollarSign, Package } from "lucide-react";
+import { Search, HelpCircle, Calendar, MapPin, DollarSign, Package, Pencil } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -377,10 +377,13 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 		}
 	};
 
+	// 判断是否为 Customer 视图 - 已弃用，统一使用卡片视图
+	// const isCustomerView = redirectUrl.includes('/customers/');
+
 	return (
 		<div className="space-y-4">
-			<Card>
-				<CardHeader>
+			<Card className="bg-transparent border-none shadow-none">
+				<CardHeader className="px-0 pt-0">
 					<CardTitle></CardTitle>
 					{/* 添加搜索框和状态筛选下拉菜单 */}
 					{/* 移动端布局 */}
@@ -440,7 +443,7 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 						</div>
 					</div>
 				</CardHeader>
-				<CardContent>
+				<CardContent className="px-0">
 					{loading ? (
 						<div className="flex justify-center py-8">
 							<p className="text-sm text-gray-500">正在加载订单数据...</p>
@@ -457,216 +460,138 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 						</div>
 					) : (
 						<>
-							{/* 移动端卡片布局 */}
-							<div className="block md:hidden space-y-3">
+							<div className="space-y-4">
+								{/* Header Row - Desktop only */}
+								<div className="hidden md:grid grid-cols-[1fr_1.5fr_2fr_1.5fr_1fr_1fr_1fr_auto] gap-4 px-6 py-3 text-xs font-semibold text-gray-400 bg-white rounded-t-xl border-b">
+									<div>CREATED</div>
+									<div>CUSTOMER</div>
+									<div>ITEMS</div>
+									<div>DESTINATION</div>
+									<div>DELIVERY</div>
+									<div>COST</div>
+									<div>STATUS</div>
+									<div className="w-8"></div>
+								</div>
+
 								{filteredOrders.map((order) => (
-									<Card
-										key={order.orderCode}
-										className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-										onClick={() => handleOrderClick(order.orderCode)}
-									>
-										<div className="space-y-3">
-											{/* 订单编号和状态 */}
-											<div className="flex items-start justify-between">
-												<div className="flex items-start gap-2 flex-1">
-													<Package className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-													<div className="flex-1">
-														<h3 className="font-mono font-semibold text-sm text-gray-900">
-															#{order.orderCode}
-														</h3>
-													</div>
-												</div>
-												<div className="ml-2 flex-shrink-0">
-													{order.orderStatus === "EXCHANGE_REQUESTED" && order.afterSaleAt ? (
-														<TooltipProvider>
-															<Tooltip 
-																onOpenChange={(open) => {
-																	if (open && order.afterSaleAt) {
-																		handleTooltipOpen(order.orderCode, order.afterSaleAt);
-																	} else {
-																		handleTooltipClose();
-																	}
-																}}
-															>
-																<TooltipTrigger asChild>
-																	<div>
-																		<Badge variant={getStatusVariant(order.orderStatus)} className="rounded-full text-xs">
-																			{translateOrderStatus(order.orderStatus)}
-																		</Badge>
-																	</div>
-																</TooltipTrigger>
-																<TooltipContent className="bg-gray-800 text-white text-xs px-3 py-1">
-																	<p>
-																		处理剩余时间: {countdowns[order.orderCode] || (order.afterSaleAt && calculateAfterSaleRemainingTime(order.afterSaleAt))}
-																	</p>
-																</TooltipContent>
-															</Tooltip>
-														</TooltipProvider>
-													) : (
-														<Badge variant={getStatusVariant(order.orderStatus)} className="rounded-full text-xs">
-															{translateOrderStatus(order.orderStatus)}
-														</Badge>
-													)}
+									<div key={order.orderCode} className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+										{/* Main Content */}
+										<div className="grid grid-cols-1 md:grid-cols-[1fr_1.5fr_2fr_1.5fr_1fr_1fr_1fr_auto] gap-4 p-6 items-start md:items-center">
+											{/* Created */}
+											<div className="md:block flex justify-between items-center">
+												<span className="md:hidden text-xs font-semibold text-gray-500">CREATED</span>
+												<div>
+													<div className="font-medium text-gray-900">{format(new Date(order.deliveryDate), "dd MMM")}</div>
+													<div className="text-xs text-gray-500">{format(new Date(order.deliveryDate), "HH:mm")}</div>
 												</div>
 											</div>
 
-											{/* 送货信息 */}
-											<div className="space-y-2">
-												<div className="flex items-start gap-2">
-													<MapPin className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
-													<div className="flex-1">
-														<div className="text-xs text-gray-500">送货地址</div>
-														<div className="text-sm text-gray-900 mt-0.5">{order.deliveryAddress}</div>
-													</div>
+											{/* Customer */}
+											<div className="md:block flex justify-between items-center">
+												<span className="md:hidden text-xs font-semibold text-gray-500">CUSTOMER</span>
+												<div>
+													<div className="font-medium text-gray-900 truncate max-w-[150px]" title={order.orderCode}>{order.orderCode}</div>
+													<div className="text-xs text-gray-500">+86 123 4567 8901</div>
 												</div>
-												<div className="flex items-start gap-2">
-													<Calendar className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
-													<div className="flex-1">
-														<div className="text-xs text-gray-500">送货日期</div>
-														<div className="text-sm text-gray-900 mt-0.5">
-															{format(new Date(order.deliveryDate), "yyyy年MM月dd日")}
+											</div>
+
+											{/* Items */}
+											<div className="md:block">
+												<span className="md:hidden text-xs font-semibold text-gray-500 block mb-2">ITEMS</span>
+												<div className="flex flex-col gap-1">
+													{order.items?.slice(0, 2).map((item, i) => (
+														<div key={i} className="text-sm text-gray-700 flex items-center gap-2">
+															<span className="w-1.5 h-1.5 rounded-full bg-purple-900"></span>
+															<span className="font-semibold">{item.quantity} x</span> {item.name}
 														</div>
-													</div>
+													))}
+													{order.items && order.items.length > 2 && (
+														<div className="text-xs text-gray-500 pl-3.5">+{order.items.length - 2} more items...</div>
+													)}
+													{(!order.items || order.items.length === 0) && (
+														<div className="text-sm text-gray-400 italic">No items detail</div>
+													)}
 												</div>
 											</div>
 
-											{/* 金额信息 */}
-											<div className="grid grid-cols-2 gap-2 border-t pt-2">
-												<div className="bg-gray-50 p-2 rounded">
-													<div className="text-xs text-gray-500">下单金额</div>
-													<div className="font-mono font-semibold mt-1 text-sm">￥{order.totalAmount}</div>
-												</div>
-												<div className="bg-gray-50 p-2 rounded">
-													<div className="flex items-center gap-1 text-xs text-gray-500">
-														<span>实际金额</span>
-														<TooltipProvider>
-															<Tooltip>
-																<TooltipTrigger asChild>
-																	<HelpCircle className="h-3 w-3 text-gray-400 cursor-help" />
-																</TooltipTrigger>
-																<TooltipContent>
-																	<p className="text-xs">订单完成后显示实际金额</p>
-																</TooltipContent>
-															</Tooltip>
-														</TooltipProvider>
-													</div>
-													<div className="font-mono font-semibold mt-1 text-sm text-blue-600">￥{order.actualAmount}</div>
+											{/* Destination */}
+											<div className="md:block flex justify-between items-center">
+												<span className="md:hidden text-xs font-semibold text-gray-500">DESTINATION</span>
+												<div className="font-medium text-gray-900 truncate max-w-[150px]" title={order.deliveryAddress}>
+													{order.deliveryAddress}
 												</div>
 											</div>
 
-											{/* 操作按钮 */}
-											{providers && providers.length > 0 && (
-												<div className="flex justify-end border-t pt-2">
-													{order.orderStatus === "PENDING" && !order.assignedTo && !assignedOrders.has(order.orderCode) && (
-														<Button 
-															size="sm" 
-															variant="outline" 
-															onClick={(e) => handleAssignButtonClick(order.orderCode, e)}
-														>
-															指派
-														</Button>
-													)}
-												</div>
-											)}
-										</div>
-									</Card>
-								))}
-							</div>
+											{/* Delivery */}
+											<div className="md:block flex justify-between items-center">
+												<span className="md:hidden text-xs font-semibold text-gray-500">DELIVERY</span>
+												<div className="font-medium text-gray-900">Next day</div>
+											</div>
 
-							{/* 桌面端表格布局 */}
-							<div className="hidden md:block">
-								<Table>
-									<TableHeader className="text-xs font-semibold bg-gray-100 text-gray-900">
-										<TableRow>
-											<TableHead className="w-[250px]">#订单编号</TableHead>
-											<TableHead>送货地址</TableHead>
-											<TableHead>送货日期</TableHead>
-											<TableHead>状态</TableHead>
-											<TableHead className="text-left">下单金额(元)</TableHead>
-											<TableHead className="text-left">
-												<div className="flex items-center gap-1">
-													<span>实际金额(元)</span>
-													<TooltipProvider>
-														<Tooltip>
-															<TooltipTrigger asChild>
-																<HelpCircle className="h-3.5 w-3.5 text-gray-500 cursor-help" />
-															</TooltipTrigger>
-															<TooltipContent>
-																<p>订单完成后显示实际金额</p>
-															</TooltipContent>
-														</Tooltip>
-													</TooltipProvider>
-												</div>
-											</TableHead>
-											{providers && providers.length > 0 && (
-												<TableHead className="text-right">操作</TableHead>
-											)}
-										</TableRow>
-									</TableHeader>
-									<TableBody>
-										{filteredOrders.map((order) => (
-											<TableRow
-												key={order.orderCode}
-												className="cursor-pointer hover:bg-gray-50 text-xs"
-												onClick={() => handleOrderClick(order.orderCode)}>
-												<TableCell className="font-mono">#{order.orderCode}</TableCell>
-												<TableCell className="max-w-[200px] truncate" title={order.deliveryAddress}>
-													{order.deliveryAddress.length > 15 ? `${order.deliveryAddress.slice(0, 30)}...` : order.deliveryAddress}
-												</TableCell>
-												<TableCell>
-													{format(new Date(order.deliveryDate), "yyyy年MM月dd日")}
-												</TableCell>
-												<TableCell>
-													{order.orderStatus === "EXCHANGE_REQUESTED" && order.afterSaleAt ? (
-														<TooltipProvider>
-															<Tooltip 
-																onOpenChange={(open) => {
-																	if (open && order.afterSaleAt) {
-																		handleTooltipOpen(order.orderCode, order.afterSaleAt);
-																	} else {
-																		handleTooltipClose();
-																	}
-																}}
-															>
-																<TooltipTrigger asChild>
-																	<div>
-																		<Badge variant={getStatusVariant(order.orderStatus)} className="rounded-full">
-																			{translateOrderStatus(order.orderStatus)}
-																		</Badge>
-																	</div>
-																</TooltipTrigger>
-																<TooltipContent className="bg-gray-800 text-white text-xs px-3 py-1">
-																	<p>
-																		处理剩余时间: {countdowns[order.orderCode] || (order.afterSaleAt && calculateAfterSaleRemainingTime(order.afterSaleAt))}
-																	</p>
-																</TooltipContent>
-															</Tooltip>
-														</TooltipProvider>
-													) : (
-														<Badge variant={getStatusVariant(order.orderStatus)} className="rounded-full">
-															{translateOrderStatus(order.orderStatus)}
-														</Badge>
-													)}
-												</TableCell>
-												<TableCell className="text-left font-mono">
-													￥{order.totalAmount}
-												</TableCell>
-												<TableCell className="text-left font-mono">
-													￥{order.actualAmount}
-												</TableCell>
-												{providers && providers.length > 0 && (
-													<TableCell className="text-right">
-														{order.orderStatus === "PENDING" && !order.assignedTo && !assignedOrders.has(order.orderCode) && (
-															<Button size="sm" variant="outline" onClick={(e) => handleAssignButtonClick(order.orderCode, e)}>
-																指派
-															</Button>
-														)}
-													</TableCell>
+											{/* Cost */}
+											<div className="md:block flex justify-between items-center">
+												<span className="md:hidden text-xs font-semibold text-gray-500">COST</span>
+												<div className="font-bold text-gray-900">¥{order.totalAmount}</div>
+											</div>
+
+											{/* Status Payment (using Order Status for now) */}
+											<div className="md:block flex justify-between items-center">
+												<span className="md:hidden text-xs font-semibold text-gray-500">STATUS</span>
+												<Badge 
+													variant="outline" 
+													className={`
+														rounded-md px-3 py-1 font-normal border-0
+														${order.orderStatus === 'COMPLETED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}
+													`}
+												>
+													{order.orderStatus === 'COMPLETED' ? 'Payed' : 'Not paid'}
+												</Badge>
+											</div>
+
+											{/* Action */}
+											<div className="flex justify-end items-center gap-2">
+												{providers && providers.length > 0 && order.orderStatus === "PENDING" && !order.assignedTo && !assignedOrders.has(order.orderCode) && (
+													<Button size="sm" variant="outline" onClick={(e) => handleAssignButtonClick(order.orderCode, e)}>
+														指派
+													</Button>
 												)}
-											</TableRow>
-										))}
-									</TableBody>
-								</Table>
+												<Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-600" onClick={() => handleOrderClick(order.orderCode)}>
+													<Pencil className="h-4 w-4" />
+												</Button>
+											</div>
+										</div>
+
+										{/* Footer Status Bar */}
+										<div className="px-6 py-4 border-t bg-gray-50/30 flex flex-wrap items-center gap-6 text-sm">
+											<span className="text-gray-400 font-medium mr-2">Status:</span>
+											
+											{/* Simplified Status Flow */}
+											<div className="flex items-center gap-2">
+												{['PENDING', 'SUPPLIER_PREPARING', 'MARKET_INSPECTING', 'COMPLETED'].includes(order.orderStatus) ? (
+													<div className="flex items-center gap-2">
+														<div className="w-4 h-4 rounded-full bg-green-600 flex items-center justify-center">
+															<div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+														</div>
+														<span className="font-medium text-gray-900">{translateOrderStatus(order.orderStatus)}</span>
+													</div>
+												) : (
+													<div className="flex items-center gap-2 text-gray-400">
+														<div className="w-4 h-4 rounded-full border border-gray-300"></div>
+														<span>{translateOrderStatus(order.orderStatus)}</span>
+													</div>
+												)}
+											</div>
+											
+											{/* Other statuses as greyed out placeholders to mimic the design */}
+											{['Returned', 'Cancelled'].map(s => (
+												<div key={s} className="flex items-center gap-2 text-gray-400">
+													<div className="w-4 h-4 rounded-full border border-gray-300"></div>
+													<span>{s}</span>
+												</div>
+											))}
+										</div>
+									</div>
+								))}
 							</div>
 							<div className="mt-6">
 								<Pagination>
