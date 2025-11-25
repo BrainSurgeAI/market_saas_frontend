@@ -57,6 +57,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { translateOrderStatus, getStatusVariant } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Import new types
 import {
@@ -64,6 +65,13 @@ import {
   MarketOrderRound,
   MarketOrderItem,
 } from "@/lib/types/marketOrder";
+
+// Provider interface extracted from page
+export interface Provider {
+	id: string;
+	name: string;
+	businessScope?: string;
+}
 
 interface MarketOrderDetailsProps {
   orderCode: string;
@@ -111,6 +119,13 @@ export default function MarketOrderDetails({
   // Inspection Status State
   const [inspectionResult, setInspectionResult] = useState<string>("PENDING");
 
+  // Provider Assignment State
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<string>("");
+  const [showProviderDialog, setShowProviderDialog] = useState(false);
+  const [assigningOrder, setAssigningOrder] = useState(false);
+
   // Fetch Data
   const fetchMarketOrderDetails = async () => {
     try {
@@ -151,6 +166,101 @@ export default function MarketOrderDetails({
   useEffect(() => {
     fetchMarketOrderDetails();
   }, [orderCode]);
+
+  // Fetch Providers Logic
+  const fetchProviders = async () => {
+		try {
+			setLoadingProviders(true);
+			const response = await fetch(`/api/markets/${orgId}/providers`, {
+				method: 'GET',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+			});
+
+			if (!response.ok) {
+				throw new Error(`请求失败: ${response.status}`);
+			}
+
+			const responseData = await response.json();
+
+			if (Array.isArray(responseData)) {
+				setProviders(responseData);
+			} else if (responseData.data && Array.isArray(responseData.data)) {
+				setProviders(responseData.data);
+			} else {
+				setProviders([]);
+			}
+		} catch (err) {
+			toast({
+				title: "获取供应商失败",
+				description: err instanceof Error ? err.message : "获取供应商列表时出错",
+				variant: "destructive",
+			});
+		} finally {
+			setLoadingProviders(false);
+		}
+	};
+
+  // Open Assign Dialog
+  const handleOpenAssignDialog = () => {
+      fetchProviders();
+      setSelectedProvider("");
+      setShowProviderDialog(true);
+  };
+
+  // Handle Assign Order
+  const handleAssignOrder = async () => {
+      if (!selectedProvider || assigningOrder) return;
+
+      try {
+          setAssigningOrder(true);
+
+          const response = await fetch(`/api/markets/${orgId}/orders/${orderCode}/assign`, {
+              method: 'PATCH',
+              headers: {
+                  'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                  providerId: parseInt(selectedProvider),
+                  confirmedBy: "MARKET_USER" // Should come from real user
+              })
+          });
+
+          if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`指派订单失败: ${response.status}, ${errorText}`);
+          }
+
+          toast({
+              title: "指派成功",
+              description: `订单 ${orderCode} 已成功指派`,
+              variant: "default", // success variant not standard in shadcn usually, use default
+          });
+
+          setShowProviderDialog(false);
+          fetchMarketOrderDetails(); // Refresh order details
+
+      } catch (err) {
+          toast({
+              title: "指派失败",
+              description: err instanceof Error ? err.message : "指派订单时出错",
+              variant: "destructive",
+          });
+      } finally {
+          setAssigningOrder(false);
+      }
+  };
+
+  // Get selected provider business scope
+  const getSelectedProviderBusinessScope = () => {
+		if (!selectedProvider) return [];
+
+		const provider = providers.find(p => p.id === selectedProvider);
+		if (!provider || !provider.businessScope) return [];
+
+		return provider.businessScope.split(',');
+	};
 
   // State for begin inspecting
   const [isStartingInspection, setIsStartingInspection] = useState(false);
@@ -546,6 +656,16 @@ export default function MarketOrderDetails({
         </div>
         <div className="flex gap-2">
            {/* Action Buttons */}
+           {/* 指派按钮 (PENDING) */}
+           {marketOrderData.orderStatus === "PENDING" && (
+              <Button 
+                onClick={handleOpenAssignDialog}
+                className="bg-primary hover:bg-primary/90"
+              >
+                  指派供应商
+              </Button>
+           )}
+
            {/* 开始验收按钮 (SUPPLIER_DELIVERING) */}
            {(marketOrderData.orderStatus === "SUPPLIER_DELIVERING" || 
              marketOrderData.orderStatus === "EXCHANGE_DELIVERING" || 
@@ -971,6 +1091,70 @@ export default function MarketOrderDetails({
               </AlertDialogFooter>
           </AlertDialogContent>
       </AlertDialog>
+
+      {/* Provider Assign Dialog */}
+      <Dialog open={showProviderDialog} onOpenChange={setShowProviderDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">指派订单</DialogTitle>
+            <DialogDescription className="text-xs">
+              选择一个供应商来处理此订单，未指派供应商的订单将无法进行备货
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-1">
+            {loadingProviders ? (
+              <div className="flex justify-center py-2">
+                <p className="text-sm text-gray-500">正在加载供应商数据...</p>
+              </div>
+            ) : providers.length === 0 ? (
+              <div className="flex justify-center py-2">
+                <p className="text-sm text-gray-500">暂无可用供应商</p>
+              </div>
+            ) : (
+              <>
+                <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                  <SelectTrigger className="text-xs">
+                    <SelectValue placeholder="选择供应商" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {providers.map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id} className="cursor-pointer text-xs">
+                        {provider.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* 显示所选供应商的业务范围 */}
+                {selectedProvider && (
+                  <div className="mt-3">
+                    <p className="text-xs text-gray-500 mb-2">供应商业务范围:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {getSelectedProviderBusinessScope().length > 0 ? (
+                        getSelectedProviderBusinessScope().map((scope, index) => (
+                          <Badge key={index} variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                            {scope.trim()}
+                          </Badge>
+                        ))
+                      ) : (
+                        <p className="text-xs text-gray-500">该供应商未设置业务范围</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setShowProviderDialog(false)}>
+              取消
+            </Button>
+            <Button size="sm" onClick={handleAssignOrder} disabled={!selectedProvider || assigningOrder}>
+              {assigningOrder ? "指派中..." : "确认"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
