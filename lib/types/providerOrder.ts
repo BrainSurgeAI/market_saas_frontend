@@ -6,6 +6,7 @@ export interface ProviderOrderItem {
   categoryName: string;
   needToDeliverQty: string;
   orderDetailId: number;
+  imageUrl: string | null;
   processingRequirements: string | null;
   productCode: string;
   productName: string;

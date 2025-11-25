@@ -3,8 +3,21 @@
 import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, Package, RotateCcw, RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Download,
+  Package,
+  RotateCcw,
+  RefreshCw,
+  CheckCircle,
+  AlertCircle,
+  Calendar,
+  MapPin,
+  User,
+  Truck
+} from "lucide-react";
 import { useRouter } from "next/navigation";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 // 导入商品清单组件
 import { ProductListSection } from "./order-details/ProductListSection";
@@ -342,6 +355,7 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
         name: item.productName,
         category: item.categoryName,
         categoryId: item.categoryId,
+        imageUrl: item.imageUrl, // 确保 imageUrl 被传递
         orderedQty: item.needToDeliverQty,
         unit: item.unit,
         unitPrice: item.unitPrice,
@@ -379,6 +393,7 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
         name: item.productName,
         category: item.categoryName,
         categoryId: item.categoryId,
+        imageUrl: item.imageUrl, // 确保 imageUrl 被传递
         orderedQty: item.needToDeliverQty,
         unit: item.unit,
         unitPrice: item.unitPrice,
@@ -838,6 +853,10 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
           <div>
             <h1 className="text-xl font-semibold">订单详情</h1>
             <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5" />
+                {new Date(providerOrderData.deliveryDate).toLocaleDateString()}
+              </span>
               <Badge variant={getStatusVariant(providerOrderData.orderStatus)}>
                 {translateOrderStatus(providerOrderData.orderStatus)}
               </Badge>
@@ -904,73 +923,125 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
       </div>
 
       {/* 订单基本信息 */}
-      <Card>
-        <CardHeader>
-          <Collapsible open={!isOrderInfoCollapsed} onOpenChange={(open) => setIsOrderInfoCollapsed(!open)}>
-            <CollapsibleTrigger className="flex items-center justify-between w-full">
-              <CardTitle className="text-left">订单信息</CardTitle>
-              {isOrderInfoCollapsed ? (
-                <ChevronRight className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-            </CollapsibleTrigger>
-          </Collapsible>
-        </CardHeader>
-        <Collapsible open={!isOrderInfoCollapsed} onOpenChange={(open) => setIsOrderInfoCollapsed(!open)}>
-          <CollapsibleContent>
-            <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">订单号</p>
-              <p className="text-sm">{providerOrderData.orderCode}</p>
+      <Card className="border-none shadow-sm bg-white overflow-hidden rounded-xl">
+        <Collapsible
+          open={!isOrderInfoCollapsed}
+          onOpenChange={(open) => setIsOrderInfoCollapsed(!open)}
+        >
+          <div className="flex items-center justify-between p-6 cursor-pointer hover:bg-gray-50/50 transition-colors" onClick={() => setIsOrderInfoCollapsed(!isOrderInfoCollapsed)}>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                <Package className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">基本信息</h2>
+                <p className="text-xs text-gray-500">
+                  {providerOrderData.orderCode}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">创建时间</p>
-              <p className="text-sm">{new Date(providerOrderData.createdAt).toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">配送日期</p>
-              <p className="text-sm">{new Date(providerOrderData.deliveryDate).toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">客户名称</p>
-              <p className="text-sm">{providerOrderData.customerName}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">收货人</p>
-              <p className="text-sm">{providerOrderData.receiverName}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">收货电话</p>
-              <p className="text-sm">{providerOrderData.receiverPhone}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">发货人</p>
-              <p className="text-sm">{providerOrderData.shipperName}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">发货电话</p>
-              <p className="text-sm">{providerOrderData.shipperPhone}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">配送地址</p>
-              <p className="text-sm">{providerOrderData.deliveryAddress}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">订单金额</p>
-              <p className="text-sm">¥{providerOrderData.orderedAmount}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">折扣金额</p>
-              <p className="text-sm">¥{providerOrderData.discountAmount}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">净金额</p>
-              <p className="text-sm">¥{providerOrderData.netAmount}</p>
-            </div>
+            {isOrderInfoCollapsed ? (
+              <ChevronRight className="h-5 w-5 text-gray-400" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-gray-400" />
+            )}
           </div>
-            </CardContent>
+          
+          <CollapsibleContent>
+            <div className="px-6 pb-8 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-y-8 gap-x-12">
+                <div className="flex gap-4">
+                  <div className="mt-1">
+                    <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+                      <Calendar className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="space-y-3 mt-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-0.5 font-medium">创建时间</p>
+                        <p className="text-sm text-gray-500">
+                          {new Date(providerOrderData.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-0.5 font-medium">配送日期</p>
+                        <p className="text-sm text-gray-500">
+                          {new Date(providerOrderData.deliveryDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="mt-1">
+                    <div className="p-2.5 rounded-xl bg-violet-50 text-violet-600 ring-1 ring-violet-100">
+                      <User className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-violet-600/80 uppercase tracking-wide">客户信息</p>
+                    <div className="space-y-3 mt-2">
+                      <div>
+                        <p className="text-sm text-gray-500">
+                          {providerOrderData.customerName}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-0.5 font-medium">收货人</p>
+                        <p className="text-sm text-gray-500">
+                          {providerOrderData.receiverName} ({providerOrderData.receiverPhone})
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="mt-1">
+                    <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600 ring-1 ring-amber-100">
+                      <Truck className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-amber-600/80 uppercase tracking-wide">发货信息</p>
+                    <div className="space-y-3 mt-2">
+                      <div>
+                        <p className="text-sm text-gray-500">
+                          {providerOrderData.shipperName ? (
+                            <span className="flex items-center gap-2">
+                              {providerOrderData.shipperName}
+                              <span className="text-muted-foreground text-xs font-normal bg-gray-100 px-1.5 py-0.5 rounded-md">
+                                {providerOrderData.shipperPhone}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 italic text-sm">未分配</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="mt-1">
+                    <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+                      <MapPin className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-emerald-600/80 uppercase tracking-wide">配送地址</p>
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-500 leading-relaxed">
+                        {providerOrderData.deliveryAddress}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </CollapsibleContent>
         </Collapsible>
       </Card>
@@ -985,22 +1056,31 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
         <TabsContent value="products" className="space-y-4">
           {convertedData && (
             <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>商品清单</CardTitle>
+              <Card className="border-none shadow-none bg-transparent">
+                <CardHeader className="px-0 pt-0 pb-4">
+                  <CardTitle className="text-lg font-semibold"></CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-0">
                   <div className="space-y-3">
                     {editableOrderItems.map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4 bg-card">
+                      <div key={item.id} className="border rounded-lg p-4 bg-card shadow-sm">
                         {/* 商品基本信息 */}
-                        <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-start gap-4 mb-4">
+                          <Avatar className="h-16 w-16 border border-gray-100 shadow-md rounded-lg shrink-0">
+                            <AvatarImage src={(item as any).imageUrl || ""} alt={item.name} className="object-cover" />
+                            <AvatarFallback className="bg-primary/5 text-primary text-sm rounded-lg font-medium shadow-inner">
+                              {item.name ? item.name.slice(0, 2) : "无"}
+                            </AvatarFallback>
+                          </Avatar>
+                          
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-semibold text-sm text-foreground">{item.name}</span>
                             </div>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <span>SKU: {item.productId}</span>
+                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                              <span className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-mono">
+                                SKU: {item.productId}
+                              </span>
                               <span>分类: {item.category}</span>
                               <span>规格: {item.unit}</span>
                             </div>
