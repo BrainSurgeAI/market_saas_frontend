@@ -1,0 +1,520 @@
+"use client";
+
+import React from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  ClipboardList,
+  Truck,
+  CheckCircle2,
+  AlertCircle,
+  Package,
+  ArrowRight,
+  TrendingUp,
+  Clock,
+  User,
+  MoreHorizontal,
+  ArrowUpRight,
+  Filter,
+  Calendar as CalendarIcon,
+} from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  Legend,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+// --- Mock Data ---
+
+const overviewData = {
+  newOrders: 128,
+  pendingAssignment: 45,
+  pendingInspection: 32,
+  exceptions: 12,
+  completed: 85,
+};
+
+const tasksData = [
+  {
+    id: "assign",
+    title: "待分配订单",
+    count: 45,
+    description: "需指派供应商",
+    icon: ClipboardList,
+    action: "立即分配",
+    link: "/workspace/market/orders?status=PENDING",
+    theme: "blue",
+  },
+  {
+    id: "inspect",
+    title: "待验收配送",
+    count: 32,
+    description: "供应商已送达",
+    icon: Truck,
+    action: "立即验收",
+    link: "/workspace/market/orders?status=ARRIVED",
+    theme: "indigo",
+  },
+  {
+    id: "exception",
+    title: "验收异常",
+    count: 12,
+    description: "需处理退换货",
+    icon: AlertCircle,
+    action: "立即处理",
+    link: "/workspace/market/orders?status=EXCEPTION",
+    theme: "rose",
+  },
+];
+
+const progressData = [
+  { name: "配送中", value: 40, color: "#3b82f6" }, // blue-500
+  { name: "待验收", value: 32, color: "#6366f1" }, // indigo-500
+  { name: "已完成", value: 85, color: "#10b981" }, // emerald-500
+  { name: "异常", value: 12, color: "#f43f5e" },   // rose-500
+];
+
+const providerData = [
+  {
+    id: 1,
+    name: "鲜丰水果批发",
+    deliveryVolume: 450,
+    onTimeRate: 98,
+    acceptanceRate: 99,
+    exceptionRate: 1,
+    avatar: "鲜",
+    status: "excellent",
+  },
+  {
+    id: 2,
+    name: "绿野蔬菜基地",
+    deliveryVolume: 320,
+    onTimeRate: 92,
+    acceptanceRate: 95,
+    exceptionRate: 5,
+    avatar: "绿",
+    status: "good",
+  },
+  {
+    id: 3,
+    name: "晨曦肉类供应",
+    deliveryVolume: 210,
+    onTimeRate: 88,
+    acceptanceRate: 92,
+    exceptionRate: 8,
+    avatar: "晨",
+    status: "average",
+  },
+  {
+    id: 4,
+    name: "海鲜大市场",
+    deliveryVolume: 150,
+    onTimeRate: 95,
+    acceptanceRate: 96,
+    exceptionRate: 4,
+    avatar: "海",
+    status: "good",
+  },
+  {
+    id: 5,
+    name: "调味品总汇",
+    deliveryVolume: 80,
+    onTimeRate: 100,
+    acceptanceRate: 100,
+    exceptionRate: 0,
+    avatar: "调",
+    status: "excellent",
+  },
+];
+
+// Mock data for a tiny trend chart in cards
+const trendData = [
+  { value: 40 }, { value: 35 }, { value: 55 }, { value: 45 }, { value: 60 }, { value: 75 }, { value: 65 }
+];
+
+export default function MarketDashboard() {
+  const currentDate = new Date().toLocaleDateString("zh-CN", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  return (
+    <div className="w-full bg-slate-50/50 min-h-screen p-6 space-y-8">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            Dashboard
+          </h1>
+          <p className="text-slate-500 flex items-center gap-2 text-sm">
+            <CalendarIcon className="w-4 h-4" />
+            {currentDate} • 今日运营概览
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50" size="sm">
+            <Filter className="w-4 h-4 mr-2" />
+            筛选视图
+          </Button>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20 transition-all" size="sm">
+            <ArrowUpRight className="w-4 h-4 mr-2" />
+            导出报表
+          </Button>
+        </div>
+      </div>
+
+      {/* 1. Overview Cards - Nexus Style: Clean, white, subtle borders, high contrast numbers */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+        <NexusStatCard
+          title="今日新订单"
+          value={overviewData.newOrders}
+          trend="+12.5%"
+          trendUp={true}
+          icon={Package}
+          colorClass="text-blue-600"
+          bgClass="bg-blue-50"
+        />
+        <NexusStatCard
+          title="待分配订单"
+          value={overviewData.pendingAssignment}
+          subtitle="急需处理"
+          icon={ClipboardList}
+          colorClass="text-violet-600"
+          bgClass="bg-violet-50"
+          active={true}
+        />
+        <NexusStatCard
+          title="待验收配送"
+          value={overviewData.pendingInspection}
+          trend="+5"
+          trendUp={true}
+          icon={Truck}
+          colorClass="text-indigo-600"
+          bgClass="bg-indigo-50"
+        />
+        <NexusStatCard
+          title="今日异常"
+          value={overviewData.exceptions}
+          trend="-2"
+          trendUp={false} // Good that it's down
+          icon={AlertCircle}
+          colorClass="text-rose-600"
+          bgClass="bg-rose-50"
+        />
+        <NexusStatCard
+          title="已完成"
+          value={overviewData.completed}
+          trend="+8%"
+          trendUp={true}
+          icon={CheckCircle2}
+          colorClass="text-emerald-600"
+          bgClass="bg-emerald-50"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        {/* Left Column: Tasks & Progress */}
+        <div className="xl:col-span-2 space-y-8">
+          
+          {/* 2. Actionable Tasks - Nexus Style: Horizontal cards with clear actions */}
+          <div className="space-y-4">
+             <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-slate-500" />
+                  待处理事项
+                </h2>
+                <Button variant="link" className="text-blue-600 h-auto p-0">查看全部</Button>
+             </div>
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {tasksData.map((task) => (
+                  <NexusTaskCard key={task.id} data={task} />
+                ))}
+             </div>
+          </div>
+
+          {/* 4. Provider Performance Table - Nexus Style: Clean table, minimalist headers */}
+          <Card className="border-slate-100 shadow-sm bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="border-b border-slate-50 px-6 py-5 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg font-bold text-slate-900">供应商表现 Top 5</CardTitle>
+                <CardDescription className="mt-1">监控今日履约质量与异常率</CardDescription>
+              </div>
+              <Button variant="ghost" size="icon" className="text-slate-400">
+                <MoreHorizontal className="w-5 h-5" />
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent border-slate-50">
+                    <TableHead className="pl-6 h-12 text-xs uppercase tracking-wider font-semibold text-slate-500">供应商</TableHead>
+                    <TableHead className="h-12 text-xs uppercase tracking-wider font-semibold text-slate-500 text-right">今日配送</TableHead>
+                    <TableHead className="h-12 text-xs uppercase tracking-wider font-semibold text-slate-500 text-right">准时率</TableHead>
+                    <TableHead className="h-12 text-xs uppercase tracking-wider font-semibold text-slate-500 text-right">验收率</TableHead>
+                    <TableHead className="pr-6 h-12 text-xs uppercase tracking-wider font-semibold text-slate-500 text-right">异常率</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {providerData.map((provider, index) => (
+                    <TableRow key={provider.id} className="hover:bg-slate-50/50 border-slate-50 transition-colors">
+                      <TableCell className="pl-6 py-4 font-medium text-slate-700">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9 border-2 border-white shadow-sm">
+                            <AvatarFallback className={`text-xs font-bold ${
+                              index === 0 ? 'bg-blue-100 text-blue-600' : 
+                              index === 1 ? 'bg-indigo-100 text-indigo-600' :
+                              'bg-slate-100 text-slate-600'
+                            }`}>
+                              {provider.avatar}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="font-semibold">{provider.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-slate-600">
+                        {provider.deliveryVolume}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end">
+                          <Badge
+                            variant="outline"
+                            className={`rounded-md px-2 py-0.5 border-0 font-medium ${
+                              provider.onTimeRate >= 95
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "bg-amber-50 text-amber-700"
+                            }`}
+                          >
+                            {provider.onTimeRate}%
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-slate-600">
+                        {provider.acceptanceRate}%
+                      </TableCell>
+                      <TableCell className="pr-6 text-right">
+                        <span
+                          className={`font-bold text-sm ${
+                            provider.exceptionRate > 5
+                              ? "text-rose-500"
+                              : "text-slate-400"
+                          }`}
+                        >
+                          {provider.exceptionRate}%
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column: Charts */}
+        <div className="space-y-8">
+          {/* 3. Progress Overview - Nexus Style: Minimalist donut chart */}
+          <Card className="border-slate-100 shadow-sm bg-white rounded-2xl h-full flex flex-col">
+            <CardHeader className="px-6 py-5">
+              <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-blue-600" />
+                今日进度
+              </CardTitle>
+              <CardDescription>实时订单流转状态概览</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col justify-center px-6 pb-6">
+              <div className="h-[280px] w-full relative">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={progressData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={80}
+                      outerRadius={110}
+                      paddingAngle={4}
+                      dataKey="value"
+                      cornerRadius={6}
+                      stroke="none"
+                    >
+                      {progressData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ 
+                        borderRadius: '12px', 
+                        border: 'none', 
+                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                        padding: '12px'
+                      }}
+                      itemStyle={{ fontWeight: 600 }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Center Text Overlay */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
+                    {progressData.reduce((acc, curr) => acc + curr.value, 0)}
+                  </span>
+                  <span className="text-sm font-medium text-slate-400 mt-1 uppercase tracking-wide">今日总单</span>
+                </div>
+              </div>
+
+              {/* Custom Legend */}
+              <div className="mt-6 space-y-4">
+                  {progressData.map((item) => (
+                      <div key={item.name} className="flex items-center justify-between p-3 rounded-xl bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center gap-3">
+                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                              <span className="text-sm font-medium text-slate-700">{item.name}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                              <span className="text-sm font-bold text-slate-900">{item.value}</span>
+                              <span className="text-xs text-slate-400">单</span>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Nexus Style Components ---
+
+function NexusStatCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  trend,
+  trendUp,
+  colorClass,
+  bgClass,
+  active
+}: {
+  title: string;
+  value: number;
+  subtitle?: string;
+  icon: any;
+  trend?: string;
+  trendUp?: boolean;
+  colorClass: string;
+  bgClass: string;
+  active?: boolean;
+}) {
+  return (
+    <Card className={`border-none shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md group rounded-2xl ${active ? 'bg-gradient-to-br from-white to-blue-50/30 ring-1 ring-blue-100' : 'bg-white'}`}>
+      <CardContent className="p-5">
+        <div className="flex justify-between items-start mb-4">
+          <div className={`p-2.5 rounded-xl ${bgClass} ${colorClass} bg-opacity-50 transition-colors group-hover:scale-110 duration-300`}>
+            <Icon className="w-5 h-5" />
+          </div>
+          {trend && (
+            <div className={`flex items-center px-2 py-1 rounded-full text-xs font-bold ${trendUp ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+              {trendUp ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingUp className="w-3 h-3 mr-1 rotate-180" />}
+              {trend}
+            </div>
+          )}
+        </div>
+        <div>
+          <h3 className="text-3xl font-extrabold text-slate-900 tracking-tight">{value}</h3>
+          <div className="flex items-center justify-between mt-1">
+             <p className="text-sm font-medium text-slate-500">{title}</p>
+             {subtitle && <span className="text-xs text-rose-500 font-medium animate-pulse">{subtitle}</span>}
+          </div>
+        </div>
+        
+        {/* Tiny Area Chart for decoration */}
+        <div className="h-8 mt-3 w-full opacity-20 group-hover:opacity-40 transition-opacity">
+           <ResponsiveContainer width="100%" height="100%">
+             <AreaChart data={trendData}>
+               <defs>
+                 <linearGradient id={`grad-${colorClass}`} x1="0" y1="0" x2="0" y2="1">
+                   <stop offset="5%" stopColor="currentColor" className={colorClass} stopOpacity={0.8}/>
+                   <stop offset="95%" stopColor="currentColor" className={colorClass} stopOpacity={0}/>
+                 </linearGradient>
+               </defs>
+               <Area type="monotone" dataKey="value" stroke="currentColor" className={colorClass} fill={`url(#grad-${colorClass})`} strokeWidth={2} />
+             </AreaChart>
+           </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NexusTaskCard({ data }: { data: any }) {
+  const themeColors: Record<string, string> = {
+    blue: "bg-blue-50 text-blue-600 border-blue-100 hover:border-blue-200",
+    indigo: "bg-indigo-50 text-indigo-600 border-indigo-100 hover:border-indigo-200",
+    rose: "bg-rose-50 text-rose-600 border-rose-100 hover:border-rose-200",
+  };
+  
+  const btnTheme: Record<string, string> = {
+    blue: "bg-blue-600 hover:bg-blue-700 shadow-blue-200",
+    indigo: "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200",
+    rose: "bg-rose-600 hover:bg-rose-700 shadow-rose-200",
+  };
+
+  return (
+    <Card className="border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 rounded-2xl overflow-hidden group">
+      <CardContent className="p-0">
+        <div className="p-6">
+          <div className="flex items-start justify-between">
+            <div className={`p-3 rounded-2xl ${themeColors[data.theme].split(' ').slice(0, 2).join(' ')}`}>
+              <data.icon className="w-6 h-6" />
+            </div>
+            <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-mono text-sm px-2.5 py-0.5">
+              {data.count}
+            </Badge>
+          </div>
+          <div className="mt-4">
+            <h3 className="text-lg font-bold text-slate-900">{data.title}</h3>
+            <p className="text-sm text-slate-500 mt-1 line-clamp-1">{data.description}</p>
+          </div>
+        </div>
+        <div className="px-6 pb-6 pt-0">
+          <Button 
+            className={`w-full rounded-xl shadow-lg text-white font-medium flex justify-between items-center group-hover:scale-[1.02] transition-transform ${btnTheme[data.theme]}`}
+            asChild
+          >
+            <a href={data.link}>
+              {data.action}
+              <ArrowRight className="w-4 h-4 opacity-80" />
+            </a>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}

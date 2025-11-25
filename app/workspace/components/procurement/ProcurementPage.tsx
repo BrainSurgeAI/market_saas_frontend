@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ShoppingCart, X, Calendar } from "lucide-react";
 
@@ -26,7 +25,6 @@ import { SearchBar } from "./SearchBar";
 import { ProductDetailSheet } from "./ProductDetail";
 import { QuantityDialog } from "@/lib/components/QuantityDialog";
 import { Organization, User } from "@/app/models";
-import { log } from "console";
 
 interface ProcurementPageProps {
 	user: User;
@@ -667,73 +665,194 @@ export function ProcurementPage({ user, organization, userRole }: ProcurementPag
 		setSelectedCartItemId(null);
 	};
 
-	// 渲染购物车内容
+	// 更新购物车数量（增加/减少）
+	const updateCartQuantity = (itemId: string, newQuantity: number) => {
+		if (newQuantity <= 0) return;
+
+		const item = cartItems.find(item => (item.uniqueId || item.productId) === itemId);
+		if (!item || newQuantity < (item.minOrderQuantity || 1)) return;
+
+		setCartItems(cartItems.map(cartItem =>
+			(cartItem.uniqueId || cartItem.productId) === itemId
+				? {
+					...cartItem,
+					quantity: newQuantity,
+					total: Number((cartItem.price * newQuantity).toFixed(2)),
+					originalTotal: Number((cartItem.originalPrice * newQuantity).toFixed(2))
+				}
+				: cartItem
+		));
+	};
+
+	// 计算购物车商品的步长（根据单位类型）
+	const getCartItemStepValue = (unit: string) => {
+		const lowerUnit = unit.toLowerCase();
+		if (lowerUnit === "kg" || lowerUnit === "g") {
+			// kg和g单位按100g变化
+			return lowerUnit === "kg" ? 0.1 : 100;
+		}
+		// 其他单位按1变化
+		return 1;
+	};
+
+	// 渲染购物车内容 - 现代购物车 UI 设计
 	const renderCartContent = () => {
 		if (cartItems.length === 0) {
 			return (
-				<div className="flex flex-col items-center justify-center h-[200px]">
-					<ShoppingCart className="h-10 w-10 text-gray-300 mb-3" />
-					<p className="text-sm text-gray-500">您的采购清单为空</p>
+				<div className="flex flex-col items-center justify-center py-12 px-4">
+					<div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+						<ShoppingCart className="w-8 h-8 text-slate-400" />
+					</div>
+					<h3 className="text-lg font-medium text-slate-900 mb-2">购物车是空的</h3>
+					<p className="text-sm text-slate-500 text-center max-w-[200px]">
+						添加一些商品到您的采购清单中
+					</p>
 				</div>
 			);
 		}
 
 		return (
-			<div className="space-y-4 text-xs">
-				<div className="max-h-[400px] overflow-auto space-y-3 pr-1">
+			<div className="space-y-6">
+				{/* 购物车商品列表 */}
+				<div className="max-h-[400px] overflow-auto space-y-4 pr-1">
 					{cartItems.map((item) => (
-						<div key={item.uniqueId || item.productId} className="flex items-center justify-between border-b pb-2">
-							<div className="flex-1 min-w-0">
-								<h4 className="text-xs truncate">{item.name}</h4>
-								<p className="text-xs text-gray-500 font-mono">¥{item.price.toFixed(2)}/{item.unit}</p>
-								{((item.processingServices && item.processingServices.length > 0) || item.customNote) && (
-									<div className="mt-1">
-										{item.processingServices?.map((service, index) => (
-											<span key={index} className="text-xs text-gray-500 block">
-												· {service.type}
-												{service.description && ` - ${service.description}`}
+						<div key={item.uniqueId || item.productId} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+							<div className="p-4">
+								{/* 商品头部信息 */}
+								<div className="flex items-start justify-between mb-3">
+									<div className="flex-1 min-w-0">
+										<h4 className="text-sm font-semibold text-slate-900 line-clamp-2 mb-1">
+											{item.name}
+										</h4>
+										<div className="flex items-center gap-2">
+											<span className="text-sm font-medium text-slate-900 font-mono">
+												¥{item.price.toFixed(2)}
 											</span>
+											<span className="text-xs text-slate-500">/{item.unit}</span>
+											{item.discountRate && item.discountRate < 1 && (
+												<span className="text-xs bg-red-50 text-red-600 px-1.5 py-0.5 rounded">
+													{Math.round((1 - item.discountRate) * 100)}% OFF
+												</span>
+											)}
+										</div>
+									</div>
+									<Button
+										variant="ghost"
+										size="sm"
+										className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full flex-shrink-0"
+										onClick={() => removeCartItem(item.uniqueId || item.productId)}
+									>
+										<X className="h-4 w-4" />
+									</Button>
+								</div>
+
+								{/* 加工服务和备注 */}
+								{((item.processingServices && item.processingServices.length > 0) || item.customNote) && (
+									<div className="mb-3 space-y-1">
+										{item.processingServices?.map((service, index) => (
+											<div key={index} className="flex items-start gap-2">
+												<div className="w-1 h-1 rounded-full bg-slate-400 mt-2 flex-shrink-0" />
+												<span className="text-xs text-slate-600">
+													{service.type}
+													{service.description && ` - ${service.description}`}
+												</span>
+											</div>
 										))}
 										{item.customNote && (
-											<span className="text-xs text-gray-500 block">
-												· 备注: {item.customNote}
-											</span>
+											<div className="flex items-start gap-2">
+												<div className="w-1 h-1 rounded-full bg-slate-400 mt-2 flex-shrink-0" />
+												<span className="text-xs text-slate-600">
+													备注: {item.customNote}
+												</span>
+											</div>
 										)}
 									</div>
 								)}
-							</div>
-							<div className="flex items-center gap-1 mx-2 font-mono">
-								<div
-									className="w-16 h-7 text-xs text-center border rounded flex items-center justify-center cursor-pointer hover:border-primary"
-									onClick={() => handleOpenQuantityDialog(item.uniqueId || item.productId)}>
-									{item.quantity}
+
+								{/* 数量控制和价格 */}
+								<div className="flex items-center justify-between">
+									{/* 数量控制 */}
+									<div className="flex items-center gap-3">
+										<div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
+											<Button
+												variant="ghost"
+												size="sm"
+												className="h-8 w-8 text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-none"
+												onClick={() => updateCartQuantity(item.uniqueId || item.productId, item.quantity - getCartItemStepValue(item.unit))}
+												disabled={item.quantity - getCartItemStepValue(item.unit) < (item.minOrderQuantity || 1)}
+											>
+												-
+											</Button>
+											<div className="w-12 h-8 flex items-center justify-center text-sm font-medium border-x border-slate-200">
+												{item.unit.toLowerCase() === "kg" || item.unit.toLowerCase() === "g"
+													? item.quantity.toFixed(item.unit.toLowerCase() === "kg" ? 1 : 0)
+													: item.quantity
+												}
+											</div>
+											<Button
+												variant="ghost"
+												size="sm"
+												className="h-8 w-8 text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-none"
+												onClick={() => updateCartQuantity(item.uniqueId || item.productId, item.quantity + getCartItemStepValue(item.unit))}
+											>
+												+
+											</Button>
+										</div>
+										<span className="text-xs text-slate-500">{item.unit}</span>
+									</div>
+
+									{/* 小计价格 */}
+									<div className="text-right">
+										<div className="text-sm font-semibold text-slate-900 font-mono">
+											¥{item.total.toFixed(2)}
+										</div>
+										{item.discountRate && item.discountRate < 1 && (
+											<div className="text-xs text-slate-500 line-through font-mono">
+												¥{item.originalTotal?.toFixed(2)}
+											</div>
+										)}
+									</div>
 								</div>
-								<span className="text-xs">{item.unit}</span>
-							</div>
-							<div className="flex items-center gap-1">
-								<span className="text-xs font-medium font-mono">¥{item.total.toFixed(2)}</span>
-								<Button
-									variant="ghost"
-									size="icon"
-									className="h-5 w-5 text-gray-400 hover:text-red-500 transition-colors"
-									onClick={() => removeCartItem(item.uniqueId || item.productId)}>
-									<X className="h-3 w-3" />
-								</Button>
 							</div>
 						</div>
 					))}
 				</div>
 
-				<div className="border-t pt-3 space-y-3">
-					<div className="flex justify-between">
-						<span className="text-sm">总计金额</span>
-						<span className="text-base font-medium text-primary font-mono">¥{cartTotal.toFixed(2)}</span>
+				{/* 订单摘要和结账 */}
+				<div className="bg-slate-50 rounded-xl p-4 space-y-4">
+					{/* 订单摘要 */}
+					<div className="space-y-2">
+						<div className="flex justify-between text-sm">
+							<span className="text-slate-600">商品总价</span>
+							<span className="font-medium font-mono">¥{cartItems.reduce((sum, item) => sum + item.originalTotal, 0).toFixed(2)}</span>
+						</div>
+						{cartTotal < cartItems.reduce((sum, item) => sum + item.originalTotal, 0) && (
+							<div className="flex justify-between text-sm">
+								<span className="text-green-600">优惠金额</span>
+								<span className="font-medium text-green-600 font-mono">
+									-¥{(cartItems.reduce((sum, item) => sum + item.originalTotal, 0) - cartTotal).toFixed(2)}
+								</span>
+							</div>
+						)}
+						<div className="border-t border-slate-200 pt-2 flex justify-between">
+							<span className="font-medium text-slate-900">总计</span>
+							<span className="text-lg font-bold text-slate-900 font-mono">¥{cartTotal.toFixed(2)}</span>
+						</div>
 					</div>
+
+					{/* 结账按钮 */}
 					<Button
-						className="w-full text-xs transition-all duration-200 hover:shadow-sm"
-						onClick={handleCheckout}>
-						确认采购
+						className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-base font-semibold rounded-xl shadow-lg shadow-blue-600/20 transition-all duration-200 hover:shadow-xl hover:shadow-blue-600/30"
+						onClick={handleCheckout}
+					>
+						<ShoppingCart className="w-5 h-5 mr-2" />
+						确认采购 ({cartItems.length} 件商品)
 					</Button>
+
+					{/* 安全提示 */}
+					<p className="text-xs text-slate-500 text-center">
+						您的订单将受到安全保护
+					</p>
 				</div>
 			</div>
 		);
@@ -770,30 +889,6 @@ export function ProcurementPage({ user, organization, userRole }: ProcurementPag
 	return (
 		<div className="container mx-auto py-4 px-4 md:px-6">
 			<div className="flex flex-col space-y-4">
-				{/* 移动端顶部布局 */}
-				<div className="block md:hidden space-y-2">
-					<div>
-						<h3 className="text-lg font-semibold">商品采购</h3>
-						<p className="text-xs text-gray-500 mt-1">欢迎回来，{user.name}</p>
-					</div>
-					<div className="flex items-center text-xs text-gray-500">
-						<Calendar className="h-3.5 w-3.5 mr-1" />
-						<span>今日: {new Date().toLocaleDateString()}</span>
-					</div>
-				</div>
-				{/* 桌面端顶部布局 */}
-				<div className="hidden md:flex justify-between items-center">
-					<div>
-						<h3 className="text-xl font-semibold">商品采购</h3>
-						<p className="text-sm text-gray-500">欢迎回来，{user.name}</p>
-					</div>
-					<div className="flex items-center gap-4">
-						<div className="flex items-center text-sm text-gray-500">
-							<Calendar className="h-4 w-4 mr-1" />
-							<span>今日: {new Date().toLocaleDateString()}</span>
-						</div>
-					</div>
-				</div>
 				<div className="flex flex-col md:flex-row gap-4">
 					<div className="flex-1 pb-20 md:pb-0">
 						<SearchBar
@@ -819,52 +914,62 @@ export function ProcurementPage({ user, organization, userRole }: ProcurementPag
 
 					{/* 采购清单 - 移动端底部浮动，桌面端右侧固定 */}
 					{/* 移动端底部浮动按钮 - 始终显示 */}
-					<div className="block md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50 p-3">
+					<div className="block md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-2xl z-50 p-4 safe-area-inset-bottom">
 						{cartItems.length > 0 ? (
-							<Button
-								className="w-full bg-primary hover:bg-primary/90 text-white h-12 text-base font-semibold"
-								onClick={() => setShowMobileCart(true)}>
-								<ShoppingCart className="h-5 w-5 mr-2" />
-								采购清单 ({cartItems.length} 项)
-								<span className="ml-auto font-mono">¥{cartTotal.toFixed(2)}</span>
-							</Button>
+							<div className="space-y-3">
+								{/* 简要信息 */}
+								<div className="flex items-center justify-between text-sm">
+									<span className="text-slate-600">{cartItems.length} 件商品</span>
+									<span className="font-bold text-slate-900 font-mono">¥{cartTotal.toFixed(2)}</span>
+								</div>
+								{/* 结账按钮 */}
+								<Button
+									className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-base font-semibold rounded-xl shadow-lg shadow-blue-600/20"
+									onClick={() => setShowMobileCart(true)}>
+									<ShoppingCart className="h-5 w-5 mr-2" />
+									查看清单并结账
+								</Button>
+							</div>
 						) : (
 							<Button
 								variant="outline"
-								className="w-full h-12 text-base border-gray-300"
+								className="w-full h-12 text-base border-slate-200 rounded-xl"
 								onClick={() => setShowMobileCart(true)}>
 								<ShoppingCart className="h-5 w-5 mr-2" />
-								查看采购清单
-								<span className="text-xs text-gray-500 ml-2">(空)</span>
+								采购清单
+								<span className="text-xs text-slate-500 ml-2">空</span>
 							</Button>
 						)}
 					</div>
 					{/* 移动端购物车对话框 */}
 					<AlertDialog open={showMobileCart} onOpenChange={setShowMobileCart}>
-						<AlertDialogContent className="max-w-[95vw] max-h-[85vh] overflow-hidden flex flex-col">
-							<AlertDialogHeader>
-								<AlertDialogTitle className="text-base font-semibold flex items-center justify-between">
-									<span>采购清单</span>
+						<AlertDialogContent className="max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col rounded-2xl">
+							<AlertDialogHeader className="border-b border-slate-100 pb-4">
+								<AlertDialogTitle className="text-lg font-bold text-slate-900 flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										<ShoppingCart className="w-5 h-5 text-blue-600" />
+										<span>采购清单</span>
+									</div>
 									{cartItems.length > 0 && (
-										<Badge className="bg-primary text-white text-xs">
-											{cartItems.length} 项
+										<Badge className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-1">
+											{cartItems.length} 件
 										</Badge>
 									)}
 								</AlertDialogTitle>
 							</AlertDialogHeader>
-							<div className="flex-1 overflow-y-auto -mx-6 px-6">
+							<div className="flex-1 overflow-y-auto -mx-6 px-6 py-2">
 								{renderCartContent()}
 							</div>
 							{cartItems.length > 0 && (
-								<AlertDialogFooter className="flex-col gap-2 sm:flex-row border-t pt-4">
-									<AlertDialogCancel className="w-full sm:w-auto">取消</AlertDialogCancel>
-									<AlertDialogAction 
+								<AlertDialogFooter className="flex-col gap-3 sm:flex-row border-t border-slate-100 pt-4">
+									<AlertDialogCancel className="w-full h-12 rounded-xl border-slate-200">继续选购</AlertDialogCancel>
+									<AlertDialogAction
 										onClick={() => {
 											setShowMobileCart(false);
 											handleCheckout();
 										}}
-										className="w-full sm:w-auto bg-primary hover:bg-primary/90">
-										确认采购 (¥{cartTotal.toFixed(2)})
+										className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-600/20">
+										确认采购 ¥{cartTotal.toFixed(2)}
 									</AlertDialogAction>
 								</AlertDialogFooter>
 							)}
@@ -872,24 +977,32 @@ export function ProcurementPage({ user, organization, userRole }: ProcurementPag
 					</AlertDialog>
 
 					{/* 桌面端右侧固定 */}
-					<div className="hidden md:block w-[350px] shrink-0">
-						<Card className="bg-white sticky top-4">
-							<CardHeader className="pb-2 flex flex-row items-center justify-between">
-								<div className="flex items-center">
-									<CardTitle className="font-semibold text-sm">采购清单</CardTitle>
-								</div>
-								<div className="flex items-center gap-2">
+					<div className="hidden md:block w-[380px] shrink-0">
+						<div className="bg-white rounded-2xl border border-slate-200 shadow-xl sticky top-4 overflow-hidden">
+							<div className="p-6 border-b border-slate-100">
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-3">
+										<div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+											<ShoppingCart className="w-5 h-5 text-blue-600" />
+										</div>
+										<div>
+											<h2 className="font-bold text-slate-900">采购清单</h2>
+											<p className="text-xs text-slate-500">
+												{cartItems.length > 0 ? `${cartItems.length} 件商品` : '暂无商品'}
+											</p>
+										</div>
+									</div>
 									{cartItems.length > 0 && (
-										<Badge className="bg-primary text-white text-[10px]">
-											{cartItems.length} 项
+										<Badge className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-1 rounded-full">
+											{cartItems.length}
 										</Badge>
 									)}
 								</div>
-							</CardHeader>
-							<CardContent>
+							</div>
+							<div className="p-6">
 								{renderCartContent()}
-							</CardContent>
-						</Card>
+							</div>
+						</div>
 					</div>
 				</div>
 			</div>
