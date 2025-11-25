@@ -5,7 +5,7 @@ import ProviderOrderDetail from "@/app/workspace/components/orders/ProviderOrder
 
 
 export default function OrderDetailPage() {
-  const params = useParams();
+  const params = useParams();  
 
   console.log('🚀 PROVIDER DEDICATED ROUTE - OrderDetailPage');
   console.log('🚀 PROVIDER ROUTE - orderCode:', params.order_code);

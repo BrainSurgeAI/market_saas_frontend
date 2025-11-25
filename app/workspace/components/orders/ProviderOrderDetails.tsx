@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, Package, RotateCcw, RefreshCw, CheckCircle } from "lucide-react";
+import { ArrowLeft, Download, Package, RotateCcw, RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 // 导入商品清单组件
@@ -13,7 +13,7 @@ import { ProductListSection } from "./order-details/ProductListSection";
 import type {
   ProviderOrderData,
   ProviderOrderItem,
-  ProviderOrderRound,
+  ProviderOrderCurrent,
   ProviderOrderResponse
 } from "@/lib/types/providerOrder";
 
@@ -24,6 +24,7 @@ import type { DeliveryPerson } from "@/lib/types/orderStatus";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -47,6 +48,134 @@ interface ProviderOrderDetailProps {
   orderCode: string;
   orgId: string;
 }
+
+// Helper component for rendering item badges
+const RenderStatusBadges = ({ item }: { item: ProviderOrderItem }) => {
+  return (
+    <div className="flex flex-wrap gap-1">
+      <Badge variant="secondary" className="bg-blue-500 text-white dark:bg-blue-600 text-xs">
+        待配送
+      </Badge>
+    </div>
+  );
+};
+
+// Helper component for grouped round items
+const RoundItemGroups = ({ items }: { items: ProviderOrderItem[] }) => {
+  const groups = useMemo(() => {
+    const g = {
+      PENDING: [] as ProviderOrderItem[],
+      SIGN: [] as ProviderOrderItem[],
+      RETURN: [] as ProviderOrderItem[],
+      EXCHANGE: [] as ProviderOrderItem[],
+    };
+    // 简化：所有商品都放在PENDING组中
+    items.forEach(item => {
+      g.PENDING.push(item);
+    });
+    return g;
+  }, [items]);
+
+  const [isSignOpen, setIsSignOpen] = useState(false);
+  const [isReturnOpen, setIsReturnOpen] = useState(false);
+
+  const ItemRow = ({ item }: { item: ProviderOrderItem }) => {
+
+    return (
+        <div className="py-4 px-4 rounded-lg border bg-muted/30 border-muted">
+            <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="font-medium text-sm">{item.productName}</span>
+                        <span className="text-xs text-muted-foreground">({item.productCode})</span>
+                    </div>
+                    <RenderStatusBadges item={item} />
+                </div>
+            </div>
+
+            {/* Quantity Display - Horizontal Layout */}
+            <div className="grid grid-cols-2 gap-6 mb-3">
+                <div className="text-center">
+                    <div className="text-xs font-medium text-muted-foreground mb-1">需求量</div>
+                    <div className="text-sm font-semibold text-foreground bg-background rounded px-2 py-1">
+                        {item.needToDeliverQty} {item.unit}
+                    </div>
+                </div>
+                <div className="text-center">
+                    <div className="text-xs font-medium text-muted-foreground mb-1">发货量</div>
+                    <div className={`text-sm font-semibold rounded px-2 py-1 ${item.actualQty ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-50 text-gray-500 border border-gray-200'}`}>
+                        {item.actualQty || '0.00'} {item.actualQty ? item.unit : ''}
+                    </div>
+                </div>
+            </div>
+
+            {/* Processing Requirements */}
+            {item.processingRequirements && (
+                <div className="mt-3 pt-2 border-t border-muted">
+                    <div className="text-xs text-muted-foreground mb-1">加工要求</div>
+                    <div className="text-xs bg-yellow-50 text-yellow-700 px-2 py-1 rounded border border-yellow-200">
+                        {item.processingRequirements}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+  };
+
+  return (
+      <div className="space-y-4">
+          {/* Pending / To Inspect */}
+          {groups.PENDING.length > 0 && (
+              <div className="space-y-2">
+                  <h5 className="text-sm font-medium text-muted-foreground">待验收 / 其他 ({groups.PENDING.length})</h5>
+                  <div className="space-y-1">
+                      {groups.PENDING.map(item => <ItemRow key={item.orderDetailId} item={item} />)}
+                  </div>
+              </div>
+          )}
+          
+          {/* Exchange */}
+           {groups.EXCHANGE.length > 0 && (
+              <div className="space-y-2">
+                  <h5 className="text-sm font-medium text-orange-600">换货 ({groups.EXCHANGE.length})</h5>
+                  <div className="space-y-1">
+                      {groups.EXCHANGE.map(item => <ItemRow key={item.orderDetailId} item={item} />)}
+                  </div>
+              </div>
+          )}
+
+          {/* RETURN - Collapsible (Default Closed) */}
+          {groups.RETURN.length > 0 && (
+             <Collapsible open={isReturnOpen} onOpenChange={setIsReturnOpen} className="border rounded-md p-2">
+                <CollapsibleTrigger className="flex items-center justify-between w-full">
+                    <h5 className="text-sm font-medium text-red-600 flex items-center gap-2">
+                        <RotateCcw className="h-4 w-4"/> 退货 ({groups.RETURN.length})
+                    </h5>
+                    {isReturnOpen ? <ChevronDown className="h-4 w-4"/> : <ChevronRight className="h-4 w-4"/>}
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 space-y-1">
+                    {groups.RETURN.map(item => <ItemRow key={item.orderDetailId} item={item} />)}
+                </CollapsibleContent>
+             </Collapsible>
+          )}
+
+          {/* SIGN - Collapsible (Default Closed) */}
+          {groups.SIGN.length > 0 && (
+             <Collapsible open={isSignOpen} onOpenChange={setIsSignOpen} className="border rounded-md p-2">
+                <CollapsibleTrigger className="flex items-center justify-between w-full">
+                    <h5 className="text-sm font-medium text-green-600 flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4"/> 已签收 ({groups.SIGN.length})
+                    </h5>
+                    {isSignOpen ? <ChevronDown className="h-4 w-4"/> : <ChevronRight className="h-4 w-4"/>}
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 space-y-1">
+                    {groups.SIGN.map(item => <ItemRow key={item.orderDetailId} item={item} />)}
+                </CollapsibleContent>
+             </Collapsible>
+          )}
+      </div>
+  );
+};
 
 export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderDetailProps) {
   const router = useRouter();
@@ -88,11 +217,13 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
   }>({ open: false });
 
   // 根据订单状态计算是否可编辑
+  // 只有订单状态为 EXCHANGE_IN_PROGRESS 或 SUPPLIER_PREPARING 时才能进入编辑模式
   const isEditing = useMemo(() => {
     if (!providerOrderData) return false;
     const status = providerOrderData.orderStatus;
-    // SUPPLIER_PREPARING 和 EXCHANGE_IN_PROGRESS 状态下PROVIDER可以编辑
-    return status === 'SUPPLIER_PREPARING' || status === 'EXCHANGE_IN_PROGRESS';
+    const editing = status === 'SUPPLIER_PREPARING' || status === 'EXCHANGE_IN_PROGRESS';
+    console.log('🔍 ProviderOrderDetails - isEditing calculation:', { status, editing, deliveryStatus: providerOrderData.current.deliveryStatus });
+    return editing;
   }, [providerOrderData]);
 
   // 验证数量输入
@@ -151,25 +282,25 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
       orderCode: providerOrderData.orderCode,
     };
 
-    // 转换 PROVIDER 商品数据为 OrderItem 格式
-    const convertedOrderItems = providerOrderData.rounds.flatMap(round =>
-      round.items.map(item => ({
-        id: item.orderDetailId,
-        productId: item.productCode,
-        name: item.productName,
-        category: item.categoryName,
-        categoryId: item.categoryId,
-        orderedQty: item.needToDeliverQty,
-        unit: item.unit,
-        unitPrice: item.unitPrice,
-        discountedUnitPrice: item.unitPrice,
-        processingRequirements: item.processingRequirements || '',
-        remark: item.remark?.reason || '',
-        discountRate: "0", // PROVIDER 数据没有折扣率
-        netAmount: (parseFloat(item.unitPrice) * parseFloat(item.needToDeliverQty)).toString(),
-        orderedAmount: (parseFloat(item.unitPrice) * parseFloat(item.needToDeliverQty)).toString(),
-      }))
-    );
+    // 使用current的items
+    const convertedOrderItems = providerOrderData.current.items.map(item => ({
+      id: item.orderDetailId,
+      productId: item.productCode,
+      name: item.productName,
+      category: item.categoryName,
+      categoryId: item.categoryId,
+      orderedQty: item.needToDeliverQty,
+      unit: item.unit,
+      unitPrice: item.unitPrice,
+      discountedUnitPrice: item.unitPrice,
+      processingRequirements: item.processingRequirements || '',
+      remark: '', // 新格式没有remark
+      discountRate: "0", // PROVIDER 数据没有折扣率
+      netAmount: (parseFloat(item.unitPrice) * parseFloat(item.needToDeliverQty)).toString(),
+      orderedAmount: (parseFloat(item.unitPrice) * parseFloat(item.needToDeliverQty)).toString(),
+      // 保留原始数据
+      actualQty: item.actualQty,
+    }));
 
     return {
       orderDetail: convertedOrderDetail,
@@ -177,61 +308,6 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
     };
   }, [providerOrderData]);
 
-  // 动态构造 roundGroups，基于 editableOrderItems
-  const roundGroups = useMemo(() => {
-    if (!providerOrderData || editableOrderItems.length === 0) {
-      return [];
-    }
-
-    return providerOrderData.rounds.map((round, index) => {
-      // 构造 deliveries 数据，基于editableOrderItems中的deliveredQuantity
-      const deliveries = round.items
-        .filter(item => {
-          // 查找对应的editableOrderItem
-          const editableItem = editableOrderItems.find(ei => ei.id === item.orderDetailId);
-          return editableItem && (editableItem as any).deliveredQuantity;
-        })
-        .map(item => {
-          const editableItem = editableOrderItems.find(ei => ei.id === item.orderDetailId)!;
-          const deliveredQuantity = (editableItem as any).deliveredQuantity;
-
-          return {
-            id: item.orderDetailId,
-            assignmentId: undefined,
-            parentId: null,
-            deliveryRound: round.round,
-            deliveryType: round.deliveryType,
-            deliveredAt: undefined,
-            deliveredBy: providerOrderData.shipperName || '',
-            deliveryStatus: round.deliveryStatus,
-            deliveryContactNumber: providerOrderData.shipperPhone || '',
-            createdAt: providerOrderData.createdAt,
-            updatedAt: providerOrderData.createdAt,
-            items: [{
-              id: item.orderDetailId,
-              orderDetailId: item.orderDetailId,
-              productCode: item.productCode,
-              actualQty: deliveredQuantity,
-              unitPrice: item.unitPrice,
-              subtotal: (parseFloat(deliveredQuantity) * parseFloat(item.unitPrice)).toString(),
-              weightUnit: item.unit,
-              createdAt: providerOrderData.createdAt,
-              updatedAt: providerOrderData.createdAt,
-            }],
-          };
-        });
-
-      return {
-        round: round.round,
-        isLatest: index === providerOrderData.rounds.length - 1,
-        deliveries,
-        inspections: [],
-        items: editableOrderItems.filter(item =>
-          round.items.some(roundItem => roundItem.orderDetailId === item.id)
-        ),
-      };
-    });
-  }, [providerOrderData, editableOrderItems]);
 
   // 重新获取订单数据
   const refreshData = async () => {
@@ -259,68 +335,28 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
       setProviderOrderData(providerOrderData);
 
       // 重新初始化可编辑商品列表，包含服务器返回的actualQty
-      const updatedItems = providerOrderData.rounds.flatMap(round =>
-        round.items.map(item => ({
-          id: item.orderDetailId,
-          productId: item.productCode,
-          name: item.productName,
-          category: item.categoryName,
-          categoryId: item.categoryId,
-          orderedQty: item.needToDeliverQty,
-          unit: item.unit,
-          unitPrice: item.unitPrice,
-          discountedUnitPrice: item.unitPrice,
-          processingRequirements: item.processingRequirements || '',
-          remark: item.remark?.reason || '',
-          discountRate: "0", // PROVIDER 数据没有折扣率
-          netAmount: (parseFloat(item.unitPrice) * parseFloat(item.needToDeliverQty)).toString(),
-          orderedAmount: (parseFloat(item.unitPrice) * parseFloat(item.needToDeliverQty)).toString(),
-          // 使用服务器返回的actualQty作为初始值，确保是字符串
-          deliveredQuantity: item.actualQty ? item.actualQty.toString() : "",
-        }))
-      );
+      const updatedItems = providerOrderData.current.items.map(item => ({
+        id: item.orderDetailId,
+        round: 1, // 只有一个current，所以round设为1
+        productId: item.productCode,
+        name: item.productName,
+        category: item.categoryName,
+        categoryId: item.categoryId,
+        orderedQty: item.needToDeliverQty,
+        unit: item.unit,
+        unitPrice: item.unitPrice,
+        discountedUnitPrice: item.unitPrice,
+        processingRequirements: item.processingRequirements || '',
+        remark: '', // 新格式没有remark
+        discountRate: "0", // PROVIDER 数据没有折扣率
+        netAmount: (parseFloat(item.unitPrice) * parseFloat(item.needToDeliverQty)).toString(),
+        orderedAmount: (parseFloat(item.unitPrice) * parseFloat(item.needToDeliverQty)).toString(),
+        // 使用服务器返回的actualQty作为初始值，确保是字符串
+        deliveredQuantity: item.actualQty ? item.actualQty.toString() : "",
+      }));
       setEditableOrderItems(updatedItems);
       setItemErrors({}); // 清空错误状态
 
-      // 重新构造roundGroups
-      const roundGroups: RoundGroupedData[] = providerOrderData.rounds.map((round, index) => {
-        const deliveries = round.items
-          .filter(item => item.actualQty)
-          .map(item => ({
-            id: item.orderDetailId,
-            assignmentId: undefined,
-            parentId: null,
-            deliveryRound: round.round,
-            deliveryType: round.deliveryType,
-            deliveredAt: undefined,
-            deliveredBy: providerOrderData.shipperName || '',
-            deliveryStatus: round.deliveryStatus,
-            deliveryContactNumber: providerOrderData.shipperPhone || '',
-            createdAt: providerOrderData.createdAt,
-            updatedAt: providerOrderData.createdAt,
-            items: [{
-              id: item.orderDetailId,
-              orderDetailId: item.orderDetailId,
-              productCode: item.productCode,
-              actualQty: item.actualQty!,
-              unitPrice: item.unitPrice,
-              subtotal: (parseFloat(item.actualQty!) * parseFloat(item.unitPrice)).toString(),
-              weightUnit: item.unit,
-              createdAt: providerOrderData.createdAt,
-              updatedAt: providerOrderData.createdAt,
-            }],
-          }));
-
-        return {
-          round: round.round,
-          isLatest: index === providerOrderData.rounds.length - 1,
-          deliveries,
-          inspections: [],
-          items: updatedItems.filter(item =>
-            round.items.some(roundItem => roundItem.orderDetailId === item.id)
-          ),
-        };
-      });
 
     } catch (err) {
       console.error('❌ ProviderOrderDetails - Error refreshing data:', err);
@@ -336,26 +372,25 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
   useEffect(() => {
     if (providerOrderData && editableOrderItems.length === 0) {
       // 在初次加载时，使用服务器返回的actualQty作为初始值
-      const initialItems = providerOrderData.rounds.flatMap(round =>
-        round.items.map(item => ({
-          id: item.orderDetailId,
-          productId: item.productCode,
-          name: item.productName,
-          category: item.categoryName,
-          categoryId: item.categoryId,
-          orderedQty: item.needToDeliverQty,
-          unit: item.unit,
-          unitPrice: item.unitPrice,
-          discountedUnitPrice: item.unitPrice,
-          processingRequirements: item.processingRequirements || '',
-          remark: item.remark?.reason || '',
-          discountRate: "0", // PROVIDER 数据没有折扣率
-          netAmount: (parseFloat(item.unitPrice) * parseFloat(item.needToDeliverQty)).toString(),
-          orderedAmount: (parseFloat(item.unitPrice) * parseFloat(item.needToDeliverQty)).toString(),
-          // 使用服务器返回的actualQty作为初始值，确保是字符串
-          deliveredQuantity: item.actualQty ? item.actualQty.toString() : "",
-        }))
-      );
+      const initialItems = providerOrderData.current.items.map(item => ({
+        id: item.orderDetailId,
+        round: 1, // 只有一个current，所以round设为1
+        productId: item.productCode,
+        name: item.productName,
+        category: item.categoryName,
+        categoryId: item.categoryId,
+        orderedQty: item.needToDeliverQty,
+        unit: item.unit,
+        unitPrice: item.unitPrice,
+        discountedUnitPrice: item.unitPrice,
+        processingRequirements: item.processingRequirements || '',
+        remark: '', // 新格式没有remark
+        discountRate: "0", // PROVIDER 数据没有折扣率
+        netAmount: (parseFloat(item.unitPrice) * parseFloat(item.needToDeliverQty)).toString(),
+        orderedAmount: (parseFloat(item.unitPrice) * parseFloat(item.needToDeliverQty)).toString(),
+        // 为已有发货记录的商品设置actualQty，新配送的商品设置为0.00
+        deliveredQuantity: item.actualQty ? item.actualQty.toString() : "0.00",
+      }));
       setEditableOrderItems(initialItems);
     }
   }, [providerOrderData, editableOrderItems.length]);
@@ -419,46 +454,95 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
       setSavingChanges(true);
       setItemErrors({});
 
-      // 从editableOrderItems中收集有deliveredQuantity的商品
-      const items = editableOrderItems
-        .filter(item => (item as any).deliveredQuantity)
-        .map(item => ({
-          id: item.id,
-          deliveredQuantity: parseFloat((item as any).deliveredQuantity),
-        }));
+      // 如果订单状态是EXCHANGE_IN_PROGRESS，调用换货配送API
+      if (providerOrderData?.orderStatus === 'EXCHANGE_IN_PROGRESS') {
 
-      if (items.length === 0) {
-        toast({
-          title: "提示",
-          description: "没有需要保存的更改",
+        // 收集当前配送的商品数据
+        const exchangeItems = providerOrderData.current.items.map(item => {
+          // 找到对应的editableOrderItems中的用户设置的数量
+          const editableItem = editableOrderItems.find(e => e.id === item.orderDetailId);
+          const actualQuantity = editableItem ? parseFloat((editableItem as any).deliveredQuantity || '0') : parseFloat(item.needToDeliverQty || '0');
+
+          return {
+            orderDetailId: item.orderDetailId,
+            actualQuantity: actualQuantity,
+          };
         });
-        return;
+
+        if (exchangeItems.length === 0) {
+          toast({
+            title: "提示",
+            description: "没有需要保存的更改",
+          });
+          return;
+        }
+
+        // 调用换货配送API
+        const response = await fetch(`/api/orders/${orderCode}/exchange-deliver`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            items: exchangeItems,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || '提交换货配送失败');
+        }
+
+        const result = await response.json();
+
+        toast({
+          title: "成功",
+          description: "换货配送已提交",
+          variant: "default",
+          duration: 3000,
+        });
+      } else {
+        // 从editableOrderItems中收集有deliveredQuantity的商品
+        const items = editableOrderItems
+          .filter(item => (item as any).deliveredQuantity !== undefined && (item as any).deliveredQuantity !== null && (item as any).deliveredQuantity !== "")
+          .map(item => ({
+            id: item.id,
+            deliveredQuantity: parseFloat((item as any).deliveredQuantity),
+          }));
+
+        if (items.length === 0) {
+          toast({
+            title: "提示",
+            description: "没有需要保存的更改",
+          });
+          return;
+        }
+
+        // 调用API保存 - 配送到市场
+        const response = await fetch(`/api/orders/${orderCode}/deliver-to-market`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            items,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || '保存失败');
+        }
+
+        const result = await response.json();
+
+        toast({
+          title: "成功",
+          description: "实际发货数量已更新",
+          variant: "default",
+          duration: 3000,
+        });
       }
-
-      // 调用API保存 - 配送到市场
-      const response = await fetch(`/api/orders/${orderCode}/deliver-to-market`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          items,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || '保存失败');
-      }
-
-      const result = await response.json();
-
-      toast({
-        title: "成功",
-        description: "实际发货数量已更新",
-        variant: "default",
-        duration: 3000,
-      });
 
       // 重新获取订单数据，显示服务器返回的actualQty
       await refreshData();
@@ -517,8 +601,33 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
       handleBeginExchangeProcessing: async () => {
         setStartingExchange(true);
         try {
-          // 实现开始换货处理逻辑
-          console.log('开始换货处理...');
+          const response = await fetch(`/api/orders/${orderCode}/begin-exchange-progress`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ operateBy: "PROVIDER_USER" }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`开始换货失败: ${response.status}`);
+          }
+
+          toast({
+            title: '操作成功',
+            description: '已确认退换货，开始处理',
+            variant: 'default',
+          });
+          
+          // 刷新数据
+          refreshData();
+
+        } catch (err) {
+          toast({
+            title: '操作失败',
+            description: err instanceof Error ? err.message : '开始换货时出错',
+            variant: 'destructive',
+          });
         } finally {
           setStartingExchange(false);
         }
@@ -609,9 +718,9 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
   }, [orderStrategy, strategyContext, areAllInputsValid]);
 
   // 处理实际数量变更
-  const handleActualQuantityChange = (id: number, value: string) => {
+  const handleActualQuantityChange = (id: number, round: number, value: string) => {
     // 找到对应的商品项
-    const item = editableOrderItems.find(item => item.id === id);
+    const item = editableOrderItems.find(item => item.id === id && item.round === round);
     if (!item) return;
 
     // 验证输入值
@@ -620,7 +729,7 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
     // 更新商品数据
     setEditableOrderItems(prev =>
       prev.map(item => {
-        if (item.id === id) {
+        if (item.id === id && item.round === round) {
           return {
             ...item,
             deliveredQuantity: value
@@ -656,11 +765,7 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
         setLoading(true);
         setError(null);
 
-        console.log('🔄 ProviderOrderDetails - Starting fetch for:', orderCode);
-
         const apiUrl = `/api/orders/${orderCode}`;
-        console.log('🔄 ProviderOrderDetails - API URL:', apiUrl);
-
         const response = await fetch(apiUrl, {
           method: 'GET',
           headers: {
@@ -668,20 +773,15 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
           },
         });
 
-        console.log('🔄 ProviderOrderDetails - Response received');
-        console.log('🔄 ProviderOrderDetails - Response status:', response.status);
-        console.log('🔄 ProviderOrderDetails - Response ok:', response.ok);
-        console.log('🔄 ProviderOrderDetails - Response headers:', Object.fromEntries(response.headers.entries()));
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('❌ ProviderOrderDetails - HTTP error response:', errorText);
           throw new Error(`HTTP ${response.status}: ${errorText}`);
         }
 
         // API 路由已经返回了解包后的 data，直接使用
         const providerOrderData: ProviderOrderData = await response.json();
-        console.log('✅ ProviderOrderDetails - Received PROVIDER order data:', providerOrderData);
+        console.log('✅ ProviderOrderDetails - Received PROVIDER order data');
 
         setProviderOrderData(providerOrderData);
 
@@ -700,37 +800,6 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
 
     fetchProviderOrderDetail();
   }, [orderCode, toast]);
-
-  // 渲染状态徽章
-  const renderStatusBadges = (item: ProviderOrderItem) => {
-    return (
-      <div className="flex flex-wrap gap-1">
-        {item.inspectionStatus === "RETURN" && (
-          <Badge variant="secondary" className="bg-red-500 text-white dark:bg-red-600 text-xs">
-            <RotateCcw className="h-3 w-3 mr-1" />
-            退货
-          </Badge>
-        )}
-        {item.inspectionStatus === "EXCHANGE" && (
-          <Badge variant="secondary" className="bg-orange-500 text-white dark:bg-orange-600 text-xs">
-            <RefreshCw className="h-3 w-3 mr-1" />
-            换货
-          </Badge>
-        )}
-        {item.inspectionStatus === "SIGN" && (
-          <Badge variant="secondary" className="bg-green-500 text-white dark:bg-green-600 text-xs">
-            <CheckCircle className="h-3 w-3 mr-1" />
-            签收
-          </Badge>
-        )}
-        {(!item.inspectionStatus || item.inspectionStatus === "PENDING") && (
-          <Badge variant="secondary" className="bg-gray-500 text-white dark:bg-gray-600 text-xs">
-            待验收
-          </Badge>
-        )}
-      </div>
-    );
-  };
 
   if (loading) {
     return (
@@ -919,33 +988,90 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
       <Tabs defaultValue="products" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="products">商品清单</TabsTrigger>
-          <TabsTrigger value="rounds">配送轮次</TabsTrigger>
+          <TabsTrigger value="rounds">配送状态</TabsTrigger>
         </TabsList>
 
         <TabsContent value="products" className="space-y-4">
           {convertedData && (
             <>
-              <ProductListSection
-                orderDetail={convertedData.orderDetail}
-                orderItems={editableOrderItems.length > 0 ? editableOrderItems : convertedData.orderItems.map(item => ({ ...item, deliveredQuantity: undefined }))}
-                tenantType={TenantType.PROVIDER}
-                isEditing={isEditing}
-                itemErrors={itemErrors}
-                shouldShowDeliverQuantityColumn={true}
-                shouldShowReceivedQuantityColumn={false}
-                shouldShowInspectMenu={false}
-                shouldShowStatusColumn={true}
-                handleActualQuantityChange={handleActualQuantityChange}
-                handleActualQuantityKeyDown={handleActualQuantityKeyDown}
-                productStatusSummary={{
-                  totalItems: (editableOrderItems.length > 0 ? editableOrderItems : convertedData.orderItems).length,
-                  hasExchange: false,
-                  allInspected: false,
-                  itemStatusMap: {},
-                }}
-                isUnitAllowingDecimal={(unit: string) => true}
-                roundGroups={roundGroups}
-              />
+              <Card>
+                <CardHeader>
+                  <CardTitle>商品清单</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {editableOrderItems.map((item) => (
+                      <div key={item.id} className="border rounded-lg p-4 bg-card">
+                        {/* 商品基本信息 */}
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-semibold text-base text-foreground">{item.name}</span>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <span>编码: {item.productId}</span>
+                              <span>分类: {item.category}</span>
+                              <span>规格: {item.unit}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 数量信息 - 使用表格样式布局 */}
+                        <div className="border-t pt-3">
+                          <div className="grid grid-cols-3 gap-4 items-center">
+                            {/* 需求量 */}
+                            <div className="text-center">
+                              <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">需求量</div>
+                              <div className="text-lg font-bold text-foreground bg-muted/50 rounded-md px-3 py-2 border">
+                                {item.orderedQty} {item.unit}
+                              </div>
+                            </div>
+
+                            {/* 分隔符 */}
+                            <div className="flex justify-center">
+                              <div className="w-px h-8 bg-border"></div>
+                            </div>
+
+                            {/* 发货量 */}
+                            <div className="text-center">
+                              <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+                                {isEditing ? '发货量' : '已发货'}
+                              </div>
+                              <div className="flex justify-center">
+                                {isEditing ? (
+                                  <div className="space-y-1">
+                                    <Input
+                                      type="number"
+                                      value={(item as any).deliveredQuantity || ""}
+                                      onChange={(event) => handleActualQuantityChange(item.id, item.round || 1, event.target.value)}
+                                      className={`w-24 text-center font-mono font-semibold text-lg ${itemErrors[item.id] ? "border-red-500" : ""}`}
+                                      step={true ? "0.01" : "1"}
+                                      min="0"
+                                      max="999999.99"
+                                      onKeyDown={(event) => handleActualQuantityKeyDown?.(event, item.id)}
+                                      placeholder="0.00"
+                                    />
+                                    {itemErrors[item.id] && (
+                                      <p className="text-xs text-red-500 text-center">{itemErrors[item.id]}</p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="text-lg font-bold text-foreground bg-muted/50 rounded-md px-3 py-2 border min-w-[80px]">
+                                    {parseFloat((item as any).deliveredQuantity || '0') > 0
+                                      ? `${parseFloat((item as any).deliveredQuantity || '0').toFixed(2)} ${item.unit}`
+                                      : "-"
+                                    }
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             </>
           )}
         </TabsContent>
@@ -953,59 +1079,57 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
         <TabsContent value="rounds" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>配送轮次详情</CardTitle>
+              <CardTitle>配送状态详情</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {providerOrderData.rounds.map((round, index) => (
-                  <div key={round.round} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold">
-                        第 {round.round} 轮配送
-                      </h3>
-                      <div className="flex gap-2">
-                        <Badge variant={round.deliveryType === 'NORMAL' ? 'default' : 'secondary'}>
-                          {round.deliveryType === 'NORMAL' ? '正常配送' : '换货配送'}
-                        </Badge>
-                        <Badge variant="outline">
-                          {round.deliveryStatus}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground">商品数量</p>
-                        <p className="text-lg font-semibold">{round.items.length} 件</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">总需配送</p>
-                        <p className="text-lg font-semibold">
-                          {round.items.reduce((sum, item) => sum + parseFloat(item.needToDeliverQty), 0)} 件
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <h4 className="font-medium">商品列表：</h4>
-                      <div className="space-y-1">
-                        {round.items.map((item) => (
-                          <div key={item.orderDetailId} className="flex items-center justify-between py-2 px-3 bg-muted rounded">
-                            <div className="flex-1">
-                              <span className="font-medium">{item.productName}</span>
-                              <span className="text-sm text-muted-foreground ml-2">
-                                ({item.needToDeliverQty} {item.unit})
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {renderStatusBadges(item)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">
+                      当前配送状态
+                    </h3>
+                    <div className="flex gap-2">
+                      <Badge variant={providerOrderData.current.deliveryType === 'NORMAL' ? 'default' : 'secondary'}>
+                        {providerOrderData.current.deliveryType === 'NORMAL' ? '正常配送' : '换货配送'}
+                      </Badge>
+                      <Badge variant="outline">
+                        {providerOrderData.current.deliveryStatus}
+                      </Badge>
                     </div>
                   </div>
-                ))}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">商品数量</p>
+                      <p className="text-lg font-semibold">{providerOrderData.current.items.length} 件</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">总需配送</p>
+                      <p className="text-lg font-semibold">
+                        {providerOrderData.current.items.reduce((sum, item) => sum + parseFloat(item.needToDeliverQty), 0)} 件
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-medium mb-2">商品列表：</h4>
+                    <div className="space-y-2">
+                      {providerOrderData.current.items.map((item, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex-1">
+                            <div className="font-medium">{item.productName}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {item.categoryName} · {item.productCode} · {item.needToDeliverQty}{item.unit}
+                            </div>
+                          </div>
+                          <div className="text-sm text-blue-600 font-medium">
+                            {item.actualQty ? `${item.actualQty} ${item.unit}` : '待配送'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1156,3 +1280,4 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
     </div>
   );
 }
+

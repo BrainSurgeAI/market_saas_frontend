@@ -21,14 +21,16 @@ interface ProductListSectionProps {
   shouldShowReceivedQuantityColumn: boolean;
   shouldShowInspectMenu: boolean;
   shouldShowStatusColumn: boolean;
-  handleActualQuantityChange?: (id: number, value: string) => void;
+  handleActualQuantityChange?: (id: number, round: number, value: string) => void;
   handleActualQuantityKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>, id: number) => void;
   handleOperation?: (id: number, type: OperationType) => void;
   productStatusSummary: ProductStatusSummary;
   isUnitAllowingDecimal: (unit: string) => boolean;
   roundGroups?: RoundGroupedData[];
   inspections?: any[];
+  tabPrefix?: string;
   receipts?: Receipt[];
+  ignoreRoundEditRestrictions?: boolean;
 }
 
 export function ProductListSection({
@@ -49,6 +51,8 @@ export function ProductListSection({
   roundGroups,
   inspections = [],
   receipts = [],
+  tabPrefix = '',
+  ignoreRoundEditRestrictions = false,
 }: ProductListSectionProps) {
   const renderStatusBadges = (item: OrderItem, actualStatus: string) => {
     return (
@@ -109,6 +113,8 @@ export function ProductListSection({
               inspections={inspections}
               receipts={receipts}
               showRoundTitle={shouldShowRoundTitle}
+              tabPrefix={tabPrefix}
+              ignoreRoundEditRestrictions={ignoreRoundEditRestrictions}
             />
           ))}
         </div>

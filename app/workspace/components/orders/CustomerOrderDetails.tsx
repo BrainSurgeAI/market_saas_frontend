@@ -507,9 +507,10 @@ export default function CustomerOrderDetails({
           </div>
         </div>
         <div className="flex gap-2">
-           {/* 开始验收按钮 (MARKET_DELIVERING) */}
-           {customerOrderData.orderStatus === "MARKET_DELIVERING" && (
-               <Button 
+           {/* 开始验收按钮 (MARKET_DELIVERING 或 EXCHANGE_NEW_DELIVERING) */}
+           {(customerOrderData.orderStatus === "MARKET_DELIVERING" ||
+             customerOrderData.orderStatus === "EXCHANGE_NEW_DELIVERING") && (
+               <Button
                 onClick={() => setIsStartInspectDialogOpen(true)}
                 className="bg-blue-600 hover:bg-blue-500"
                >

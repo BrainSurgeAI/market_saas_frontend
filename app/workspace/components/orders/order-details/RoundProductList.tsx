@@ -21,7 +21,7 @@ interface RoundProductListProps {
   shouldShowReceivedQuantityColumn: boolean;
   shouldShowInspectMenu: boolean;
   shouldShowStatusColumn: boolean;
-  handleActualQuantityChange?: (id: number, value: string) => void;
+  handleActualQuantityChange?: (id: number, round: number, value: string) => void;
   handleActualQuantityKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>, id: number) => void;
   handleOperation?: (id: number, type: OperationType) => void;
   productStatusSummary: ProductStatusSummary;
@@ -29,6 +29,8 @@ interface RoundProductListProps {
   inspections?: any[];
   receipts?: Receipt[];
   showRoundTitle?: boolean;
+  tabPrefix?: string; // 用于区分不同tab的key前缀
+  ignoreRoundEditRestrictions?: boolean;
 }
 
 export function RoundProductList({
@@ -49,6 +51,8 @@ export function RoundProductList({
   inspections = [],
   receipts = [],
   showRoundTitle = true,
+  tabPrefix = '',
+  ignoreRoundEditRestrictions = false,
 }: RoundProductListProps) {
   const [isCollapsed, setIsCollapsed] = useState(!group.isLatest);
   const renderStatusBadges = (item: OrderItem, actualStatus: string) => {
@@ -128,9 +132,16 @@ export function RoundProductList({
         <div className="block md:hidden space-y-3">
           {group.items.map((item) => {
             const actualStatus = productStatusSummary.itemStatusMap[item.id] || "PENDING";
-            const canEdit = !["SIGN", "RETURN", "EXCHANGE"].includes(actualStatus);
-            const canEditThisRound = isProvider && isExchangeInProgress ? isLatestRound : true;
-            const canEditQuantity = canEdit && canEditThisRound;
+            // 对于PROVIDER，发货数量编辑逻辑：
+            // 1. canEdit: PROVIDER始终可以编辑（不依赖inspectionStatus）
+            // 2. canEditThisRound: PROVIDER只有在订单状态为SUPPLIER_PREPARING或EXCHANGE_IN_PROGRESS，且deliveryStatus为PREPARING或PENDING时才能编辑
+            // 3. canEditQuantity: 必须同时满足isEditing(订单状态)、canEdit和canEditThisRound
+            const canEdit = isProvider ? true : !["SIGN", "RETURN", "EXCHANGE"].includes(actualStatus);
+            const canEditThisRound = ignoreRoundEditRestrictions ? true : (isProvider ? (group.deliveryStatus === 'PREPARING' || group.deliveryStatus === 'PENDING') : true);
+            const canEditQuantity = isEditing && canEdit && canEditThisRound;
+            const shouldShowInput = isEditing && canEditQuantity;
+
+            console.log(`🔍 PROVIDER EDIT DEBUG - item=${item.name}, tenantType=${tenantType}, isProvider=${isProvider}, isEditing=${isEditing}, canEdit=${canEdit}, canEditThisRound=${canEditThisRound}, deliveryStatus="${group.deliveryStatus}" (type: ${typeof group.deliveryStatus}), canEditQuantity=${canEditQuantity}, shouldShowInput=${shouldShowInput}, ignoreRoundEditRestrictions=${ignoreRoundEditRestrictions}`);
 
 
             // 获取数量显示值
@@ -143,8 +154,10 @@ export function RoundProductList({
               : ((isProvider || isMarket)
                 ? getDeliveredQuantityFromRound(item.id, group.deliveries)
                 : "0");
-            
-            const customerReceivedQtyForCustomer = isCustomer 
+
+            console.log(`Mobile RoundProductList: item=${item.name}, round=${group.round}, deliveryStatus=${group.deliveryStatus}, isEditing=${isEditing}, canEdit=${canEdit}, canEditThisRound=${canEditThisRound}, canEditQuantity=${canEditQuantity}, shouldShowInput=${shouldShowInput}, deliveredQuantityFromRound=${deliveredQuantityFromRound}`);
+
+            const customerReceivedQtyForCustomer = isCustomer
               ? getCustomerReceivedQuantity(item.id, inspections)
               : "";
 
@@ -163,11 +176,10 @@ export function RoundProductList({
                   ? deliveredQtyForSubtotal 
                   : orderedQtyValue));
 
-            const shouldShowInput = isEditing && canEditQuantity;
             const forceShowInput = isProvider && isExchangeInProgress && isLatestRound && canEdit && !isEditing;
 
             return (
-              <Card key={item.id} className="p-4">
+              <Card key={`${tabPrefix}${group.round}-${item.id}`} className="p-4">
                 <div className="space-y-3">
                   {/* 商品名称、类别和状态 */}
                   <div>
@@ -219,7 +231,7 @@ export function RoundProductList({
                             <Input
                               type="number"
                               value={(item as OrderItem & { deliveredQuantity?: string }).deliveredQuantity ?? ""}
-                              onChange={(event) => handleActualQuantityChange?.(item.id, event.target.value)}
+                              onChange={(event) => handleActualQuantityChange?.(item.id, group.round, event.target.value)}
                               className={`w-full text-center font-mono font-semibold text-sm ${itemErrors[item.id] ? "border-red-500" : ""}`}
                               step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
                               min="0"
@@ -339,9 +351,16 @@ export function RoundProductList({
             <TableBody>
               {group.items.map((item) => {
                 const actualStatus = productStatusSummary.itemStatusMap[item.id] || "PENDING";
-                const canEdit = !["SIGN", "RETURN", "EXCHANGE"].includes(actualStatus);
-                const canEditThisRound = isProvider && isExchangeInProgress ? isLatestRound : true;
-                const canEditQuantity = canEdit && canEditThisRound;
+                // 对于PROVIDER，发货数量编辑逻辑：
+                // 1. canEdit: PROVIDER始终可以编辑（不依赖inspectionStatus）
+                // 2. canEditThisRound: PROVIDER只有在订单状态为SUPPLIER_PREPARING或EXCHANGE_IN_PROGRESS，且deliveryStatus为PREPARING或PENDING时才能编辑
+                // 3. canEditQuantity: 必须同时满足isEditing(订单状态)、canEdit和canEditThisRound
+                const canEdit = isProvider ? true : !["SIGN", "RETURN", "EXCHANGE"].includes(actualStatus);
+                const canEditThisRound = ignoreRoundEditRestrictions ? true : (isProvider ? (group.deliveryStatus === 'PREPARING' || group.deliveryStatus === 'PENDING') : true);
+                const canEditQuantity = isEditing && canEdit && canEditThisRound;
+                const shouldShowInput = isEditing && canEditQuantity;
+
+                console.log(`🔍 PROVIDER EDIT DEBUG (DESKTOP) - item=${item.name}, tenantType=${tenantType}, isProvider=${isProvider}, isEditing=${isEditing}, canEdit=${canEdit}, canEditThisRound=${canEditThisRound}, deliveryStatus="${group.deliveryStatus}" (type: ${typeof group.deliveryStatus}), canEditQuantity=${canEditQuantity}, shouldShowInput=${shouldShowInput}, ignoreRoundEditRestrictions=${ignoreRoundEditRestrictions}`);
 
                 // 每个轮次都只显示该轮次的验收数据，不累加之前轮次的数据
                 const marketReceivedQty = getReceivedQuantityFromRound(item.id, "MARKET", group.inspections);
@@ -352,8 +371,10 @@ export function RoundProductList({
                   : ((isProvider || isMarket)
                     ? getDeliveredQuantityFromRound(item.id, group.deliveries)
                     : "0");
-                
-                const customerReceivedQtyForCustomer = isCustomer 
+
+                console.log(`Desktop RoundProductList: item=${item.name}, round=${group.round}, deliveryStatus=${group.deliveryStatus}, isEditing=${isEditing}, canEdit=${canEdit}, canEditThisRound=${canEditThisRound}, canEditQuantity=${canEditQuantity}, shouldShowInput=${shouldShowInput}, deliveredQuantityFromRound=${deliveredQuantityFromRound}`);
+
+                const customerReceivedQtyForCustomer = isCustomer
                   ? getCustomerReceivedQuantity(item.id, inspections)
                   : "";
 
@@ -371,12 +392,11 @@ export function RoundProductList({
                       ? deliveredQtyForSubtotal 
                       : orderedQtyValue));
 
-                const shouldShowInput = isEditing && canEditQuantity;
                 const forceShowInput = isProvider && isExchangeInProgress && isLatestRound && canEdit && !isEditing;
 
 
                 return (
-                  <TableRow key={item.id} className="text-xs text-gray-700">
+                  <TableRow key={`${tabPrefix}${group.round}-${item.id}`} className="text-xs text-gray-700">
                     <TableCell className="p-2 border-b">
                       {item.name}
                       {(item.processingRequirements || item.remark) && (
@@ -400,7 +420,7 @@ export function RoundProductList({
                             <Input
                               type="number"
                               value={(item as OrderItem & { deliveredQuantity?: string }).deliveredQuantity || ""}
-                              onChange={(event) => handleActualQuantityChange?.(item.id, event.target.value)}
+                              onChange={(event) => handleActualQuantityChange?.(item.id, group.round, event.target.value)}
                               className={`max-w-[100px] text-center font-mono font-semibold ${itemErrors[item.id] ? "border-red-500" : ""}`}
                               step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
                               min="0"
@@ -498,9 +518,14 @@ export function RoundProductList({
           <div className="block md:hidden space-y-3">
             {group.items.map((item) => {
               const actualStatus = productStatusSummary.itemStatusMap[item.id] || "PENDING";
-              const canEdit = !["SIGN", "RETURN", "EXCHANGE"].includes(actualStatus);
-              const canEditThisRound = isProvider && isExchangeInProgress ? isLatestRound : true;
-              const canEditQuantity = canEdit && canEditThisRound;
+              // 对于PROVIDER，发货数量编辑逻辑：
+              // 1. canEdit: PROVIDER始终可以编辑（不依赖inspectionStatus）
+              // 2. canEditThisRound: 只有当前轮deliveryStatus为PREPARING时才能编辑
+              // 3. canEditQuantity: 必须同时满足isEditing(订单状态)、canEdit和canEditThisRound
+              const canEdit = isProvider ? true : !["SIGN", "RETURN", "EXCHANGE"].includes(actualStatus);
+              const canEditThisRound = ignoreRoundEditRestrictions ? true : (isProvider ? group.deliveryStatus === 'PREPARING' : true);
+              const canEditQuantity = isEditing && canEdit && canEditThisRound;
+              const shouldShowInput = isEditing && canEditQuantity;
 
             // 获取数量显示值
             // 发货数量、市场接收、客户接收都按对应轮数的deliveries和inspections显示
@@ -512,6 +537,8 @@ export function RoundProductList({
                 : ((isProvider || isMarket)
                   ? getDeliveredQuantityFromRound(item.id, group.deliveries)
                   : "0");
+
+              console.log(`Card Mobile RoundProductList: item=${item.name}, round=${group.round}, deliveryStatus=${group.deliveryStatus}, isEditing=${isEditing}, canEdit=${canEdit}, canEditThisRound=${canEditThisRound}, canEditQuantity=${canEditQuantity}, shouldShowInput=${shouldShowInput}, deliveredQuantityFromRound=${deliveredQuantityFromRound}`);
 
               const customerReceivedQtyForCustomer = isCustomer
                 ? getCustomerReceivedQuantity(item.id, inspections)
@@ -532,11 +559,10 @@ export function RoundProductList({
                     ? deliveredQtyForSubtotal
                     : orderedQtyValue));
 
-              const shouldShowInput = isEditing && canEditQuantity;
               const forceShowInput = isProvider && isExchangeInProgress && isLatestRound && canEdit && !isEditing;
 
               return (
-                <Card key={item.id} className="p-4">
+                <Card key={`${tabPrefix}${group.round}-${item.id}`} className="p-4">
                   <div className="space-y-3">
                     {/* 商品名称、类别和状态 */}
                     <div>
@@ -578,7 +604,7 @@ export function RoundProductList({
                               <Input
                                 type="number"
                                 value={(item as OrderItem & { deliveredQuantity?: string }).deliveredQuantity || ""}
-                                onChange={(event) => handleActualQuantityChange?.(item.id, event.target.value)}
+                                onChange={(event) => handleActualQuantityChange?.(item.id, group.round, event.target.value)}
                                 className={`w-full text-center font-mono font-semibold text-sm ${itemErrors[item.id] ? "border-red-500" : ""}`}
                                 step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
                                 min="0"
@@ -698,9 +724,14 @@ export function RoundProductList({
               <TableBody>
                 {group.items.map((item) => {
                   const actualStatus = productStatusSummary.itemStatusMap[item.id] || "PENDING";
-                  const canEdit = !["SIGN", "RETURN", "EXCHANGE"].includes(actualStatus);
-                  const canEditThisRound = isProvider && isExchangeInProgress ? isLatestRound : true;
-                  const canEditQuantity = canEdit && canEditThisRound;
+                  // 对于PROVIDER，发货数量编辑逻辑：
+                  // 1. canEdit: PROVIDER始终可以编辑（不依赖inspectionStatus）
+                  // 2. canEditThisRound: 只有当前轮deliveryStatus为PREPARING时才能编辑
+                  // 3. canEditQuantity: 必须同时满足isEditing(订单状态)、canEdit和canEditThisRound
+                  const canEdit = isProvider ? true : !["SIGN", "RETURN", "EXCHANGE"].includes(actualStatus);
+                  const canEditThisRound = ignoreRoundEditRestrictions ? true : (isProvider ? group.deliveryStatus === 'PREPARING' : true);
+                  const canEditQuantity = isEditing && canEdit && canEditThisRound;
+                  const shouldShowInput = isEditing && canEditQuantity;
 
                 // 市场接收、客户接收都按对应轮数的inspections显示
                 const marketReceivedQty = getReceivedQuantityFromRound(item.id, "MARKET", group.inspections);
@@ -711,6 +742,8 @@ export function RoundProductList({
                     : ((isProvider || isMarket)
                       ? getDeliveredQuantityFromRound(item.id, group.deliveries)
                       : "0");
+
+                  console.log(`Another Table RoundProductList: item=${item.name}, round=${group.round}, deliveryStatus=${group.deliveryStatus}, isEditing=${isEditing}, canEdit=${canEdit}, canEditThisRound=${canEditThisRound}, canEditQuantity=${canEditQuantity}, shouldShowInput=${shouldShowInput}, deliveredQuantityFromRound=${deliveredQuantityFromRound}`);
 
                   const customerReceivedQtyForCustomer = isCustomer
                     ? getCustomerReceivedQuantity(item.id, inspections)
@@ -730,11 +763,10 @@ export function RoundProductList({
                         ? deliveredQtyForSubtotal
                         : orderedQtyValue));
 
-                  const shouldShowInput = isEditing && canEditQuantity;
                   const forceShowInput = isProvider && isExchangeInProgress && isLatestRound && canEdit && !isEditing;
 
                   return (
-                    <TableRow key={item.id} className="text-xs text-gray-700">
+                    <TableRow key={`${tabPrefix}${group.round}-${item.id}`} className="text-xs text-gray-700">
                       <TableCell className="p-2 border-b">
                         {item.name}
                         {(item.processingRequirements || item.remark) && (
@@ -758,7 +790,7 @@ export function RoundProductList({
                               <Input
                                 type="number"
                                 value={(item as OrderItem & { deliveredQuantity?: string }).deliveredQuantity || ""}
-                                onChange={(event) => handleActualQuantityChange?.(item.id, event.target.value)}
+                                onChange={(event) => handleActualQuantityChange?.(item.id, group.round, event.target.value)}
                                 className={`max-w-[100px] text-center font-mono font-semibold ${itemErrors[item.id] ? "border-red-500" : ""}`}
                                 step={isUnitAllowingDecimal(item.unit) ? "0.01" : "1"}
                                 min="0"

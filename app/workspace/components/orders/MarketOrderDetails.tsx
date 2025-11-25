@@ -658,7 +658,7 @@ export default function MarketOrderDetails({
                   <TableRow>
                     <TableHead>商品名称</TableHead>
                     <TableHead>单价/单位</TableHead>
-                    <TableHead className="text-center">下单量</TableHead>
+                    <TableHead className="text-center">订购量</TableHead>
                     <TableHead className="text-center">金额</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -721,6 +721,7 @@ export default function MarketOrderDetails({
                                 <TableRow>
                                     <TableHead>商品名称</TableHead>
                                     <TableHead>单价/单位</TableHead>
+                                    <TableHead className="text-center">订购量</TableHead>
                                     <TableHead className="text-center">待验量</TableHead>
                                     <TableHead className="text-center">实收量</TableHead>
                                     <TableHead className="text-center">验收状态</TableHead>
@@ -743,6 +744,9 @@ export default function MarketOrderDetails({
                                         </TableCell>
                                         <TableCell>
                                             ¥{item.unitPrice} / {item.unit}
+                                        </TableCell>
+                                        <TableCell className="text-center font-mono font-medium">
+                                            {item.orderedQty}
                                         </TableCell>
                                         <TableCell className="text-center font-mono font-medium">
                                             {item.needToInspectQty}

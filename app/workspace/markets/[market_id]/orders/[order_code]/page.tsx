@@ -8,7 +8,7 @@ import { useWorkspace } from "@/lib/WorkspaceContext";
 import { TenantType } from "@/lib/types/orderStatus";
 
 export default function OrderDetailPage() {
-  const params = useParams();
+  const params = useParams();  
   const { workspaceOrg } = useWorkspace();
   
   const tenantType = workspaceOrg?.tenantType || "";

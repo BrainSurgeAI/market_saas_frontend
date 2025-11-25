@@ -56,6 +56,7 @@ export interface DeliveryPerson {
 
 export interface OrderItem {
   id: number;
+  round?: number; // 配送轮次，用于区分不同轮次的相同商品
   productId: string;
   name: string;
   categoryId: number;

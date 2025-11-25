@@ -6,6 +6,7 @@ import { Delivery, OrderInspection, OrderItem, Receipt, ReceiptItem } from "@/li
 export interface RoundGroupedData {
   round: number;
   isLatest: boolean;
+  deliveryStatus?: string;
   deliveries: Delivery[];
   inspections: OrderInspection[];
   items: OrderItem[];
