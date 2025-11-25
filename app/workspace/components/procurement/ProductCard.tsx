@@ -118,8 +118,8 @@ export function ProductCard({ product, onAddToCart, onViewDetail }: ProductCardP
 								variant="secondary"
 								className="bg-green-100 text-green-700 text-xs font-medium px-2 py-1 backdrop-blur-sm border-green-200"
 							>
-								- {((1 - product.discountRate) * 100).toFixed(0)}%
-							</Badge>
+								- {Math.round((1 - product.discountRate) * 100)}%
+								</Badge>
 						)}
 					</div>
 

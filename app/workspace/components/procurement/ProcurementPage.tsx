@@ -360,6 +360,7 @@ export function ProcurementPage({ user, organization, userRole }: ProcurementPag
 				total: Number((discountedPrice * actualQuantity).toFixed(2)),
 				category: product.category,
 				categoryId: product.categoryId,
+				image: product.image,
 				processingServices: services,
 				customNote,
 				minOrderQuantity: product.minOrderQuantity,
@@ -730,8 +731,8 @@ export function ProcurementPage({ user, organization, userRole }: ProcurementPag
 											</span>
 											<span className="text-xs text-slate-500">/{item.unit}</span>
 											{item.discountRate && item.discountRate < 1 && (
-												<span className="text-xs bg-red-50 text-red-600 px-1.5 py-0.5 rounded">
-													{Math.round((1 - item.discountRate) * 100)}% OFF
+												<span className="text-xs bg-green-50 text-green-600 px-1.5 py-0.5 rounded">
+													省 {Math.round((1 - item.discountRate) * 100)}% 
 												</span>
 											)}
 										</div>
@@ -843,8 +844,7 @@ export function ProcurementPage({ user, organization, userRole }: ProcurementPag
 					{/* 结账按钮 */}
 					<Button
 						className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-base font-semibold rounded-xl shadow-lg shadow-blue-600/20 transition-all duration-200 hover:shadow-xl hover:shadow-blue-600/30"
-						onClick={handleCheckout}
-					>
+						onClick={handleCheckout} size="sm">
 						<ShoppingCart className="w-5 h-5 mr-2" />
 						确认采购 ({cartItems.length} 件商品)
 					</Button>

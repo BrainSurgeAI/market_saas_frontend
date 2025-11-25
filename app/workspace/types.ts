@@ -47,6 +47,7 @@ export interface CartItem {
   discountRate: number;
   category: string;
   categoryId: number;
+  image?: string;
   processingServices?: {
     type: string;
     description?: string;
