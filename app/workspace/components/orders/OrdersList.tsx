@@ -4,14 +4,7 @@ import { useRouter } from "next/navigation";
 import { format, differenceInSeconds } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
+
 import {
 	Pagination,
 	PaginationContent,
@@ -36,12 +29,6 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipProvider,
-	TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 interface OrdersListProps {
 	org_id: string;
@@ -377,9 +364,6 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 		}
 	};
 
-	// 判断是否为 Customer 视图 - 已弃用，统一使用卡片视图
-	// const isCustomerView = redirectUrl.includes('/customers/');
-
 	return (
 		<div className="space-y-4">
 			<Card className="bg-transparent border-none shadow-none">
@@ -387,25 +371,25 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 					<CardTitle></CardTitle>
 					{/* 添加搜索框和状态筛选下拉菜单 */}
 					{/* 移动端布局 */}
-					<div className="block md:hidden space-y-2">
+					<div className="block md:hidden space-y-3 bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
 						<div className="relative">
-							<Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+							<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
 							<Input
 								type="search"
-								placeholder="搜索订单编号..."
-								className="pl-8 text-sm"
+								placeholder="Search orders..."
+								className="pl-9 h-10 text-sm bg-gray-50/50 border-gray-200 focus:bg-white transition-colors rounded-lg"
 								value={searchQuery}
 								onChange={(e) => setSearchQuery(e.target.value)}
 							/>
 						</div>
 						<Select value={statusFilter} onValueChange={setStatusFilter}>
-							<SelectTrigger className="text-sm w-full">
-								<SelectValue placeholder="筛选订单状态" />
+							<SelectTrigger className="h-10 w-full bg-gray-50/50 border-gray-200 focus:bg-white transition-colors rounded-lg text-sm">
+								<SelectValue placeholder="Filter by status" />
 							</SelectTrigger>
 							<SelectContent>
 								<SelectGroup>
 									{statusOptions.map((option) => (
-										<SelectItem key={option.value} value={option.value} className="text-sm">
+										<SelectItem key={option.value} value={option.value} className="text-sm py-3">
 											{option.label}
 										</SelectItem>
 									))}
@@ -414,32 +398,36 @@ export default function OrdersList({ org_id, redirectUrl, providers, handleAssig
 						</Select>
 					</div>
 					{/* 桌面端布局 */}
-					<div className="hidden md:flex items-center space-x-2">
-						<div className="relative flex-1">
-							<Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+					<div className="hidden md:flex items-center justify-between bg-white rounded-xl p-2 border border-gray-100 shadow-sm">
+						<div className="relative flex-1 max-w-md">
+							<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
 							<Input
 								type="search"
-								placeholder="搜索订单编号..."
-								className="pl-8 text-xs"
+								placeholder="Search by order ID..."
+								className="pl-9 h-10 text-sm border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400"
 								value={searchQuery}
 								onChange={(e) => setSearchQuery(e.target.value)}
 							/>
 						</div>
-						<div className="w-[180px]">
-							<Select value={statusFilter} onValueChange={setStatusFilter}>
-								<SelectTrigger className="text-sm">
-									<SelectValue placeholder="筛选订单状态" />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectGroup>
-										{statusOptions.map((option) => (
-											<SelectItem key={option.value} value={option.value} className="text-sm">
-												{option.label}
-											</SelectItem>
-										))}
-									</SelectGroup>
-								</SelectContent>
-							</Select>
+						<div className="flex items-center gap-3">
+							<div className="h-6 w-px bg-gray-200 mx-2"></div>
+							<div className="flex items-center gap-2 mr-2">
+								<span className="text-sm text-gray-500 font-medium">Filter by:</span>
+								<Select value={statusFilter} onValueChange={setStatusFilter}>
+									<SelectTrigger className="h-9 w-[140px] border-none bg-gray-50/50 hover:bg-gray-100 focus:ring-0 rounded-lg text-sm font-medium text-gray-700">
+										<SelectValue placeholder="Status" />
+									</SelectTrigger>
+									<SelectContent align="end" className="w-[200px]">
+										<SelectGroup>
+											{statusOptions.map((option) => (
+												<SelectItem key={option.value} value={option.value} className="text-sm cursor-pointer py-2.5">
+													{option.label}
+												</SelectItem>
+											))}
+										</SelectGroup>
+									</SelectContent>
+								</Select>
+							</div>
 						</div>
 					</div>
 				</CardHeader>

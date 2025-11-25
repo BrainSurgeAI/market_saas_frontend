@@ -88,12 +88,21 @@ export interface ProductDetailResponse {
 
 export interface OrderOverview {
   orderCode: string;
-  deliveryDate: string;
-  orderStatus: string;
-  totalAmount: number;
+  totalAmount: string;
   actualAmount: string;
+  deliveryDate: string;
   deliveryAddress: string;
-  items: OrderItem[];
+  orderStatus: string;
+  createdAt: string;
+  marketName: string;
+  marketAddress: string;
+  customerName: string;
+  customerAddress: string;
+  contactName: string;
+  contactPhone: string;
+  marketContactNumber: string;
+  markketContactorName: string;
+  items?: OrderItem[]; // Making items optional as it's not in the provided JSON sample but might be needed elsewhere
   assignedTo?: string | null;
   afterSaleAt?: string | null;
 }
