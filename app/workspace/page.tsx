@@ -4,6 +4,7 @@ import PriceManagePage from "./organizations/[org_name]/product_prices/page";
 import ProviderPage from "./components/providers/ProviderPage";
 import MarketDashboard from "./components/market/MarketDashboard";
 import CustomerDashboard from "./components/customer/CustomerDashboard";
+import ProviderDashboard from "./components/provider/ProviderDashboard";
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,10 @@ export default async function Workspace() {
   // 根据 tenantType 显示对应的 Dashboard
   if (organization?.tenantType === 'MARKET') {
     return <MarketDashboard />;
+  }
+
+  if (organization?.tenantType === 'PROVIDER') {
+    return <ProviderDashboard />;
   }
 
   if (organization?.tenantType === 'CUSTOMER') {
