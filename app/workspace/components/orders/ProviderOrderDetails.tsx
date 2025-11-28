@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +14,11 @@ import {
   Calendar,
   MapPin,
   User,
-  Truck
+  Truck,
+  ArrowRightLeft,
+  Circle,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -22,19 +26,21 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 // 导入商品清单组件
 import { ProductListSection } from "./order-details/ProductListSection";
 
-// 导入PROVIDER专用类型定义
-import type {
-  ProviderOrderData,
-  ProviderOrderItem,
-  ProviderOrderCurrent,
-  ProviderOrderResponse
-} from "@/lib/types/providerOrder";
+  // 导入PROVIDER专用类型定义
+  import type {
+    ProviderOrderData,
+    ProviderOrderItem,
+    ProviderOrderCurrent,
+    ProviderOrderResponse,
+    DeliveryHistoryData,
+    DeliveryHistoryResponse,
+    DeliveryRound
+  } from "@/lib/types/providerOrder";
 
 // 导入配送人员相关类型
 import type { DeliveryPerson } from "@/lib/types/orderStatus";
 
 // 导入现有组件
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -42,7 +48,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight } from "lucide-react";
 
 // 导入工具函数
 import { useToast } from "@/hooks/use-toast";
@@ -69,6 +74,296 @@ const RenderStatusBadges = ({ item }: { item: ProviderOrderItem }) => {
       <Badge variant="secondary" className="bg-blue-500 text-white dark:bg-blue-600 text-xs">
         待配送
       </Badge>
+    </div>
+  );
+};
+
+// 配送历史相关类型 - 使用全局类型定义
+
+// 配送历史组件
+const DeliveryHistorySection = ({
+  deliveryHistory,
+  loading,
+  error
+}: {
+  deliveryHistory: DeliveryRound[],
+  loading: boolean,
+  error: string | null
+}) => {
+  const [expandedRound, setExpandedRound] = useState<number | null>(null);
+  const [selectedRound, setSelectedRound] = useState<DeliveryRound | null>(null);
+
+
+
+  // 如果正在加载，显示加载状态
+  if (loading) {
+    console.log('🎯 DeliveryHistorySection showing loading state');
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-sm text-gray-500">正在加载配送历史...</p>
+          <p className="text-xs text-gray-400 mt-1">请稍候</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 如果有错误，显示错误状态
+  if (error) {
+    return (
+      <Card className="border border-red-200 bg-red-50">
+        <CardContent className="p-6 text-center">
+          <div className="text-red-600 mb-2">获取配送历史失败</div>
+          <div className="text-sm text-red-500">{error}</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // 显示配送历史数据
+
+  const getDeliveryStatusBadge = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return <Badge variant="outline" className="text-yellow-600 border-yellow-200">待配送</Badge>;
+      case 'DELIVERED':
+        return <Badge variant="outline" className="text-green-600 border-green-200">已配送</Badge>;
+      case 'CANCELLED':
+        return <Badge variant="outline" className="text-red-600 border-red-200">已取消</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const getInspectionStatusBadge = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return <Badge variant="outline" className="text-blue-600 border-blue-200">验收中</Badge>;
+      case 'COMPLETED':
+        return <Badge variant="outline" className="text-green-600 border-green-200">验收完成</Badge>;
+      case 'FAILED':
+        return <Badge variant="outline" className="text-red-600 border-red-200">验收失败</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const getDeliveryTypeBadge = (type: string) => {
+    return (
+      <Badge variant={type === 'NORMAL' ? 'default' : 'secondary'}>
+        {type === 'NORMAL' ? '正常配送' : '换货配送'}
+      </Badge>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+          <Truck className="w-4 h-4 text-blue-600" />
+        </div>
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">配送历史</h2>
+          <p className="text-sm text-gray-500">查看订单的完整配送和验收记录</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {deliveryHistory.map((round) => (
+          <Card key={round.round} className="border border-gray-200 hover:shadow-md transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                      <span className="text-sm font-semibold text-blue-600">{round.round}</span>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        第 {round.round} 轮配送
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {round.deliveredAt ? new Date(round.deliveredAt).toLocaleString() : '未配送'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {getDeliveryTypeBadge(round.deliveryType)}
+                    {getDeliveryStatusBadge(round.deliveryStatus)}
+                    {getInspectionStatusBadge(round.inspectionStatus)}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setExpandedRound(expandedRound === round.round ? null : round.round);
+                    setSelectedRound(round);
+                  }}
+                  className="text-blue-600 hover:text-blue-700"
+                >
+                  {expandedRound === round.round ? '收起详情' : '查看详情'}
+                  {expandedRound === round.round ?
+                    <ChevronDown className="w-4 h-4 ml-1" /> :
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  }
+                </Button>
+              </div>
+
+              {/* 统计信息 */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <div className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className="text-lg font-semibold text-gray-900">{round.items.length}</div>
+                  <div className="text-xs text-gray-500">总商品数</div>
+                </div>
+                <div className="text-center p-3 bg-green-50 rounded-lg">
+                  <div className="text-lg font-semibold text-green-600">
+                    {round.items.filter(item => item.lastInspectionResult === 'SIGN').length}
+                  </div>
+                  <div className="text-xs text-green-600">已验收</div>
+                </div>
+                <div className="text-center p-3 bg-orange-50 rounded-lg">
+                  <div className="text-lg font-semibold text-orange-600">
+                    {round.items.filter(item => item.lastInspectionResult === 'EXCHANGE' || item.lastInspectionResult === 'RETURN').length}
+                  </div>
+                  <div className="text-xs text-orange-600">退换货</div>
+                </div>
+                <div className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className="text-lg font-semibold text-gray-600">
+                    {round.items.filter(item => !item.lastInspectionResult || item.lastInspectionResult === 'PENDING').length}
+                  </div>
+                  <div className="text-xs text-gray-600">未验收</div>
+                </div>
+              </div>
+
+              {/* 展开的商品详情 */}
+              {expandedRound === round.round && selectedRound && (
+                <div className="border-t border-gray-100 pt-4 mt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                      <Package className="w-4 h-4" />
+                      商品配送详情
+                    </h4>
+                    <div className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">
+                      共 {selectedRound.items.length} 件商品
+                    </div>
+                  </div>
+
+                  {/* Compact table using shadcn Table components */}
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-50 hover:bg-gray-50">
+                          <TableHead className="w-[35%]">商品信息</TableHead>
+                          <TableHead className="w-[15%] text-center">需配送</TableHead>
+                          <TableHead className="w-[15%] text-center">实配送</TableHead>
+                          <TableHead className="w-[20%] text-center">验收状态</TableHead>
+                          <TableHead className="w-[15%] text-center">单价</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedRound.items.map((item) => {
+                          const getStatusDisplay = (status: string) => {
+                            switch (status) {
+                              case 'SIGN':
+                                return {
+                                  icon: <CheckCircle className="w-3 h-3" />,
+                                  label: '已签收',
+                                  className: 'bg-green-100 text-green-800 border-green-200'
+                                };
+                              case 'EXCHANGE':
+                                return {
+                                  icon: <ArrowRightLeft className="w-3 h-3" />,
+                                  label: '换货',
+                                  className: 'bg-blue-100 text-blue-800 border-blue-200'
+                                };
+                              case 'RETURN':
+                                return {
+                                  icon: <RotateCcw className="w-3 h-3" />,
+                                  label: '退货',
+                                  className: 'bg-red-100 text-red-800 border-red-200'
+                                };
+                              default:
+                                return {
+                                  icon: <Circle className="w-3 h-3" />,
+                                  label: '未验收',
+                                  className: 'bg-gray-100 text-gray-600 border-gray-200'
+                                };
+                            }
+                          };
+
+                          const statusDisplay = getStatusDisplay(item.lastInspectionResult);
+
+                          return (
+                            <TableRow key={item.orderDetailId} className="hover:bg-gray-50">
+                              <TableCell className="py-3">
+                                <div>
+                                  <div className="font-medium text-gray-900 text-sm leading-tight">
+                                    {item.productName}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {item.productCode} · {item.categoryName}
+                                  </div>
+                                  {item.remark && (
+                                    <div className="text-xs text-orange-600 mt-1 italic">
+                                      备注: {item.remark}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+
+                              <TableCell className="text-center py-3">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {item.needToDeliverQty}
+                                </div>
+                                <div className="text-xs text-gray-500">{item.unit}</div>
+                              </TableCell>
+
+                              <TableCell className="text-center py-3">
+                                {item.actualQty ? (
+                                  <div className="text-sm font-medium text-green-600">
+                                    {item.actualQty} {item.unit}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-gray-400">-</div>
+                                )}
+                              </TableCell>
+
+                              <TableCell className="text-center py-3">
+                                <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusDisplay.className}`}>
+                                  {statusDisplay.icon}
+                                  {statusDisplay.label}
+                                </div>
+                              </TableCell>
+
+                              <TableCell className="text-center py-3">
+                                <div className="text-sm font-medium text-gray-900">
+                                  ¥{item.unitPrice}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {deliveryHistory.length === 0 && !loading && (
+        <Card className="border border-gray-200">
+          <CardContent className="p-8 text-center">
+            <Truck className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">暂无配送历史</h3>
+            <p className="text-gray-500">订单配送历史将在开始配送后显示</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
@@ -208,6 +503,14 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
   // 商品数量编辑相关状态
   const [editableOrderItems, setEditableOrderItems] = useState<(OrderItem & { deliveredQuantity?: string })[]>([]);
   const [itemErrors, setItemErrors] = useState<Record<number, string>>({});
+
+  // 配送历史数据
+  const [deliveryHistory, setDeliveryHistory] = useState<DeliveryRound[]>([]);
+  const [deliveryHistoryLoading, setDeliveryHistoryLoading] = useState(false);
+  const [deliveryHistoryError, setDeliveryHistoryError] = useState<string | null>(null);
+
+  // 当前视图：'products' | 'history'
+  const [currentView, setCurrentView] = useState<'products' | 'history'>('products');
 
   // 完成备货确认对话框状态
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
@@ -382,11 +685,49 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
     }
   };
 
+  // 获取配送历史数据
+  const fetchDeliveryHistory = async () => {
+    try {
+      setDeliveryHistoryLoading(true);
+      setDeliveryHistoryError(null);
+
+      const response = await fetch(`/api/orders/${orderCode}/delivery-history`);
+      if (!response.ok) {
+        throw new Error(`获取配送历史失败: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      // Handle API response format
+      if (result.code !== 200) {
+        throw new Error(`获取配送历史失败: ${result.message || '服务器返回错误'}`);
+      }
+
+      const historyData = result.data as DeliveryHistoryData;
+      setDeliveryHistory(historyData.history || []);
+    } catch (err) {
+      console.error("Error fetching delivery history:", err);
+      const errorMessage = err instanceof Error ? err.message : "获取配送历史失败";
+      setDeliveryHistoryError(errorMessage);
+      toast({
+        title: "获取失败",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setDeliveryHistoryLoading(false);
+    }
+  };
+
   // 初始化可编辑的商品列表
   useEffect(() => {
     if (providerOrderData && editableOrderItems.length === 0) {
       // 在初次加载时，使用服务器返回的actualQty作为初始值
-      const initialItems = providerOrderData.current.items.map(item => ({
+      // 过滤掉 lastInspectionResult 为 "RETURN" 的记录，因为退货了就不需要再次配送
+      const filteredItems = providerOrderData.current.items.filter(item =>
+        item.lastInspectionResult !== "RETURN"
+      );
+      const initialItems = filteredItems.map(item => ({
         id: item.orderDetailId,
         round: 1, // 只有一个current，所以round设为1
         productId: item.productCode,
@@ -409,6 +750,13 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
       setEditableOrderItems(initialItems);
     }
   }, [providerOrderData, editableOrderItems.length]);
+
+  // 获取配送历史数据 - 只在切换到history视图时才加载
+  useEffect(() => {
+    if (currentView === 'history' && providerOrderData && deliveryHistory.length === 0 && !deliveryHistoryLoading) {
+      fetchDeliveryHistory();
+    }
+  }, [currentView, providerOrderData, deliveryHistory.length, deliveryHistoryLoading]);
 
   // PROVIDER 实现配送人员选择流程
   const submitStartProcessing = async () => {
@@ -827,6 +1175,7 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
     );
   }
 
+
   if (error || !providerOrderData) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -1046,166 +1395,136 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
         </Collapsible>
       </Card>
 
-      {/* 主要内容标签页 */}
-      <Tabs defaultValue="products" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="products">商品清单</TabsTrigger>
-          <TabsTrigger value="rounds">配送状态</TabsTrigger>
-        </TabsList>
+      {/* 主要内容区域 */}
+      {/* 视图切换按钮 */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <h2 className="text-xl font-semibold text-gray-900">
+              {currentView === 'products' ? '待备货清单' : '配送历史'}
+            </h2>
+            {currentView === 'products' && providerOrderData && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentView('history')}
+                className="flex items-center gap-2"
+              >
+                <Truck className="w-4 h-4" />
+                查看配送历史
+              </Button>
+            )}
+            {currentView === 'history' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentView('products')}
+                className="flex items-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                返回待备货清单
+              </Button>
+            )}
+          </div>
+        </div>
 
-        <TabsContent value="products" className="space-y-4">
-          {convertedData && (
-            <>
-              <Card className="border-none shadow-none bg-transparent">
-                <CardHeader className="px-0 pt-0 pb-4">
-                  <CardTitle className="text-lg font-semibold"></CardTitle>
-                </CardHeader>
-                <CardContent className="px-0">
-                  <div className="space-y-3">
-                    {editableOrderItems.map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4 bg-card shadow-sm">
-                        {/* 商品基本信息 */}
-                        <div className="flex items-start gap-4 mb-4">
-                          <Avatar className="h-16 w-16 border border-gray-100 shadow-md rounded-lg shrink-0">
-                            <AvatarImage src={(item as any).imageUrl || ""} alt={item.name} className="object-cover" />
-                            <AvatarFallback className="bg-primary/5 text-primary text-sm rounded-lg font-medium shadow-inner">
-                              {item.name ? item.name.slice(0, 2) : "无"}
-                            </AvatarFallback>
-                          </Avatar>
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold text-sm text-foreground">{item.name}</span>
-                            </div>
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                              <span className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-mono">
-                                SKU: {item.productId}
-                              </span>
-                              <span>分类: {item.category}</span>
-                              <span>规格: {item.unit}</span>
-                            </div>
+        {/* 待备货清单视图 */}
+        {currentView === 'products' && convertedData && (
+          <>
+            <Card className="border-none shadow-none bg-transparent">
+              <CardContent className="px-0">
+                <div className="space-y-3">
+                  {editableOrderItems.map((item) => (
+                    <div key={item.id} className="border rounded-lg p-4 bg-card shadow-sm">
+                      {/* 商品基本信息 */}
+                      <div className="flex items-start gap-4 mb-4">
+                        <Avatar className="h-16 w-16 border border-gray-100 shadow-md rounded-lg shrink-0">
+                          <AvatarImage src={(item as any).imageUrl || ""} alt={item.name} className="object-cover" />
+                          <AvatarFallback className="bg-primary/5 text-primary text-sm rounded-lg font-medium shadow-inner">
+                            {item.name ? item.name.slice(0, 2) : "无"}
+                          </AvatarFallback>
+                        </Avatar>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-sm text-foreground">{item.name}</span>
+                          </div>
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            <span className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-mono">
+                              SKU: {item.productId}
+                            </span>
+                            <span>分类: {item.category}</span>
+                            <span>规格: {item.unit}</span>
                           </div>
                         </div>
+                      </div>
 
-                        {/* 数量信息 - 使用表格样式布局 */}
-                        <div className="border-t pt-3">
-                          <div className="grid grid-cols-3 gap-4 items-center">
-                            {/* 需求量 */}
-                            <div className="text-center">
-                              <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">需求量</div>
-                              <div className="text-medium font-bold font-mono text-foreground bg-muted/50 rounded-md px-3 py-2 border">
-                                {item.orderedQty} {item.unit}
-                              </div>
+                      {/* 数量信息 - 使用表格样式布局 */}
+                      <div className="border-t pt-3">
+                        <div className="grid grid-cols-3 gap-4 items-center">
+                          {/* 需求量 */}
+                          <div className="text-center">
+                            <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">需求量</div>
+                            <div className="text-medium font-bold font-mono text-foreground bg-muted/50 rounded-md px-3 py-2 border">
+                              {item.orderedQty} {item.unit}
                             </div>
+                          </div>
 
-                            {/* 分隔符 */}
+                          {/* 分隔符 */}
+                          <div className="flex justify-center">
+                            <div className="w-px h-8 bg-border"></div>
+                          </div>
+
+                          {/* 发货量 */}
+                          <div className="text-center">
+                            <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+                              {isEditing ? '发货量' : '已发货'}
+                            </div>
                             <div className="flex justify-center">
-                              <div className="w-px h-8 bg-border"></div>
-                            </div>
-
-                            {/* 发货量 */}
-                            <div className="text-center">
-                              <div className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-                                {isEditing ? '发货量' : '已发货'}
-                              </div>
-                              <div className="flex justify-center">
-                                {isEditing ? (
-                                  <div className="space-y-1">
-                                    <Input
-                                      type="number"
-                                      value={(item as any).deliveredQuantity || ""}
-                                      onChange={(event) => handleActualQuantityChange(item.id, item.round || 1, event.target.value)}
-                                      className={`w-24 text-center font-mono font-semibold text-medium ${itemErrors[item.id] ? "border-red-500" : ""}`}
-                                      step={true ? "0.01" : "1"}
-                                      min="0"
-                                      max="999999.99"
-                                      onKeyDown={(event) => handleActualQuantityKeyDown?.(event, item.id)}
-                                      placeholder="0.00"
-                                    />
-                                    {itemErrors[item.id] && (
-                                      <p className="text-xs text-red-500 text-center">{itemErrors[item.id]}</p>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="text-lg font-bold text-foreground bg-muted/50 rounded-md px-3 py-2 border min-w-[80px]">
-                                    {parseFloat((item as any).deliveredQuantity || '0') > 0
-                                      ? `${parseFloat((item as any).deliveredQuantity || '0').toFixed(2)} ${item.unit}`
-                                      : "-"
-                                    }
-                                  </div>
-                                )}
-                              </div>
+                              {isEditing ? (
+                                <div className="space-y-1">
+                                  <Input
+                                    type="number"
+                                    value={(item as any).deliveredQuantity || ""}
+                                    onChange={(event) => handleActualQuantityChange(item.id, item.round || 1, event.target.value)}
+                                    className={`w-24 text-center font-mono font-semibold text-medium ${itemErrors[item.id] ? "border-red-500" : ""}`}
+                                    step={true ? "0.01" : "1"}
+                                    min="0"
+                                    max="999999.99"
+                                    onKeyDown={(event) => handleActualQuantityKeyDown?.(event, item.id)}
+                                    placeholder="0.00"
+                                  />
+                                  {itemErrors[item.id] && (
+                                    <p className="text-xs text-red-500 text-center">{itemErrors[item.id]}</p>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="text-lg font-bold text-foreground bg-muted/50 rounded-md px-3 py-2 border min-w-[80px]">
+                                  {parseFloat((item as any).deliveredQuantity || '0') > 0
+                                    ? `${parseFloat((item as any).deliveredQuantity || '0').toFixed(2)} ${item.unit}`
+                                    : "-"
+                                  }
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </TabsContent>
-
-        <TabsContent value="rounds" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>配送状态详情</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold">
-                      当前配送状态
-                    </h3>
-                    <div className="flex gap-2">
-                      <Badge variant={providerOrderData.current.deliveryType === 'NORMAL' ? 'default' : 'secondary'}>
-                        {providerOrderData.current.deliveryType === 'NORMAL' ? '正常配送' : '换货配送'}
-                      </Badge>
-                      <Badge variant="outline">
-                        {providerOrderData.current.deliveryStatus}
-                      </Badge>
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">商品数量</p>
-                      <p className="text-lg font-semibold">{providerOrderData.current.items.length} 件</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">总需配送</p>
-                      <p className="text-lg font-semibold">
-                        {providerOrderData.current.items.reduce((sum, item) => sum + parseFloat(item.needToDeliverQty), 0)} 件
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <h4 className="font-medium mb-2">商品列表：</h4>
-                    <div className="space-y-2">
-                      {providerOrderData.current.items.map((item, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex-1">
-                            <div className="font-medium">{item.productName}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {item.categoryName} · {item.productCode} · {item.needToDeliverQty}{item.unit}
-                            </div>
-                          </div>
-                          <div className="text-sm text-blue-600 font-medium">
-                            {item.actualQty ? `${item.actualQty} ${item.unit}` : '待配送'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* 配送历史视图 */}
+        {currentView === 'history' && (
+          <DeliveryHistorySection
+            deliveryHistory={deliveryHistory}
+            loading={deliveryHistoryLoading}
+            error={deliveryHistoryError}
+          />
+        )}
 
       {/* 策略对话框 */}
       <AlertDialog open={dialogState.open} onOpenChange={(open) =>

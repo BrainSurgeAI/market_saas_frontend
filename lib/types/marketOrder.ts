@@ -62,8 +62,38 @@ export interface MarketOrderData {
   receiverPhone: string;
   shipperName: string;
   shipperPhone: string;
-  rounds: MarketOrderRound[];
   details?: MarketOrderDetail[];
+}
+
+export interface MarketInspectionData {
+  round: number;
+  deliveryType: "NORMAL" | "EXCHANGE";
+  deliveredAt: string;
+  inspectionResult: string;
+  inspectionAt: string | null;
+  items: MarketInspectionItem[];
+}
+
+export interface MarketInspectionItem {
+  inspectionItemId: number;
+  productCode: string;
+  productName: string;
+  categoryId: number;
+  categoryName: string;
+  unit: string;
+  discountRate: string;
+  unitPrice: string;
+  orderedQty: string;
+  needToInspectQty: string;
+  acceptedQty: string;
+  inspectionStatus: "PENDING" | "SIGN" | "RETURN" | "EXCHANGE";
+  processingRequirements: string | null;
+}
+
+export interface MarketInspectionResponse {
+  code: number;
+  message: string;
+  data: MarketInspectionData;
 }
 
 export interface MarketOrderResponse {
