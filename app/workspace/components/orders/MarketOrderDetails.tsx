@@ -104,6 +104,7 @@ export interface Provider {
 interface MarketOrderDetailsProps {
   orderCode: string;
   orgId: string;
+  userType?: "CUSTOMER" | "MARKET";
 }
 
 // 临时定义操作类型
@@ -112,6 +113,7 @@ type OperationType = "SIGN" | "RETURN" | "EXCHANGE";
 export default function MarketOrderDetails({
   orderCode,
   orgId,
+  userType = "MARKET",
 }: MarketOrderDetailsProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -435,8 +437,48 @@ export default function MarketOrderDetails({
         </div>
       </div>
 
-      {/* Order Info Card */}
-      <Card className="border-none shadow-sm bg-white overflow-hidden rounded-xl">
+        {/* Compact Inspection Prompt - Only show for specific statuses */}
+        {((userType === "CUSTOMER" && (marketOrderData.orderStatus === "MARKET_DELIVERING" || marketOrderData.orderStatus === "EXCHANGE_NEW_DELIVERING")) ||
+          (userType === "MARKET" && (marketOrderData.orderStatus === "SUPPLIER_DELIVERING" || marketOrderData.orderStatus === "EXCHANGE_DELIVERING"))) && (
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/50 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <Package className="w-4 h-4 text-amber-600" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-amber-900">
+                    商品已送达，等待验收
+                  </h4>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    供应商已完成配送，您可以开始验收商品
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={handleBeginInspect}
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-700 text-white h-8 px-4 text-xs font-medium"
+                disabled={isStartingInspection}
+              >
+                {isStartingInspection ? (
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" />
+                    验收中...
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    开始验收
+                    <ArrowLeft className="w-3 h-3 rotate-180" />
+                  </div>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Order Info Card */}
+        <Card className="border-none shadow-sm bg-white overflow-hidden rounded-xl">
         <Collapsible
           open={!isOrderInfoCollapsed}
           onOpenChange={(open) => setIsOrderInfoCollapsed(!open)}
@@ -674,46 +716,9 @@ export default function MarketOrderDetails({
               </div>
             </CardContent>
           </Card>
-        </div>
+                  </div>
 
         {/* Inspection Prompt */}
-        {(marketOrderData.orderStatus === "SUPPLIER_DELIVERING" ||
-          marketOrderData.orderStatus === "EXCHANGE_DELIVERING") && (
-          <Card className="border-amber-200 bg-amber-50/50 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                  <Package className="w-6 h-6 text-amber-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-amber-900 mb-2">
-                    商品已送达，等待验收
-                  </h3>
-                  <p className="text-amber-700 mb-4">
-                    供应商已完成配送，您可以开始验收商品了。验收过程中您可以对商品进行签收、退货或换货操作。
-                  </p>
-                  <Button
-                    onClick={handleBeginInspect}
-                    className="bg-amber-600 hover:bg-amber-700 text-white"
-                    disabled={isStartingInspection}
-                  >
-                    {isStartingInspection ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        开始验收中...
-                      </div>
-                    ) : (
-                      <>
-                        开始验收
-                        <ArrowLeft className="w-4 h-4 ml-2 rotate-180" />
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
       {/* Deliver to Customer Dialog */}
       <AlertDialog open={isDeliverToCustomerDialogOpen} onOpenChange={setIsDeliverToCustomerDialogOpen}>

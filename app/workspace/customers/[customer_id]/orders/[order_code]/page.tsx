@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import OrderDetail from "@/app/workspace/components/orders/OrderDetails";
-import CustomerOrderDetails from "@/app/workspace/components/orders/CustomerOrderDetails";
+import MarketOrderDetails from "@/app/workspace/components/orders/MarketOrderDetails";
 import { useWorkspace } from "@/lib/WorkspaceContext";
 
 export default function OrderDetailPage() {
@@ -31,10 +31,10 @@ export default function OrderDetailPage() {
   const orderCode = params.order_code as string;
   const customerId = params.customer_id as string;
 
-  // If tenantType is CUSTOMER, use the dedicated component
-  // Also fallback to CustomerOrderDetails if tenantType is missing but we are in customer route
+  // If tenantType is CUSTOMER, use MarketOrderDetails component (same as MARKET)
+  // Also fallback to MarketOrderDetails if tenantType is missing but we are in customer route
   if (tenantType === "CUSTOMER" || !tenantType) {
-    return <CustomerOrderDetails orderCode={orderCode} orgId={customerId} />;
+    return <MarketOrderDetails orderCode={orderCode} orgId={customerId} userType="CUSTOMER" />;
   }
 
   // Fallback to standard component (though this path should be for customers)

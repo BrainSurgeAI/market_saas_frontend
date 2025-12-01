@@ -60,6 +60,7 @@ export default function OrderDetailPage() {
       <MarketOrderDetails
         orderCode={params.order_code as string}
         orgId={params.market_id as string}
+        userType="MARKET"
       />
     );
   }
@@ -73,6 +74,7 @@ export default function OrderDetailPage() {
       <MarketOrderDetails
         orderCode={orderCode}
         orgId={marketId}
+        userType="MARKET"
       />
     );
   }
