@@ -944,14 +944,14 @@ export default function MarketOrderDetails({
                                       <div>
                                         <div className="font-medium">{item.productName}</div>
                                         <div className="text-gray-500 text-xs mt-0.5">
-                                          {item.productCode} · {item.categoryName}
+                                          <span className="font-mono">SKU: {item.productCode}</span> · {item.categoryName}
                                         </div>
                                       </div>
                                     </TableCell>
-                                    <TableCell className="text-xs">
+                                    <TableCell className="text-xs font-mono">
                                       {formatQuantity(item.needToInspection)}
                                     </TableCell>
-                                    <TableCell className="text-xs">
+                                    <TableCell className="text-xs font-mono">
                                       {formatQuantity(item.inspectedQty)}
                                     </TableCell>
                                     <TableCell>
