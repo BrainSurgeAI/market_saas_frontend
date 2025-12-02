@@ -51,6 +51,10 @@ import {
   User,
   Truck,
   Package,
+  History,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { translateOrderStatus, getStatusVariant } from "@/lib/utils";
@@ -110,6 +114,38 @@ interface MarketOrderDetailsProps {
 // 临时定义操作类型
 type OperationType = "SIGN" | "RETURN" | "EXCHANGE";
 
+// 验收历史类型定义（严格按照 API 返回格式）
+interface InspectionHistoryItem {
+  categoryName: string;
+  inspectedQty: string;
+  needToInspection: string;
+  orderDetailId: number;
+  productCode: string;
+  productName: string;
+  quantity: string;
+  remark: string | null;
+  result: "SIGN" | "EXCHANGE" | "RETURN" | "PASS";
+}
+
+interface InspectionHistoryRecord {
+  inspectedAt: string;
+  inspectedById: number;
+  inspectedByType: string;
+  inspectionId: number;
+  inspectionRound: number;
+  items: InspectionHistoryItem[];
+  parent_id: number;
+  result: "SIGN" | "EXCHANGE" | "RETURN" | "PASS";
+}
+
+interface InspectionHistoryResponse {
+  code: number;
+  message: string;
+  data: InspectionHistoryRecord[];
+  requestId: string;
+  timestamp: string;
+}
+
 export default function MarketOrderDetails({
   orderCode,
   orgId,
@@ -134,6 +170,12 @@ export default function MarketOrderDetails({
 
   // Inspection State
   const [isStartingInspection, setIsStartingInspection] = useState(false);
+
+  // Inspection History State
+  const [isInspectionHistoryDialogOpen, setIsInspectionHistoryDialogOpen] = useState(false);
+  const [inspectionHistory, setInspectionHistory] = useState<InspectionHistoryRecord[]>([]);
+  const [loadingInspectionHistory, setLoadingInspectionHistory] = useState(false);
+  const [inspectionHistoryError, setInspectionHistoryError] = useState<string | null>(null);
 
   // Provider Assignment State
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -370,6 +412,46 @@ export default function MarketOrderDetails({
     }
   };
 
+  // Fetch Inspection History
+  const fetchInspectionHistory = async () => {
+    try {
+      setLoadingInspectionHistory(true);
+      setInspectionHistoryError(null);
+
+      const response = await fetch(`/api/orders/${orderCode}/inspection-history`);
+      
+      if (!response.ok) {
+        throw new Error(`获取验收历史失败: ${response.status}`);
+      }
+
+      const data: InspectionHistoryRecord[] = await response.json();
+      
+      if (Array.isArray(data)) {
+        setInspectionHistory(data);
+      } else {
+        throw new Error("获取验收历史失败：数据格式错误");
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "获取验收历史时出错";
+      setInspectionHistoryError(errorMessage);
+      toast({
+        title: "获取失败",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingInspectionHistory(false);
+    }
+  };
+
+  // Handle Open Inspection History Dialog
+  const handleOpenInspectionHistory = () => {
+    setIsInspectionHistoryDialogOpen(true);
+    if (inspectionHistory.length === 0 && !loadingInspectionHistory) {
+      fetchInspectionHistory();
+    }
+  };
+
 
 
   if (loading) {
@@ -426,13 +508,24 @@ export default function MarketOrderDetails({
 
           {/* 确认发货按钮 (MARKET_ACCEPTED) */}
           {marketOrderData.orderStatus === "MARKET_ACCEPTED" && (
-            <Button
+              <Button
               onClick={() => setIsDeliverToCustomerDialogOpen(true)} size="sm"
-              className="bg-blue-600 hover:bg-blue-500"
-            >
+                className="bg-blue-600 hover:bg-blue-500"
+              >
               确认发货
-            </Button>
-          )}
+              </Button>
+            )}
+
+          {/* 查看验收历史按钮 (CUSTOMER 和 MARKET 用户) */}
+          <Button
+            onClick={handleOpenInspectionHistory}
+            size="sm"
+            variant="outline"
+            className="border-gray-300 hover:bg-gray-50"
+          >
+            <History className="w-4 h-4 mr-2" />
+            查看验收历史
+          </Button>
 
         </div>
       </div>
@@ -455,7 +548,7 @@ export default function MarketOrderDetails({
                   </p>
                 </div>
               </div>
-              <Button
+            <Button
                 onClick={handleBeginInspect}
                 size="sm"
                 className="bg-amber-600 hover:bg-amber-700 text-white h-8 px-4 text-xs font-medium"
@@ -473,12 +566,12 @@ export default function MarketOrderDetails({
                   </div>
                 )}
               </Button>
-            </div>
-          </div>
+        </div>
+      </div>
         )}
 
-        {/* Order Info Card */}
-        <Card className="border-none shadow-sm bg-white overflow-hidden rounded-xl">
+      {/* Order Info Card */}
+      <Card className="border-none shadow-sm bg-white overflow-hidden rounded-xl">
         <Collapsible
           open={!isOrderInfoCollapsed}
           onOpenChange={(open) => setIsOrderInfoCollapsed(!open)}
@@ -737,6 +830,158 @@ export default function MarketOrderDetails({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Inspection History Dialog */}
+      <Dialog open={isInspectionHistoryDialogOpen} onOpenChange={setIsInspectionHistoryDialogOpen}>
+        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">验收历史</DialogTitle>
+            <DialogDescription className="text-xs">
+              查看该订单的所有验收记录
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {loadingInspectionHistory ? (
+              <div className="flex justify-center py-8">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                  <p className="text-sm text-gray-500">正在加载验收历史...</p>
+                </div>
+              </div>
+            ) : inspectionHistoryError ? (
+              <div className="flex flex-col items-center py-8 gap-2">
+                <AlertCircle className="h-10 w-10 text-red-500" />
+                <p className="text-sm text-red-600">{inspectionHistoryError}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchInspectionHistory}
+                  className="mt-2"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  重试
+                </Button>
+              </div>
+            ) : inspectionHistory.length === 0 ? (
+              <div className="flex flex-col items-center py-8 gap-2">
+                <div className="h-12 w-12 rounded-full bg-gray-50 flex items-center justify-center">
+                  <History className="h-6 w-6 text-gray-400" />
+                </div>
+                <p className="text-sm text-gray-500">暂无验收历史</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {inspectionHistory.map((record, index) => {
+                  const resultBadgeVariant = 
+                    record.result === "SIGN" || record.result === "PASS" 
+                      ? "default" 
+                      : record.result === "EXCHANGE" 
+                      ? "secondary" 
+                      : "destructive";
+                  
+                  const resultLabel = 
+                    record.result === "SIGN" ? "已签收" :
+                    record.result === "EXCHANGE" ? "换货" :
+                    record.result === "RETURN" ? "退货" :
+                    record.result === "PASS" ? "通过" :
+                    "待验收";
+
+                  return (
+                    <Card key={`inspection-${record.inspectionId}-${record.inspectionRound}-${index}`} className="border border-gray-200">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-blue-50 flex items-center justify-center">
+                              <span className="text-sm font-semibold text-blue-600">
+                                {record.inspectionRound}
+                              </span>
+                            </div>
+                            <div>
+                              <CardTitle className="text-sm font-semibold">
+                                第 {record.inspectionRound} 轮验收
+                              </CardTitle>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {new Date(record.inspectedAt).toLocaleString('zh-CN')}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant={resultBadgeVariant} className="text-xs">
+                            {resultLabel}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-xs">商品名称</TableHead>
+                                <TableHead className="text-xs">发货数量</TableHead>
+                                <TableHead className="text-xs">接收数量</TableHead>
+                                <TableHead className="text-xs">验收结果</TableHead>
+                                <TableHead className="text-xs">备注</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {record.items.map((item, itemIndex) => {
+                                const itemResultVariant = 
+                                  item.result === "SIGN" 
+                                    ? "default" 
+                                    : item.result === "EXCHANGE" 
+                                    ? "secondary" 
+                                    : "destructive";
+                                
+                                const itemResultLabel = 
+                                  item.result === "SIGN" ? "已签收" :
+                                  item.result === "EXCHANGE" ? "换货" :
+                                  item.result === "RETURN" ? "退货" :
+                                  item.result === "PASS" ? "通过" :
+                                  "未验收";
+
+                                return (
+                                  <TableRow key={`${record.inspectionId}-${item.orderDetailId}-${itemIndex}`}>
+                                    <TableCell className="text-xs">
+                                      <div>
+                                        <div className="font-medium">{item.productName}</div>
+                                        <div className="text-gray-500 text-xs mt-0.5">
+                                          {item.productCode} · {item.categoryName}
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-xs">
+                                      {formatQuantity(item.needToInspection)}
+                                    </TableCell>
+                                    <TableCell className="text-xs">
+                                      {formatQuantity(item.inspectedQty)}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant={itemResultVariant} className="text-xs">
+                                        {itemResultLabel}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-xs text-gray-600 max-w-xs truncate" title={item.remark || ""}>
+                                      {item.remark || "-"}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setIsInspectionHistoryDialogOpen(false)}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Provider Assign Dialog */}
       <Dialog open={showProviderDialog} onOpenChange={setShowProviderDialog}>
