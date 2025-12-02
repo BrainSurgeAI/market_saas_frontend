@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { format, differenceInSeconds } from "date-fns";
+import { zhCN } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -16,10 +17,10 @@ import {
 } from "@/components/ui/pagination";
 import { OrderOverview } from "@/app/workspace/types";
 import { getStatusVariant, translateOrderStatus } from "@/lib/utils";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Search, HelpCircle, Calendar, MapPin, DollarSign, Package, Pencil } from "lucide-react";
+import { Search, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -33,13 +34,11 @@ import {
 interface OrdersListProps {
 	org_id: string;
 	redirectUrl: string;
-	
-	handleAssignClick?: (orderCode: string, event: React.MouseEvent) => void;
 	userType: 'CUSTOMER' | 'PROVIDER' | 'MARKET';
 }
 
 
-export default function OrdersList({ org_id, redirectUrl, handleAssignClick, userType }: OrdersListProps) {
+export default function OrdersList({ org_id, redirectUrl, userType }: OrdersListProps) {
 	const router = useRouter();
 
 	// 分页相关状态
@@ -58,13 +57,6 @@ export default function OrdersList({ org_id, redirectUrl, handleAssignClick, use
 	const [filteredOrders, setFilteredOrders] = useState<OrderOverview[]>([]);
 	// 添加状态筛选
 	const [statusFilter, setStatusFilter] = useState<string>("ALL");
-
-	// 添加倒计时状态
-	const [countdowns, setCountdowns] = useState<Record<string, string>>({});
-	// 添加鼠标悬停状态
-	const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
-	// 倒计时定时器引用
-	const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
 	// 订单状态选项
 	const statusOptions = [
@@ -88,38 +80,6 @@ export default function OrdersList({ org_id, redirectUrl, handleAssignClick, use
 		{ value: "CANCELLED", label: "已取消" },
 		{ value: "RETURN_REQUESTED", label: "申请退货" },
 	];
-
-	// 计算售后订单剩余处理时间（精确到秒）
-	const calculateAfterSaleRemainingTime = (afterSaleAt: string | null): string => {
-		if (!afterSaleAt) return "";
-
-		const now = new Date();
-		const afterSaleDate = new Date(afterSaleAt);
-		// 售后处理时间为120分钟（7200秒）
-		const totalSeconds = 120 * 60;
-
-		// 计算已经过去的秒数
-		const elapsedSeconds = differenceInSeconds(now, afterSaleDate);
-		// 计算剩余秒数
-		const remainingSeconds = totalSeconds - elapsedSeconds;
-
-		if (remainingSeconds <= 0) {
-			return "已超时";
-		}
-
-		// 计算小时、分钟和秒
-		const hours = Math.floor(remainingSeconds / 3600);
-		const minutes = Math.floor((remainingSeconds % 3600) / 60);
-		const seconds = remainingSeconds % 60;
-
-		if (hours > 0) {
-			return `${hours}小时${minutes}分钟${seconds}秒`;
-		} else if (minutes > 0) {
-			return `${minutes}分钟${seconds}秒`;
-		} else {
-			return `${seconds}秒`;
-		}
-	};
 
 	useEffect(() => {
 		const fetchOrders = async () => {
@@ -300,32 +260,15 @@ export default function OrdersList({ org_id, redirectUrl, handleAssignClick, use
 		];
 
 		if (userType === 'CUSTOMER') {
-			commonHeaders.push({ key: 'carrier', label: '配送人', width: '1fr' });
-		} else if (userType === 'PROVIDER' || userType === 'MARKET') {
-			commonHeaders.push({ key: 'deliveryAddress', label: '交付信息', width: '1.5fr' });
+			commonHeaders.push({ key: 'carrier', label: '联系人', width: '1fr' });
+		} else if (userType === 'PROVIDER') {
+			commonHeaders.push({ key: 'deliveryAddress', label: '联系人', width: '1.5fr' });
+		} else {
+			commonHeaders.push({ key: 'deliveryAddress', label: '配送人', width: '1.5fr' });
 		}
 
 		commonHeaders.push({ key: 'actions', label: '', width: 'auto' });
-
 		return commonHeaders;
-	};
-
-	// 处理点击指派按钮的逻辑
-	const handleAssignButtonClick = (orderCode: string, e: React.MouseEvent) => {
-		// 阻止事件冒泡，防止触发行点击事件
-		e.stopPropagation();
-
-		// 调用父组件提供的handleAssignClick函数
-		if (handleAssignClick) {
-			handleAssignClick(orderCode, e);
-
-			// 在本地标记该订单已被指派，立即隐藏按钮
-			setAssignedOrders(prev => {
-				const newSet = new Set(prev);
-				newSet.add(orderCode);
-				return newSet;
-			});
-		}
 	};
 
 	return (
@@ -378,13 +321,13 @@ export default function OrdersList({ org_id, redirectUrl, handleAssignClick, use
 							<div className="flex items-center gap-2 mr-2">
 								<span className="text-sm text-gray-500 font-medium">Filter by:</span>
 								<Select value={statusFilter} onValueChange={setStatusFilter}>
-									<SelectTrigger className="h-9 w-[140px] border-none bg-gray-50/50 hover:bg-gray-100 focus:ring-0 rounded-lg text-sm font-medium text-gray-700">
+									<SelectTrigger className="h-9 w-[140px] border-none bg-gray-50/50 hover:bg-gray-100 focus:ring-0 rounded-lg text-xs font-medium text-gray-500">
 										<SelectValue placeholder="Status" />
 									</SelectTrigger>
 									<SelectContent align="end" className="w-[200px]">
 										<SelectGroup>
 											{statusOptions.map((option) => (
-												<SelectItem key={option.value} value={option.value} className="text-sm cursor-pointer py-2.5">
+												<SelectItem key={option.value} value={option.value} className="text-xs cursor-pointer py-2.5">
 													{option.label}
 												</SelectItem>
 											))}
@@ -414,7 +357,7 @@ export default function OrdersList({ org_id, redirectUrl, handleAssignClick, use
 						<>
 							<div className="space-y-4">
 								{/* Header Row - Desktop only */}
-								<div className={`hidden md:grid gap-4 px-6 py-3 text-xs font-semibold text-gray-400 bg-white rounded-t-xl border-b ${userType === 'CUSTOMER' ? 'md:grid-cols-[1fr_2fr_1fr_1fr_1.2fr_1.5fr_1fr_auto]' : 'md:grid-cols-[1fr_2fr_1fr_1fr_1.2fr_1.5fr_1.5fr_auto]'}`}>
+								<div className={`hidden md:grid gap-4 px-6 py-3 text-xs font-semibold text-gray-400 bg-white rounded-t-xl border-b ${userType === 'CUSTOMER' ? 'md:grid-cols-[1fr_2fr_1fr_1fr_1.2fr_1.5fr_1fr_auto]' : 'md:grid-cols-[1fr_2fr_1fr_1fr_1.5fr_1.5fr_1.5fr_auto]'}`}>
 									{getTableHeaders().map((header, index) => (
 										<div key={header.key} className={`
 											${index === 2 || index === 3 ? 'text-right' : 'text-left'}
@@ -433,8 +376,8 @@ export default function OrdersList({ org_id, redirectUrl, handleAssignClick, use
 											<div className="md:block flex justify-between items-center md:justify-start">
 												<span className="md:hidden text-xs font-semibold text-gray-500">创建日期</span>
 												<div className="md:text-left">
-													<div className="font-medium text-sm text-gray-900">{format(new Date(order.createdAt), "dd MMM")}</div>
-													<div className="text-xs text-gray-500">{format(new Date(order.createdAt), "HH:mm")}</div>
+													<div className="font-medium text-sm text-gray-500">{format(new Date(order.createdAt), "M月d日", { locale: zhCN })}</div>
+													<div className="text-xs text-gray-500">{format(new Date(order.createdAt), "HH:mm", { locale: zhCN })}</div>
 												</div>
 											</div>
 
@@ -442,28 +385,27 @@ export default function OrdersList({ org_id, redirectUrl, handleAssignClick, use
 											<div className="md:block flex justify-between items-center md:justify-start">
 												<span className="md:hidden text-xs font-semibold text-gray-500">订单编号</span>
 												<div className="md:text-left">
-													<div className="font-medium text-sm text-gray-900 max-w-[250px]" title={order.orderCode}>{order.orderCode}</div>
+													<div className="font-medium font-mono text-sm text-gray-900 max-w-[250px]" title={order.orderCode}>{order.orderCode}</div>
 												</div>
 											</div>
 
 											{/* 订购金额 */}
 											<div className="md:block flex justify-between items-center md:justify-end">
 												<span className="md:hidden text-xs font-semibold text-gray-500">订购金额</span>
-												<div className="font-bold text-sm font-mono text-gray-900 md:text-right">¥{order.totalAmount}</div>
+												<div className="font-medium text-sm font-mono text-gray-900 md:text-right">¥{order.totalAmount}</div>
 											</div>
 
 											{/* 结算金额 */}
 											<div className="md:block flex justify-between items-center md:justify-end">
 												<span className="md:hidden text-xs font-semibold text-gray-500">结算金额</span>
-												<div className="font-bold text-sm font-mono text-gray-900 md:text-right">¥{order.actualAmount}</div>
+												<div className="font-medium text-sm font-mono text-gray-900 md:text-right">¥{order.actualAmount}</div>
 											</div>
 
 											{/* 配送日期 */}
 											<div className="md:block flex justify-between items-center md:justify-start md:pl-4">
 												<span className="md:hidden text-xs font-semibold text-gray-500">配送日期</span>
 												<div className="md:text-center">
-													<div className="font-medium text-sm text-gray-900">{format(new Date(order.deliveryDate), "dd MMM")}</div>
-													<div className="text-xs text-gray-500">{format(new Date(order.deliveryDate), "HH:mm")}</div>
+													<div className="font-medium text-sm text-gray-500">{format(new Date(order.deliveryDate), "M月d日", { locale: zhCN })}</div>
 												</div>
 											</div>
 
@@ -487,17 +429,26 @@ export default function OrdersList({ org_id, redirectUrl, handleAssignClick, use
 												<div className="md:block flex justify-between items-center md:justify-start">
 													<span className="md:hidden text-xs font-semibold text-gray-500">联系人</span>
 													<div className="text-center">
-														<div className="font-medium text-sm text-gray-900">{order.marketContactorName || '-'}</div>
+														<div className="font-medium text-xs text-gray-500">{order.marketContactorName || '-'}</div>
 														<div className="text-xs text-gray-500">{order.marketContactNumber || '-'}</div>
 													</div>
 												</div>
-											) : (
+											) : userType === 'PROVIDER' ? (
 												/* 配送地址 */
 												<div className="md:block flex justify-between items-center md:justify-start">
 													<span className="md:hidden text-xs font-semibold text-gray-500">交付信息</span>
 													<div className="text-center">
-														<div className="font-medium text-sm text-gray-900">{userType === 'PROVIDER' ? order.marketName : order.customerName}</div>
-														<div className="text-xs text-gray-500">{userType === 'PROVIDER' ? order.marketContactNumber : order.contactPhone}</div>
+														<div className="font-medium text-xs text-gray-500">{ order.marketContactorName }</div>
+														<div className="text-xs text-gray-500">{ order.marketContactNumber }</div>
+													</div>
+												</div>
+											) : (
+												/* 配送人 */
+												<div className="md:block flex justify-between items-center md:justify-start">
+													<span className="md:hidden text-xs font-semibold text-gray-500">配送人</span>
+													<div className="text-center">
+														<div className="font-medium text-xs text-gray-500">{order.shipperName || '-'}</div>
+														<div className="text-xs text-gray-500">{order.shipperPhone || '-'}</div>
 													</div>
 												</div>
 											)}
@@ -505,7 +456,7 @@ export default function OrdersList({ org_id, redirectUrl, handleAssignClick, use
 											{/* 操作 */}
 											<div className="flex justify-end items-center gap-2">
 												<Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-600" onClick={() => handleOrderClick(order.orderCode)}>
-													<Pencil className="h-4 w-4" />
+													<Eye className="h-4 w-4" />
 												</Button>
 											</div>
 										</div>
