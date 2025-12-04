@@ -46,6 +46,7 @@ export interface MarketOrderDetail {
   remark: string | null;
   unit: string;
   unitPrice: string;
+  acceptedQty: string;
 }
 
 export interface MarketOrderData {

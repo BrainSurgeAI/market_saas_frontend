@@ -1,16 +1,14 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMemo, useState, useEffect } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
   Download,
   Package,
   RotateCcw,
-  RefreshCw,
   CheckCircle,
-  AlertCircle,
   Calendar,
   MapPin,
   User,
@@ -30,10 +28,7 @@ import { ProductListSection } from "./order-details/ProductListSection";
   import type {
     ProviderOrderData,
     ProviderOrderItem,
-    ProviderOrderCurrent,
-    ProviderOrderResponse,
     DeliveryHistoryData,
-    DeliveryHistoryResponse,
     DeliveryRound
   } from "@/lib/types/providerOrder";
 
@@ -58,7 +53,6 @@ import { getOrderStrategy } from "./order-details/strategies/OrderStrategyFactor
 import type { ActionDescriptor } from "./order-details/types";
 import type { OrderStrategyContext } from "./order-details/strategies/OrderStrategy";
 import { OrderStatus, TenantType, type Order, type OrderItem } from "@/lib/types/orderStatus";
-import type { RoundGroupedData } from "./order-details/roundGrouping";
 
 // 导入操作函数 - PROVIDER 保持简单实现
 
@@ -164,7 +158,6 @@ const DeliveryHistorySection = ({
           <Truck className="w-4 h-4 text-blue-600" />
         </div>
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">配送历史</h2>
           <p className="text-sm text-gray-500">查看订单的完整配送和验收记录</p>
         </div>
       </div>
@@ -180,7 +173,7 @@ const DeliveryHistorySection = ({
                       <span className="text-sm font-semibold text-blue-600">{round.round}</span>
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900">
+                      <h3 className="font-semibold text-gray-900 text-sm">
                         第 {round.round} 轮配送
                       </h3>
                       <p className="text-sm text-gray-500">
@@ -189,9 +182,9 @@ const DeliveryHistorySection = ({
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {getDeliveryTypeBadge(round.deliveryType)}
+                    {/* {getDeliveryTypeBadge(round.deliveryType)} */}
                     {getDeliveryStatusBadge(round.deliveryStatus)}
-                    {getInspectionStatusBadge(round.inspectionStatus)}
+                    {/* {getInspectionStatusBadge(round.inspectionStatus)} */}
                   </div>
                 </div>
                 <Button
@@ -214,23 +207,23 @@ const DeliveryHistorySection = ({
               {/* 统计信息 */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div className="text-center p-3 bg-gray-50 rounded-lg">
-                  <div className="text-lg font-semibold text-gray-900">{round.items.length}</div>
+                  <div className="text-lg font-semibold text-gray-900 font-mono">{round.items.length}</div>
                   <div className="text-xs text-gray-500">总商品数</div>
                 </div>
                 <div className="text-center p-3 bg-green-50 rounded-lg">
-                  <div className="text-lg font-semibold text-green-600">
+                  <div className="text-lg font-semibold text-green-600 font-mono">
                     {round.items.filter(item => item.lastInspectionResult === 'SIGN').length}
                   </div>
                   <div className="text-xs text-green-600">已验收</div>
                 </div>
                 <div className="text-center p-3 bg-orange-50 rounded-lg">
-                  <div className="text-lg font-semibold text-orange-600">
+                  <div className="text-lg font-semibold text-orange-600 font-mono">
                     {round.items.filter(item => item.lastInspectionResult === 'EXCHANGE' || item.lastInspectionResult === 'RETURN').length}
                   </div>
                   <div className="text-xs text-orange-600">退换货</div>
                 </div>
                 <div className="text-center p-3 bg-gray-50 rounded-lg">
-                  <div className="text-lg font-semibold text-gray-600">
+                  <div className="text-lg font-semibold text-gray-600 font-mono">
                     {round.items.filter(item => !item.lastInspectionResult || item.lastInspectionResult === 'PENDING').length}
                   </div>
                   <div className="text-xs text-gray-600">未验收</div>
@@ -241,7 +234,7 @@ const DeliveryHistorySection = ({
               {expandedRound === round.round && selectedRound && (
                 <div className="border-t border-gray-100 pt-4 mt-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                    <h4 className="font-medium text-gray-900 flex items-center gap-2 text-sm">
                       <Package className="w-4 h-4" />
                       商品配送详情
                     </h4>
@@ -255,11 +248,12 @@ const DeliveryHistorySection = ({
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-gray-50 hover:bg-gray-50">
-                          <TableHead className="w-[35%]">商品信息</TableHead>
-                          <TableHead className="w-[15%] text-center">需配送</TableHead>
-                          <TableHead className="w-[15%] text-center">实配送</TableHead>
-                          <TableHead className="w-[20%] text-center">验收状态</TableHead>
-                          <TableHead className="w-[15%] text-center">单价</TableHead>
+                          <TableHead className="w-[30%]">商品信息</TableHead>
+                          <TableHead className="w-[15%] text-center">需配</TableHead>
+                          <TableHead className="w-[15%] text-center">实配</TableHead>
+                          <TableHead className="w-[15%] text-center">签收</TableHead>
+                          <TableHead className="w-[15%] text-center">验收状态</TableHead>
+                          <TableHead className="w-[15%] text-center">折扣价</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -299,11 +293,11 @@ const DeliveryHistorySection = ({
                             <TableRow key={item.orderDetailId} className="hover:bg-gray-50">
                               <TableCell className="py-3">
                                 <div>
-                                  <div className="font-medium text-gray-900 text-sm leading-tight">
+                                  <div className="font-medium text-gray-800 text-sm leading-tight">
                                     {item.productName}
                                   </div>
                                   <div className="text-xs text-gray-500 mt-1">
-                                    {item.productCode} · {item.categoryName}
+                                    SKU: <span className="font-mono">{item.productCode}</span> · {item.categoryName}
                                   </div>
                                   {item.remark && (
                                     <div className="text-xs text-orange-600 mt-1 italic">
@@ -314,7 +308,7 @@ const DeliveryHistorySection = ({
                               </TableCell>
 
                               <TableCell className="text-center py-3">
-                                <div className="text-sm font-medium text-gray-900">
+                                <div className="text-sm font-medium text-gray-900 font-mono">
                                   {item.needToDeliverQty}
                                 </div>
                                 <div className="text-xs text-gray-500">{item.unit}</div>
@@ -322,12 +316,17 @@ const DeliveryHistorySection = ({
 
                               <TableCell className="text-center py-3">
                                 {item.actualQty ? (
-                                  <div className="text-sm font-medium text-green-600">
+                                  <div className="text-sm font-medium text-green-600 font-mono">
                                     {item.actualQty} {item.unit}
                                   </div>
                                 ) : (
                                   <div className="text-xs text-gray-400">-</div>
                                 )}
+                              </TableCell>
+                              <TableCell className="text-center py-3">
+                                <div className="text-sm font-medium text-gray-900 font-mono">
+                                  {item.inspectedQty}
+                                </div>
                               </TableCell>
 
                               <TableCell className="text-center py-3">
@@ -338,7 +337,7 @@ const DeliveryHistorySection = ({
                               </TableCell>
 
                               <TableCell className="text-center py-3">
-                                <div className="text-sm font-medium text-gray-900">
+                                <div className="text-sm font-medium text-gray-900 font-mono">
                                   ¥{item.unitPrice}
                                 </div>
                               </TableCell>

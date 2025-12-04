@@ -94,8 +94,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 // Import new types
 import {
   MarketOrderData,
-  MarketOrderRound,
-  MarketOrderItem,
+  // MarketOrderRound,
+  // MarketOrderItem,
 } from "@/lib/types/marketOrder";
 
 // Provider interface extracted from page
@@ -112,7 +112,7 @@ interface MarketOrderDetailsProps {
 }
 
 // 临时定义操作类型
-type OperationType = "SIGN" | "RETURN" | "EXCHANGE";
+//type OperationType = "SIGN" | "RETURN" | "EXCHANGE";
 
 // 验收历史类型定义（严格按照 API 返回格式）
 interface InspectionHistoryItem {
@@ -138,13 +138,13 @@ interface InspectionHistoryRecord {
   result: "SIGN" | "EXCHANGE" | "RETURN" | "PASS";
 }
 
-interface InspectionHistoryResponse {
-  code: number;
-  message: string;
-  data: InspectionHistoryRecord[];
-  requestId: string;
-  timestamp: string;
-}
+// interface InspectionHistoryResponse {
+//   code: number;
+//   message: string;
+//   data: InspectionHistoryRecord[];
+//   requestId: string;
+//   timestamp: string;
+// }
 
 export default function MarketOrderDetails({
   orderCode,
@@ -209,9 +209,6 @@ export default function MarketOrderDetails({
         // Old format - direct data response
         data = result.data || result;
       }
-
-      // Log received data for debugging
-      console.log("Fetched market order data:", data);
 
       // Basic validation to ensure required fields exist
       if (!data.details) {
@@ -419,13 +416,13 @@ export default function MarketOrderDetails({
       setInspectionHistoryError(null);
 
       const response = await fetch(`/api/orders/${orderCode}/inspection-history`);
-      
+
       if (!response.ok) {
         throw new Error(`获取验收历史失败: ${response.status}`);
       }
 
       const data: InspectionHistoryRecord[] = await response.json();
-      
+
       if (Array.isArray(data)) {
         setInspectionHistory(data);
       } else {
@@ -508,13 +505,13 @@ export default function MarketOrderDetails({
 
           {/* 确认发货按钮 (MARKET_ACCEPTED) */}
           {marketOrderData.orderStatus === "MARKET_ACCEPTED" && (
-              <Button
+            <Button
               onClick={() => setIsDeliverToCustomerDialogOpen(true)} size="sm"
-                className="bg-blue-600 hover:bg-blue-500"
-              >
+              className="bg-blue-600 hover:bg-blue-500"
+            >
               确认发货
-              </Button>
-            )}
+            </Button>
+          )}
 
           {/* 查看验收历史按钮 (CUSTOMER 和 MARKET 用户) */}
           <Button
@@ -530,9 +527,9 @@ export default function MarketOrderDetails({
         </div>
       </div>
 
-        {/* Compact Inspection Prompt - Only show for specific statuses */}
-        {((userType === "CUSTOMER" && (marketOrderData.orderStatus === "MARKET_DELIVERING" || marketOrderData.orderStatus === "EXCHANGE_NEW_DELIVERING")) ||
-          (userType === "MARKET" && (marketOrderData.orderStatus === "SUPPLIER_DELIVERING" || marketOrderData.orderStatus === "EXCHANGE_DELIVERING"))) && (
+      {/* Compact Inspection Prompt - Only show for specific statuses */}
+      {((userType === "CUSTOMER" && (marketOrderData.orderStatus === "MARKET_DELIVERING" || marketOrderData.orderStatus === "EXCHANGE_NEW_DELIVERING")) ||
+        (userType === "MARKET" && (marketOrderData.orderStatus === "SUPPLIER_DELIVERING" || marketOrderData.orderStatus === "EXCHANGE_DELIVERING"))) && (
           <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/50 rounded-lg p-4 mb-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -548,7 +545,7 @@ export default function MarketOrderDetails({
                   </p>
                 </div>
               </div>
-            <Button
+              <Button
                 onClick={handleBeginInspect}
                 size="sm"
                 className="bg-amber-600 hover:bg-amber-700 text-white h-8 px-4 text-xs font-medium"
@@ -566,8 +563,8 @@ export default function MarketOrderDetails({
                   </div>
                 )}
               </Button>
-        </div>
-      </div>
+            </div>
+          </div>
         )}
 
       {/* Order Info Card */}
@@ -683,135 +680,143 @@ export default function MarketOrderDetails({
 
       {/* Main Content */}
       <div className="w-full">
-          <Card className="border-none shadow-none bg-transparent">
-            <CardHeader className="px-0 pt-0 pb-4">
-              <CardTitle className="text-lg font-semibold"></CardTitle>
-            </CardHeader>
-            <CardContent className="px-0">
-              {/* Desktop View */}
-              <div className="hidden md:block rounded-xl border bg-white overflow-hidden shadow-sm">
-                <Table>
-                  <TableHeader className="bg-gray-50/50">
-                    <TableRow>
-                      <TableHead className="w-[40%] pl-6">商品信息</TableHead>
-                      <TableHead className="w-[20%]">单价/单位</TableHead>
-                      <TableHead className="w-[20%] text-center">订购量</TableHead>
-                      <TableHead className="w-[20%] text-right pr-6">订购金额</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {marketOrderData.details?.map((item, index) => (
-                      <TableRow key={`o_${item.id}_${index}`} className="hover:bg-gray-50/50 transition-colors">
-                        <TableCell className="pl-6 py-4">
-                          <div className="flex items-center gap-4">
-                            <Avatar className="h-12 w-12 border border-gray-100 shadow-md rounded-lg">
-                              <AvatarImage src={item.imageUrl || ""} alt={item.name} className="object-cover" />
-                              <AvatarFallback className="bg-primary/5 text-primary text-xs rounded-lg font-medium shadow-inner">
-                                {item.name ? item.name.slice(0, 2) : "无"}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex flex-col gap-1">
-                              <p className="font-semibold text-gray-900 line-clamp-1">{item.name}</p>
-                              <div className="flex items-center gap-2">
-                                <span className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-mono">
-                                  SKU: {item.productId}
-                                </span>
-                                {item.category && (
-                                  <span className="text-xs text-gray-500">{item.category}</span>
-                                )}
-                              </div>
+        <Card className="border-none shadow-none bg-transparent">
+          <CardHeader className="px-0 pt-0 pb-4">
+            <CardTitle className="text-lg font-semibold"></CardTitle>
+          </CardHeader>
+          <CardContent className="px-0">
+            {/* Desktop View */}
+            <div className="hidden md:block rounded-xl border bg-white overflow-hidden shadow-sm">
+              <Table>
+                <TableHeader className="bg-gray-50/50">
+                  <TableRow>
+                    <TableHead className="w-[40%] pl-6">商品信息</TableHead>
+                    <TableHead className="w-[10%]">单价/单位</TableHead>
+                    <TableHead className="w-[10%] text-center">订购量</TableHead>
+                    <TableHead className="w-[10%] text-center">客户签收</TableHead>
+                    <TableHead className="w-[15%] text-right pr-6">订购金额</TableHead>
+                    <TableHead className="w-[15%] text-right pr-6">实收金额</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {marketOrderData.details?.map((item, index) => (
+                    <TableRow key={`o_${item.id}_${index}`} className="hover:bg-gray-50/50 transition-colors">
+                      <TableCell className="pl-6 py-4">
+                        <div className="flex items-center gap-4">
+                          <Avatar className="h-12 w-12 border border-gray-100 shadow-md rounded-lg">
+                            <AvatarImage src={item.imageUrl || ""} alt={item.name} className="object-cover" />
+                            <AvatarFallback className="bg-primary/5 text-primary text-xs rounded-lg font-medium shadow-inner">
+                              {item.name ? item.name.slice(0, 2) : "无"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex flex-col gap-1">
+                            <p className="font-semibold text-gray-900 line-clamp-1">{item.name}</p>
+                            <div className="flex items-center gap-2">
+                              <span className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-mono">
+                                SKU: {item.productId}
+                              </span>
+                              {item.category && (
+                                <span className="text-xs text-gray-500">{item.category}</span>
+                              )}
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="font-medium font-mono text-gray-900">¥{item.unitPrice}</span>
-                            <span className="text-xs text-gray-500">/ {item.unit}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="secondary" className="font-mono font-medium bg-blue-50 text-blue-700 hover:bg-blue-50">
-                            x {item.orderedQty}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right pr-6">
-                          <span className="font-bold font-mono text-gray-900">¥{item.orderedAmount}</span>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {(!marketOrderData.details || marketOrderData.details.length === 0) && (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-center py-12 text-gray-500 bg-gray-50/30">
-                          <div className="flex flex-col items-center gap-2">
-                            <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center">
-                              <span className="text-2xl">📦</span>
-                            </div>
-                            <p>暂无商品明细</p>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Mobile View */}
-              <div className="grid grid-cols-1 gap-4 md:hidden">
-                {marketOrderData.details?.map((item, index) => (
-                  <div key={`m_${item.id}_${index}`} className="bg-white rounded-xl p-4 border shadow-sm space-y-3">
-                    <div className="flex items-start gap-3">
-                      <Avatar className="h-16 w-16 border border-gray-100 shadow-md rounded-lg shrink-0">
-                        <AvatarImage src={item.imageUrl || ""} alt={item.name} className="object-cover" />
-                        <AvatarFallback className="bg-primary/5 text-primary text-sm rounded-lg font-medium shadow-inner">
-                          {item.name ? item.name.slice(0, 2) : "无"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-start gap-2">
-                          <h3 className="font-semibold text-gray-900 line-clamp-2 text-sm">{item.name}</h3>
-                          <span className="font-bold text-gray-900 font-mono shrink-0">¥{item.orderedAmount}</span>
                         </div>
-                        <div className="mt-1 flex flex-wrap gap-2 items-center">
-                          <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[10px] font-mono">
-                            {item.productId}
-                          </span>
-                          {item.category && (
-                            <span className="text-xs text-gray-500 border-l pl-2">{item.category}</span>
-                          )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium font-mono text-gray-900">¥{item.unitPrice}</span>
+                          <span className="text-xs text-gray-500">/ {item.unit}</span>
                         </div>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-gray-500 uppercase tracking-wider">单价</span>
-                        <span className="text-sm font-medium">¥{item.unitPrice} <span className="text-gray-400 text-xs font-normal">/ {item.unit}</span></span>
-                      </div>
-                      <div className="flex flex-col items-end">
-                        <span className="text-[10px] text-gray-500 uppercase tracking-wider">数量</span>
-                        <Badge variant="secondary" className="font-mono font-medium bg-blue-50 text-blue-700 hover:bg-blue-50 mt-0.5">
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="secondary" className="font-mono font-medium bg-blue-50 text-blue-700 hover:bg-blue-50">
                           x {item.orderedQty}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-center font-mono font-medium">
+                      {item.acceptedQty}
+                      </TableCell>
+                      <TableCell className="text-right pr-6">
+                        <span className="font-bold font-mono text-gray-900">¥{item.orderedAmount}</span>
+                      </TableCell>
+                      <TableCell className="text-right pr-6">
+                        <span className="font-bold font-mono text-gray-900">¥{item.netAmount}</span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {(!marketOrderData.details || marketOrderData.details.length === 0) && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-12 text-gray-500 bg-gray-50/30">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center">
+                            <span className="text-2xl">📦</span>
+                          </div>
+                          <p>暂无商品明细</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile View */}
+            <div className="grid grid-cols-1 gap-4 md:hidden">
+              {marketOrderData.details?.map((item, index) => (
+                <div key={`m_${item.id}_${index}`} className="bg-white rounded-xl p-4 border shadow-sm space-y-3">
+                  <div className="flex items-start gap-3">
+                    <Avatar className="h-16 w-16 border border-gray-100 shadow-md rounded-lg shrink-0">
+                      <AvatarImage src={item.imageUrl || ""} alt={item.name} className="object-cover" />
+                      <AvatarFallback className="bg-primary/5 text-primary text-sm rounded-lg font-medium shadow-inner">
+                        {item.name ? item.name.slice(0, 2) : "无"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start gap-2">
+                        <h3 className="font-semibold text-gray-900 line-clamp-2 text-sm">{item.name}</h3>
+                        <span className="font-bold text-gray-900 font-mono shrink-0">¥{item.orderedAmount}</span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-2 items-center">
+                        <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[10px] font-mono">
+                          {item.productId}
+                        </span>
+                        {item.category && (
+                          <span className="text-xs text-gray-500 border-l pl-2">{item.category}</span>
+                        )}
                       </div>
                     </div>
-                  </div>
-                ))}
-                {(!marketOrderData.details || marketOrderData.details.length === 0) && (
-                  <div className="text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="h-12 w-12 rounded-full bg-gray-50 flex items-center justify-center">
-                        <span className="text-2xl">📦</span>
-                      </div>
-                      <p className="text-sm">暂无商品明细</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
                   </div>
 
-        {/* Inspection Prompt */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-gray-500 uppercase tracking-wider">单价</span>
+                      <span className="text-sm font-medium">¥{item.unitPrice} <span className="text-gray-400 text-xs font-normal">/ {item.unit}</span></span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[10px] text-gray-500 uppercase tracking-wider">数量</span>
+                      <Badge variant="secondary" className="font-mono font-medium bg-blue-50 text-blue-700 hover:bg-blue-50 mt-0.5">
+                        x {item.orderedQty}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {(!marketOrderData.details || marketOrderData.details.length === 0) && (
+                <div className="text-center py-12 text-gray-500 bg-white rounded-xl border border-dashed">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="h-12 w-12 rounded-full bg-gray-50 flex items-center justify-center">
+                      <span className="text-2xl">📦</span>
+                    </div>
+                    <p className="text-sm">暂无商品明细</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Inspection Prompt */}
 
       {/* Deliver to Customer Dialog */}
       <AlertDialog open={isDeliverToCustomerDialogOpen} onOpenChange={setIsDeliverToCustomerDialogOpen}>
@@ -872,19 +877,19 @@ export default function MarketOrderDetails({
             ) : (
               <div className="space-y-4">
                 {inspectionHistory.map((record, index) => {
-                  const resultBadgeVariant = 
-                    record.result === "SIGN" || record.result === "PASS" 
-                      ? "default" 
-                      : record.result === "EXCHANGE" 
-                      ? "secondary" 
-                      : "destructive";
-                  
-                  const resultLabel = 
+                  const resultBadgeVariant =
+                    record.result === "SIGN" || record.result === "PASS"
+                      ? "default"
+                      : record.result === "EXCHANGE"
+                        ? "secondary"
+                        : "destructive";
+
+                  const resultLabel =
                     record.result === "SIGN" ? "已签收" :
-                    record.result === "EXCHANGE" ? "换货" :
-                    record.result === "RETURN" ? "退货" :
-                    record.result === "PASS" ? "通过" :
-                    "待验收";
+                      record.result === "EXCHANGE" ? "换货" :
+                        record.result === "RETURN" ? "退货" :
+                          record.result === "PASS" ? "通过" :
+                            "待验收";
 
                   return (
                     <Card key={`inspection-${record.inspectionId}-${record.inspectionRound}-${index}`} className="border border-gray-200">
@@ -924,19 +929,19 @@ export default function MarketOrderDetails({
                             </TableHeader>
                             <TableBody>
                               {record.items.map((item, itemIndex) => {
-                                const itemResultVariant = 
-                                  item.result === "SIGN" 
-                                    ? "default" 
-                                    : item.result === "EXCHANGE" 
-                                    ? "secondary" 
-                                    : "destructive";
-                                
-                                const itemResultLabel = 
+                                const itemResultVariant =
+                                  item.result === "SIGN"
+                                    ? "default"
+                                    : item.result === "EXCHANGE"
+                                      ? "secondary"
+                                      : "destructive";
+
+                                const itemResultLabel =
                                   item.result === "SIGN" ? "已签收" :
-                                  item.result === "EXCHANGE" ? "换货" :
-                                  item.result === "RETURN" ? "退货" :
-                                  item.result === "PASS" ? "通过" :
-                                  "未验收";
+                                    item.result === "EXCHANGE" ? "换货" :
+                                      item.result === "RETURN" ? "退货" :
+                                        item.result === "PASS" ? "通过" :
+                                          "未验收";
 
                                 return (
                                   <TableRow key={`${record.inspectionId}-${item.orderDetailId}-${itemIndex}`}>

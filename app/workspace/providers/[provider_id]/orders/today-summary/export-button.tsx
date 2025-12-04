@@ -251,9 +251,9 @@ export function ExportButton({ data }: { data: AggregatedItem[] }) {
       size="sm" 
       onClick={handleExport} 
       disabled={data.length === 0}
-      className="ml-auto flex items-center gap-1"
+      className="flex items-center gap-2 border-gray-200 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      <Download size={16} />
+      <Download className="h-4 w-4" />
       <span>导出Excel</span>
     </Button>
   );

@@ -65,6 +65,7 @@ export interface DeliveryHistoryItem {
   lastInspectionResult: string;
   inspectionAt: string | null;
   remark: string | null;
+  inspectedQty: string | null;
 }
 
 export interface DeliveryRound {
