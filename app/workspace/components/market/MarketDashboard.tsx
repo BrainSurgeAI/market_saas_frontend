@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useWorkspace } from "@/lib/WorkspaceContext";
 import {
   Card,
   CardContent,
@@ -98,38 +99,7 @@ const defaultOverviewData: OrderStatisticsData = {
   completed: 0,
 };
 
-const tasksData = [
-  {
-    id: "assign",
-    title: "待分配订单",
-    count: 45,
-    description: "需指派供应商",
-    icon: ClipboardList,
-    action: "立即分配",
-    link: "/workspace/market/orders?status=PENDING",
-    theme: "blue",
-  },
-  {
-    id: "inspect",
-    title: "待验收配送",
-    count: 32,
-    description: "供应商已送达",
-    icon: Truck,
-    action: "立即验收",
-    link: "/workspace/market/orders?status=ARRIVED",
-    theme: "indigo",
-  },
-  {
-    id: "exception",
-    title: "验收异常",
-    count: 12,
-    description: "需处理退换货",
-    icon: AlertCircle,
-    action: "立即处理",
-    link: "/workspace/market/orders?status=EXCEPTION",
-    theme: "rose",
-  },
-];
+// tasksData 将在组件内部根据 API 数据动态生成
 
 const progressData = [
   { name: "配送中", value: 40, color: "#3b82f6" }, // blue-500
@@ -197,9 +167,50 @@ const trendData = [
 ];
 
 export default function MarketDashboard() {
+  const { organization } = useWorkspace();
   const [overviewData, setOverviewData] = useState<OrderStatisticsData>(defaultOverviewData);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // 获取 market_id，优先使用 nameHash，如果没有则使用 id
+  const marketId = organization?.nameHash || organization?.id?.toString() || '';
+
+  // 根据 API 数据动态生成 tasksData
+  const tasksData = useMemo(() => {
+    const basePath = marketId ? `/workspace/markets/${marketId}/orders` : '/workspace/markets/orders';
+    return [
+      {
+        id: "assign",
+        title: "待分配订单",
+        count: overviewData.pendingAssignment,
+        description: "需指派供应商",
+        icon: ClipboardList,
+        action: "立即分配",
+        link: `${basePath}?status=PENDING`,
+        theme: "blue",
+      },
+      {
+        id: "inspect",
+        title: "待验收配送",
+        count: overviewData.pendingInspection,
+        description: "供应商已送达",
+        icon: Truck,
+        action: "立即验收",
+        link: `${basePath}?status=ARRIVED`,
+        theme: "indigo",
+      },
+      {
+        id: "exception",
+        title: "验收异常",
+        count: overviewData.exceptions,
+        description: "需处理退换货",
+        icon: AlertCircle,
+        action: "立即处理",
+        link: `${basePath}?status=EXCEPTION`,
+        theme: "rose",
+      },
+    ];
+  }, [overviewData, marketId]);
 
   useEffect(() => {
     const fetchStatistics = async () => {
@@ -345,7 +356,15 @@ export default function MarketDashboard() {
                   <Clock className="w-5 h-5 text-slate-500" />
                   待处理事项
                 </h2>
-                <Button variant="link" className="text-blue-600 h-auto p-0">查看全部</Button>
+                <Button 
+                  variant="link" 
+                  className="text-blue-600 h-auto p-0"
+                  asChild
+                >
+                  <a href={marketId ? `/workspace/markets/${marketId}/orders` : '/workspace/markets/orders'}>
+                    查看全部
+                  </a>
+                </Button>
              </div>
              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 {tasksData.map((task) => (
