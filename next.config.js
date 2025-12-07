@@ -8,11 +8,6 @@ const nextConfig = {
       },
     ],
   },
-  // 关闭ESLint检查
-  eslint: {
-    // 在生产构建期间忽略ESLint错误
-    ignoreDuringBuilds: true,
-  },
   // 启用standalone输出模式，用于Docker部署
   output: 'standalone',
 }

@@ -24,7 +24,7 @@ const protectedRoutes = [
   }
 ];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 检查是否是受保护的路由
