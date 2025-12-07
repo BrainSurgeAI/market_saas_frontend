@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -32,6 +32,7 @@ import {
   ArrowUpRight,
   Filter,
   Calendar as CalendarIcon,
+  Loader2,
 } from "lucide-react";
 import {
   PieChart,
@@ -48,14 +49,53 @@ import {
 } from "recharts";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-// --- Mock Data ---
+// --- Type Definitions ---
 
-const overviewData = {
-  newOrders: 128,
-  pendingAssignment: 45,
-  pendingInspection: 32,
-  exceptions: 12,
-  completed: 85,
+interface TrendData {
+  value: string;
+  up: boolean;
+}
+
+interface CardMetadata {
+  subtitle?: string;
+  active?: boolean;
+}
+
+interface OrderStatisticsData {
+  newOrders: number;
+  pendingAssignment: number;
+  pendingInspection: number;
+  exceptions: number;
+  completed: number;
+  trends?: {
+    newOrders?: TrendData;
+    pendingAssignment?: TrendData;
+    pendingInspection?: TrendData;
+    exceptions?: TrendData;
+    completed?: TrendData;
+  };
+  metadata?: {
+    pendingAssignment?: CardMetadata;
+    [key: string]: CardMetadata | undefined;
+  };
+}
+
+interface ApiResponse {
+  code: number;
+  message: string;
+  data: OrderStatisticsData;
+  requestId: string;
+  timestamp: string;
+}
+
+// --- Default Data (fallback) ---
+
+const defaultOverviewData: OrderStatisticsData = {
+  newOrders: 0,
+  pendingAssignment: 0,
+  pendingInspection: 0,
+  exceptions: 0,
+  completed: 0,
 };
 
 const tasksData = [
@@ -157,6 +197,39 @@ const trendData = [
 ];
 
 export default function MarketDashboard() {
+  const [overviewData, setOverviewData] = useState<OrderStatisticsData>(defaultOverviewData);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchStatistics = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        const response = await fetch('/api/orders/statistics');
+        const result: ApiResponse = await response.json();
+        
+        if (result.code === 200 && result.data) {
+          setOverviewData(result.data);
+        } else {
+          setError(result.message || '获取数据失败');
+          // 使用默认数据作为降级方案
+          setOverviewData(defaultOverviewData);
+        }
+      } catch (err) {
+        console.error('获取订单统计数据失败:', err);
+        setError(err instanceof Error ? err.message : '未知错误');
+        // 使用默认数据作为降级方案
+        setOverviewData(defaultOverviewData);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStatistics();
+  }, []);
+
   const currentDate = new Date().toLocaleDateString("zh-CN", {
     weekday: "long",
     year: "numeric",
@@ -190,53 +263,76 @@ export default function MarketDashboard() {
       </div>
 
       {/* 1. Overview Cards - Nexus Style: Clean, white, subtle borders, high contrast numbers */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
-        <NexusStatCard
-          title="今日新订单"
-          value={overviewData.newOrders}
-          trend="+12.5%"
-          trendUp={true}
-          icon={Package}
-          colorClass="text-blue-600"
-          bgClass="bg-blue-50"
-        />
-        <NexusStatCard
-          title="待分配订单"
-          value={overviewData.pendingAssignment}
-          subtitle="急需处理"
-          icon={ClipboardList}
-          colorClass="text-violet-600"
-          bgClass="bg-violet-50"
-          active={true}
-        />
-        <NexusStatCard
-          title="待验收配送"
-          value={overviewData.pendingInspection}
-          trend="+5"
-          trendUp={true}
-          icon={Truck}
-          colorClass="text-indigo-600"
-          bgClass="bg-indigo-50"
-        />
-        <NexusStatCard
-          title="今日异常"
-          value={overviewData.exceptions}
-          trend="-2"
-          trendUp={false} // Good that it's down
-          icon={AlertCircle}
-          colorClass="text-rose-600"
-          bgClass="bg-rose-50"
-        />
-        <NexusStatCard
-          title="已完成"
-          value={overviewData.completed}
-          trend="+8%"
-          trendUp={true}
-          icon={CheckCircle2}
-          colorClass="text-emerald-600"
-          bgClass="bg-emerald-50"
-        />
-      </div>
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Card key={i} className="border-slate-100 shadow-sm bg-white rounded-2xl">
+              <CardContent className="p-5 flex items-center justify-center h-32">
+                <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : error ? (
+        <Card className="border-rose-200 bg-rose-50 rounded-2xl">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 text-rose-600">
+              <AlertCircle className="w-5 h-5" />
+              <span className="text-sm font-medium">{error}</span>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+          <NexusStatCard
+            title="今日新订单"
+            value={overviewData.newOrders}
+            trend={overviewData.trends?.newOrders?.value}
+            trendUp={overviewData.trends?.newOrders?.up}
+            icon={Package}
+            colorClass="text-blue-600"
+            bgClass="bg-blue-50"
+          />
+          <NexusStatCard
+            title="待分配订单"
+            value={overviewData.pendingAssignment}
+            subtitle={overviewData.metadata?.pendingAssignment?.subtitle}
+            active={overviewData.metadata?.pendingAssignment?.active}
+            trend={overviewData.trends?.pendingAssignment?.value}
+            trendUp={overviewData.trends?.pendingAssignment?.up}
+            icon={ClipboardList}
+            colorClass="text-violet-600"
+            bgClass="bg-violet-50"
+          />
+          <NexusStatCard
+            title="待验收配送"
+            value={overviewData.pendingInspection}
+            trend={overviewData.trends?.pendingInspection?.value}
+            trendUp={overviewData.trends?.pendingInspection?.up}
+            icon={Truck}
+            colorClass="text-indigo-600"
+            bgClass="bg-indigo-50"
+          />
+          <NexusStatCard
+            title="今日异常"
+            value={overviewData.exceptions}
+            trend={overviewData.trends?.exceptions?.value}
+            trendUp={overviewData.trends?.exceptions?.up}
+            icon={AlertCircle}
+            colorClass="text-rose-600"
+            bgClass="bg-rose-50"
+          />
+          <NexusStatCard
+            title="已完成"
+            value={overviewData.completed}
+            trend={overviewData.trends?.completed?.value}
+            trendUp={overviewData.trends?.completed?.up}
+            icon={CheckCircle2}
+            colorClass="text-emerald-600"
+            bgClass="bg-emerald-50"
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         {/* Left Column: Tasks & Progress */}
@@ -440,8 +536,16 @@ function NexusStatCard({
             <Icon className="w-5 h-5" />
           </div>
           {trend && (
-            <div className={`flex items-center px-2 py-1 rounded-full text-xs font-bold ${trendUp ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-              {trendUp ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingUp className="w-3 h-3 mr-1 rotate-180" />}
+            <div className={`flex items-center px-2 py-1 rounded-full text-xs font-bold ${
+              trendUp === undefined 
+                ? 'bg-slate-50 text-slate-600' 
+                : trendUp 
+                  ? 'bg-emerald-50 text-emerald-600' 
+                  : 'bg-rose-50 text-rose-600'
+            }`}>
+              {trendUp !== undefined && (
+                trendUp ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingUp className="w-3 h-3 mr-1 rotate-180" />
+              )}
               {trend}
             </div>
           )}
