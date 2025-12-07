@@ -105,9 +105,11 @@ export interface OrderOverview {
   marketContactorName: string | null;
   shipperName: string | null;
   shipperPhone: string | null;
+  skuCount: number;
+  urgent: boolean;
   items?: OrderItem[]; // Making items optional as it's not in the provided JSON sample but might be needed elsewhere
-  assignedTo?: string | null;
-  afterSaleAt?: string | null;
+  // assignedTo?: string | null;
+  // afterSaleAt?: string | null;
 }
 
 // 定义订单类型
