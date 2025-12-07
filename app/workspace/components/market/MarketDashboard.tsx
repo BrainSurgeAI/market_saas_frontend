@@ -296,7 +296,7 @@ export default function MarketDashboard() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
           <NexusStatCard
-            title="今日新订单"
+            title="今日订单"
             value={overviewData.newOrders}
             trend={overviewData.trends?.newOrders?.value}
             trendUp={overviewData.trends?.newOrders?.up}
