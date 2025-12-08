@@ -14,7 +14,7 @@ import { logger } from "@/lib/logger";
 import { TokenPayload } from "../models";
 import { DynamicBreadcrumb } from "./components/DynamicBreadcrumb";
 import { fetchRemoteData, getToken } from "@/lib/api-utils";
-import "@/lib/menuCacheDebug"; // 加载调试工具
+//import "@/lib/menuCacheDebug"; // 加载调试工具
 
 export const dynamic = 'force-dynamic';
 

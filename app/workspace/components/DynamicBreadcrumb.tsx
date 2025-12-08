@@ -23,17 +23,65 @@ const pathMap: Record<string, string> = {
   "product_prices": "报价管理",
   "tasks": "任务",
   "reports": "报表",
+  "markets": "市场",
+  "orders": "订单管理",
+  "providers": "供应商",
+  "customers": "客户",
+  "invoiceSettlements": "结算单",
+  "delivery_staffs": "配送员",
   // 添加更多路径映射
 }
 
+// 定义已知的静态路由段（不会被识别为动态段）
+const staticSegments = new Set([
+  "workspace",
+  "organizations",
+  "users",
+  "settings",
+  "pricer",
+  "dashboard",
+  "product_prices",
+  "tasks",
+  "reports",
+  "markets",
+  "orders",
+  "providers",
+  "customers",
+  "invoiceSettlements",
+  "delivery_staffs",
+]);
+
 // 定义要跳过的动态路由段
 const isDynamicSegment = (segment: string) => {
-  // 检查是否是动态路由段，如 [org_name], [id] 等
-  return segment.startsWith('[') && segment.endsWith(']') || 
-         // 或者检查实际值，例如 UUID 或特定格式
-         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(segment) ||
-         // 检查组织名称格式（如果有特定格式）
-         /^[a-z0-9_-]+$/.test(segment) && !Object.keys(pathMap).includes(segment);
+  // 如果是已知的静态段，不是动态段
+  if (staticSegments.has(segment)) {
+    return false;
+  }
+  
+  // 检查是否是动态路由段，如 [org_name], [id] 等（这种情况不应该出现，因为这是实际路径值）
+  if (segment.startsWith('[') && segment.endsWith(']')) {
+    return true;
+  }
+  
+  // 检查是否是 UUID 格式
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment)) {
+    return true;
+  }
+  
+  // 检查是否是纯数字（可能是 ID）
+  if (/^\d+$/.test(segment)) {
+    return true;
+  }
+  
+  // 检查是否是 hash/ID 格式（6-32 位字母数字混合，如 jkh2urp6）
+  // 如果同时包含数字和字母，且不在静态段列表中，很可能是动态段
+  const hasNumbers = /\d/.test(segment);
+  const hasLetters = /[a-z]/i.test(segment);
+  if (hasNumbers && hasLetters && /^[a-z0-9]{6,32}$/i.test(segment)) {
+    return true;
+  }
+  
+  return false;
 }
 
 export function DynamicBreadcrumb() {
@@ -42,14 +90,31 @@ export function DynamicBreadcrumb() {
   // 忽略空字符串（根路径）
   const pathSegments = pathname.split("/").filter(Boolean)
   
+  // 定义需要跳过的 tenant 类型段（因为 JWT token 中已包含 tenant_type 和 tenant_hash）
+  const tenantTypeSegments = new Set(["markets", "providers", "customers"]);
+  
   // 过滤掉不想显示的路径段，并构建新的面包屑路径
   const visibleSegments: {segment: string, href: string}[] = [];
   let currentPath = "";
+  let skipNext = false; // 标记是否跳过下一个段（用于跳过 tenant ID）
   
-  pathSegments.forEach((segment) => {
+  pathSegments.forEach((segment, index) => {
     currentPath += `/${segment}`;
     
-    // 如果不是动态段，或者是我们想要显示的特定动态段，则添加到可见段中
+    // 如果当前段是 tenant 类型段（markets/providers/customers），跳过它和下一个段（tenant ID）
+    if (tenantTypeSegments.has(segment)) {
+      skipNext = true;
+      return; // 跳过当前段
+    }
+    
+    // 如果标记了跳过下一个段（tenant ID），则跳过
+    if (skipNext) {
+      skipNext = false;
+      return; // 跳过 tenant ID 段
+    }
+    
+    // 如果不是动态段，则添加到可见段中
+    // 注意：即使跳过动态段，currentPath 也已经更新，这样后续段的路径才是正确的
     if (!isDynamicSegment(segment)) {
       visibleSegments.push({
         segment,
