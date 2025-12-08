@@ -22,7 +22,7 @@ import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 // 导入商品清单组件
-import { ProductListSection } from "./order-details/ProductListSection";
+//import { ProductListSection } from "./order-details/ProductListSection";
 
   // 导入PROVIDER专用类型定义
   import type {
@@ -72,8 +72,6 @@ const RenderStatusBadges = ({ item }: { item: ProviderOrderItem }) => {
   );
 };
 
-// 配送历史相关类型 - 使用全局类型定义
-
 // 配送历史组件
 const DeliveryHistorySection = ({
   deliveryHistory,
@@ -88,10 +86,8 @@ const DeliveryHistorySection = ({
   const [selectedRound, setSelectedRound] = useState<DeliveryRound | null>(null);
 
 
-
   // 如果正在加载，显示加载状态
   if (loading) {
-    console.log('🎯 DeliveryHistorySection showing loading state');
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
@@ -130,26 +126,26 @@ const DeliveryHistorySection = ({
     }
   };
 
-  const getInspectionStatusBadge = (status: string) => {
-    switch (status) {
-      case 'PENDING':
-        return <Badge variant="outline" className="text-blue-600 border-blue-200">验收中</Badge>;
-      case 'COMPLETED':
-        return <Badge variant="outline" className="text-green-600 border-green-200">验收完成</Badge>;
-      case 'FAILED':
-        return <Badge variant="outline" className="text-red-600 border-red-200">验收失败</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
+  // const getInspectionStatusBadge = (status: string) => {
+  //   switch (status) {
+  //     case 'PENDING':
+  //       return <Badge variant="outline" className="text-blue-600 border-blue-200">验收中</Badge>;
+  //     case 'COMPLETED':
+  //       return <Badge variant="outline" className="text-green-600 border-green-200">验收完成</Badge>;
+  //     case 'FAILED':
+  //       return <Badge variant="outline" className="text-red-600 border-red-200">验收失败</Badge>;
+  //     default:
+  //       return <Badge variant="outline">{status}</Badge>;
+  //   }
+  // };
 
-  const getDeliveryTypeBadge = (type: string) => {
-    return (
-      <Badge variant={type === 'NORMAL' ? 'default' : 'secondary'}>
-        {type === 'NORMAL' ? '正常配送' : '换货配送'}
-      </Badge>
-    );
-  };
+  // const getDeliveryTypeBadge = (type: string) => {
+  //   return (
+  //     <Badge variant={type === 'NORMAL' ? 'default' : 'secondary'}>
+  //       {type === 'NORMAL' ? '正常配送' : '换货配送'}
+  //     </Badge>
+  //   );
+  // };
 
   return (
     <div className="space-y-4">
@@ -488,9 +484,6 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
   const router = useRouter();
   const { toast } = useToast();
 
-  // 添加组件标识
-  console.log('🚀 PROVIDER COMPONENT LOADED:', { orderCode, orgId });
-
   // PROVIDER 数据状态
   const [providerOrderData, setProviderOrderData] = useState<ProviderOrderData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -537,7 +530,6 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
     if (!providerOrderData) return false;
     const status = providerOrderData.orderStatus;
     const editing = status === 'SUPPLIER_PREPARING' || status === 'EXCHANGE_IN_PROGRESS';
-    console.log('🔍 ProviderOrderDetails - isEditing calculation:', { status, editing, deliveryStatus: providerOrderData.current.deliveryStatus });
     return editing;
   }, [providerOrderData]);
 
@@ -639,7 +631,6 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ ProviderOrderDetails - HTTP error response:', errorText);
         throw new Error(`获取订单详情失败: ${response.status}`);
       }
 
@@ -675,7 +666,6 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
 
 
     } catch (err) {
-      console.error('❌ ProviderOrderDetails - Error refreshing data:', err);
       toast({
         title: "刷新失败",
         description: err instanceof Error ? err.message : '刷新订单数据失败',
@@ -705,7 +695,6 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
       const historyData = result.data as DeliveryHistoryData;
       setDeliveryHistory(historyData.history || []);
     } catch (err) {
-      console.error("Error fetching delivery history:", err);
       const errorMessage = err instanceof Error ? err.message : "获取配送历史失败";
       setDeliveryHistoryError(errorMessage);
       toast({
@@ -1339,7 +1328,7 @@ export default function ProviderOrderDetail({ orderCode, orgId }: ProviderOrderD
                       <div>
                         <p className="text-xs text-muted-foreground mb-0.5 font-medium">收货人</p>
                         <p className="text-sm text-gray-500">
-                          {providerOrderData.receiverName} ({providerOrderData.receiverPhone})
+                          {providerOrderData.marketContactorName} ({providerOrderData.marketContactNumber})
                         </p>
                       </div>
                     </div>

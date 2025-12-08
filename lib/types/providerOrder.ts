@@ -35,6 +35,7 @@ export interface SharedOrderData {
   orderedAmount: string;
   receiverName: string;
   receiverPhone: string;
+ 
 }
 
 // PROVIDER专用的完整数据（包含共享字段 + PROVIDER特有字段）
@@ -42,6 +43,8 @@ export interface ProviderOrderData extends SharedOrderData {
   current: ProviderOrderCurrent;
   shipperName: string | null;
   shipperPhone: string | null;
+  marketContactorName: string | null;
+  marketContactNumber: string | null;
 }
 
 // 配送历史相关类型
