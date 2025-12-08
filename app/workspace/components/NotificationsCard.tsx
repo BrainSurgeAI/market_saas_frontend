@@ -71,6 +71,7 @@ export function NotificationsCard({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [markingAsRead, setMarkingAsRead] = useState<number | null>(null);
+  const [removingIds, setRemovingIds] = useState<Set<number>>(new Set());
 
   const formatNotificationTime = (dateString: string): string => {
     try {
@@ -89,7 +90,11 @@ export function NotificationsCard({
         const result: NotificationsResponse = await response.json();
 
         if (result.code === 200 && result.data) {
-          setNotifications(result.data.data || []);
+          // 过滤掉已读的通知，只显示未读的通知
+          const unreadNotifications = (result.data.data || []).filter(
+            (notification) => !notification.isRead
+          );
+          setNotifications(unreadNotifications);
         } else {
           setError(result.message || '获取通知数据失败');
         }
@@ -130,12 +135,20 @@ export function NotificationsCard({
       const result = await response.json();
 
       if (result.code === 200) {
-        // 更新本地状态
-        setNotifications(prevNotifications =>
-          prevNotifications.map(n =>
-            n.id === notificationId ? { ...n, isRead: true } : n
-          )
-        );
+        // 先标记为正在移除，触发动画
+        setRemovingIds(prev => new Set(prev).add(notificationId));
+
+        // 等待动画完成后移除该项
+        setTimeout(() => {
+          setNotifications(prevNotifications =>
+            prevNotifications.filter(n => n.id !== notificationId)
+          );
+          setRemovingIds(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(notificationId);
+            return newSet;
+          });
+        }, 300); // 动画持续时间 300ms
 
         toast({
           title: "已标记为已读",
@@ -194,59 +207,66 @@ export function NotificationsCard({
         ) : (
           <>
             <div className="space-y-4">
-              {notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`p-4 rounded-xl border transition-colors ${
-                    notification.isRead
-                      ? "bg-slate-50/50 border-slate-100"
-                      : "bg-blue-50/50 border-blue-100"
-                  }`}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <Badge
-                        variant="outline"
-                        className="text-xs px-2 py-0.5 bg-white"
-                      >
-                        {notification.category}
-                      </Badge>
-                      <div className="flex items-center gap-2">
-                        {!notification.isRead && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => markAsRead(notification.id, e)}
-                              disabled={markingAsRead === notification.id}
-                              className="h-6 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-100"
-                            >
-                              {markingAsRead === notification.id ? (
-                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
-                              ) : (
-                                <>
-                                  <Check className="w-3 h-3 mr-1" />
-                                  标为已读
-                                </>
-                              )}
-                            </Button>
-                            <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-1" />
-                          </>
-                        )}
+              {notifications.map((notification) => {
+                const isRemoving = removingIds.has(notification.id);
+                return (
+                  <div
+                    key={notification.id}
+                    className={`p-4 rounded-xl border transition-all duration-300 ease-in-out ${
+                      isRemoving
+                        ? "opacity-0 max-h-0 overflow-hidden py-0 mb-0"
+                        : "opacity-100 max-h-[500px] mb-0"
+                    } ${
+                      notification.isRead
+                        ? "bg-slate-50/50 border-slate-100"
+                        : "bg-blue-50/50 border-blue-100"
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <Badge
+                          variant="outline"
+                          className="text-xs px-2 py-0.5 bg-white"
+                        >
+                          {notification.category}
+                        </Badge>
+                        <div className="flex items-center gap-2">
+                          {!notification.isRead && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => markAsRead(notification.id, e)}
+                                disabled={markingAsRead === notification.id}
+                                className="h-6 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-100"
+                              >
+                                {markingAsRead === notification.id ? (
+                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                                ) : (
+                                  <>
+                                    <Check className="w-3 h-3 mr-1" />
+                                    标为已读
+                                  </>
+                                )}
+                              </Button>
+                              <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-1" />
+                            </>
+                          )}
+                        </div>
                       </div>
+                      <h4 className="text-sm font-semibold text-slate-900">
+                        {notification.title}
+                      </h4>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        {notification.content}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {formatNotificationTime(notification.createdAt)}
+                      </p>
                     </div>
-                    <h4 className="text-sm font-semibold text-slate-900">
-                      {notification.title}
-                    </h4>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      {notification.content}
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      {formatNotificationTime(notification.createdAt)}
-                    </p>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             {showViewAll && (
               <Button 
