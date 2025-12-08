@@ -49,6 +49,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { translateOrderStatus, getStatusVariant } from "@/lib/utils";
 import { MarketInspectionData, MarketInspectionItem, MarketInspectionResponse } from "@/lib/types/marketOrder";
+import { OrderStatus } from "@/lib/types/orderStatus";
 
 // Helper function to format quantity display with proper decimal places
 const formatQuantity = (value: any, unit?: string): string => {
@@ -92,6 +93,7 @@ export default function OrderInspectionPage() {
 
   // Data State
   const [inspectionData, setInspectionData] = useState<MarketInspectionData | null>(null);
+  const [orderStatus, setOrderStatus] = useState<OrderStatus | null>(null);
 
   // Add a ref to track the latest data
   const latestDataRef = useRef<MarketInspectionData | null>(null);
@@ -158,8 +160,30 @@ export default function OrderInspectionPage() {
     }
   };
 
+  // Fetch Order Status
+  const fetchOrderStatus = async () => {
+    try {
+      const response = await fetch(`/api/orders/${orderCode}`);
+      if (!response.ok) {
+        throw new Error(`获取订单详情失败: ${response.status}`);
+      }
+      const orderData = await response.json();
+      // 订单详情 API 返回格式: { order: { orderStatus: "..." } }
+      if (orderData?.order?.orderStatus) {
+        setOrderStatus(orderData.order.orderStatus as OrderStatus);
+      } else if (orderData?.orderStatus) {
+        // 兼容直接返回 orderStatus 的情况
+        setOrderStatus(orderData.orderStatus as OrderStatus);
+      }
+    } catch (err) {
+      console.error("Error fetching order status:", err);
+      // 如果获取订单状态失败，不影响页面显示
+    }
+  };
+
   useEffect(() => {
     fetchInspectionData();
+    fetchOrderStatus();
   }, [orderCode]);
 
 
@@ -477,7 +501,13 @@ export default function OrderInspectionPage() {
             size="sm"
             disabled={stats.pending > 0}
           >
-            {currentData.inspectionResult === "PENDING" ? "确认换货验收" : "完成验收"}
+            {orderStatus === OrderStatus.EXCHANGE_INSPECTING
+              ? "确认换货验收"
+              : orderStatus === OrderStatus.MARKET_INSPECTING || orderStatus === OrderStatus.CUSTOMER_INSPECTING
+              ? "确认验收"
+              : currentData.inspectionResult === "PENDING"
+              ? "确认换货验收"
+              : "完成验收"}
           </Button>
         </div>
       </div>
