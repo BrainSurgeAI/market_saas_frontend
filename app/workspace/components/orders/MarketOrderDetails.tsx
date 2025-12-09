@@ -396,8 +396,12 @@ export default function MarketOrderDetails({
         variant: "default",
       });
 
-      // 成功后跳转到验收页面
-      router.push(`/workspace/markets/${orgId}/orders/${orderCode}/inspection`);
+      // 成功后跳转到验收页面，根据 userType 决定路径
+      if (userType === "CUSTOMER") {
+        router.push(`/workspace/customers/${orgId}/orders/${orderCode}/inspection`);
+      } else {
+        router.push(`/workspace/markets/${orgId}/orders/${orderCode}/inspection`);
+      }
     } catch (err) {
       toast({
         title: "操作失败",
@@ -510,6 +514,20 @@ export default function MarketOrderDetails({
               className="bg-blue-600 hover:bg-blue-500"
             >
               确认发货
+            </Button>
+          )}
+
+          {/* 前往验收页面按钮 (CUSTOMER_INSPECTING 状态) */}
+          {userType === "CUSTOMER" && (marketOrderData.orderStatus === "CUSTOMER_INSPECTING" || marketOrderData.orderStatus === "EXCHANGE_INSPECTING") && (
+            <Button
+              onClick={() => {
+                router.push(`/workspace/customers/${orgId}/orders/${orderCode}/inspection`);
+              }}
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <Package className="w-4 h-4 mr-2" />
+              前往验收
             </Button>
           )}
 
