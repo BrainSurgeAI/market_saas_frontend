@@ -4,13 +4,13 @@ import { fetchRemoteData } from '@/lib/api-utils';
 export async function GET(request: NextRequest) {
   try {
     // 调用 Rust 后端 API
-    const endpoint = '/orders/statistics';
+    const endpoint = '/orders/dashboard-stats';
     
     const response = await fetchRemoteData({
       endpoint: endpoint,
       method: 'GET',
       needToken: true,
-      tags: ['orders-statistics'],
+      tags: ['orders-dashboard-stats'],
       revalidate: 0 // 不缓存，实时数据
     });
 

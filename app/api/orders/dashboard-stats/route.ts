@@ -5,10 +5,12 @@ export async function GET(request: NextRequest) {
   try {
     // 获取查询参数中的日期，如果没有则使用当日
     const searchParams = request.nextUrl.searchParams;
-    const deliveryDate = searchParams.get('deliveryDate') || new Date().toISOString().split('T')[0];
+    const date = searchParams.get('date');
     
-    // 构建带日期参数的 endpoint
-    const endpoint = `/orders/dashboard-stats?deliveryDate=${deliveryDate}`;
+    // 构建带日期参数的 endpoint（如果提供了 date 参数）
+    const endpoint = date 
+      ? `/orders/dashboard-stats?date=${date}`
+      : `/orders/dashboard-stats`;
     
     // Call the Rust backend API using the unified fetchRemoteData function
     const response = await fetchRemoteData({

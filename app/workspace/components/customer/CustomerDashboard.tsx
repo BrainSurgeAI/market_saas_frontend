@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -58,16 +58,25 @@ import {
   CartesianGrid,
 } from "recharts";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { NotificationsCard } from "../NotificationsCard";
 
-// --- Mock Data ---
+// --- Types ---
 
-const overviewData = {
-  pendingConfirmation: 3, // 待确认订单
-  inTransit: 12,        // 配送中订单
-  arrivingToday: 8,     // 今日预计到达
-  awaitingAcceptance: 5, // 等待验收
-  exceptions: 2,        // 验收异常
-};
+interface DashboardStats {
+  pendingConfirmation: number;
+  inTransit: number;
+  arrivingToday: number;
+  inAcceptance: number;
+  exceptions: number;
+}
+
+interface DashboardStatsResponse {
+  code: number;
+  message: string;
+  data: DashboardStats;
+  requestId: string;
+  timestamp: string;
+}
 
 const ordersData = [
   {
@@ -140,40 +149,7 @@ const pendingTasks = [
   },
 ];
 
-const notifications = [
-  {
-    id: 1,
-    type: "验收完成",
-    title: "订单已验收",
-    message: "您的订单 ODR-20251124091603009 已由市场验收完成",
-    time: "2025-11-25 10:30",
-    read: false,
-  },
-  {
-    id: 2,
-    type: "配送更新",
-    title: "配送状态更新",
-    message: "您的订单 ODR-20251125091603010-DAFK 正在配送中",
-    time: "2025-11-25 09:45",
-    read: false,
-  },
-  {
-    id: 3,
-    type: "换货通知",
-    title: "换货已处理",
-    message: "您发起的换货请求已通过市场审核",
-    time: "2025-11-24 16:20",
-    read: true,
-  },
-];
 
-const progressData = [
-  { name: "待确认", value: 3, color: "#94a3b8" }, // slate-400
-  { name: "配送中", value: 12, color: "#3b82f6" }, // blue-500
-  { name: "今日到货", value: 8, color: "#10b981" }, // emerald-500
-  { name: "待验收", value: 5, color: "#f59e0b" }, // amber-500
-  { name: "异常", value: 2, color: "#ef4444" },   // red-500
-];
 
 const monthlyStats = {
   orders: 45,
@@ -197,6 +173,40 @@ export default function CustomerDashboard() {
   });
 
   const [activeTab, setActiveTab] = useState("overview");
+  const [overviewData, setOverviewData] = useState<DashboardStats>({
+    pendingConfirmation: 0,
+    inTransit: 0,
+    arrivingToday: 0,
+    inAcceptance: 0,
+    exceptions: 0,
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  // Fetch dashboard stats from API
+  useEffect(() => {
+    const fetchDashboardStats = async () => {
+      try {
+        setLoadingStats(true);
+        setStatsError(null);
+        const response = await fetch('/api/orders/dashboard-stats');
+        const result: DashboardStatsResponse = await response.json();
+
+        if (result.code === 200 && result.data) {
+          setOverviewData(result.data);
+        } else {
+          setStatsError(result.message || '获取统计数据失败');
+        }
+      } catch (err) {
+        console.error('Error fetching dashboard stats:', err);
+        setStatsError('获取统计数据时发生错误');
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    fetchDashboardStats();
+  }, []);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -215,6 +225,15 @@ export default function CustomerDashboard() {
       default: return "bg-slate-50 text-slate-700 border-slate-200";
     }
   };
+
+  // Calculate progress data from overviewData
+  const progressData = [
+    { name: "待确认", value: overviewData.pendingConfirmation, color: "#94a3b8" }, // slate-400
+    { name: "配送中", value: overviewData.inTransit, color: "#3b82f6" }, // blue-500
+    { name: "今日到货", value: overviewData.arrivingToday, color: "#10b981" }, // emerald-500
+    { name: "正在验收", value: overviewData.inAcceptance, color: "#f59e0b" }, // amber-500
+    { name: "异常", value: overviewData.exceptions, color: "#ef4444" },   // red-500
+  ];
 
   return (
     <div className="w-full bg-slate-50/50 min-h-screen p-6 space-y-8">
@@ -270,8 +289,8 @@ export default function CustomerDashboard() {
           bgClass="bg-emerald-50"
         />
         <ProgressStatCard
-          title="等待验收"
-          value={overviewData.awaitingAcceptance}
+          title="正在验收"
+          value={overviewData.inAcceptance}
           icon={Package}
           colorClass="text-amber-600"
           bgClass="bg-amber-50"
@@ -558,56 +577,13 @@ export default function CustomerDashboard() {
         {/* Right Column: Notifications */}
         <div className="space-y-8">
           {/* 5. Notifications Center */}
-          <Card className="border-slate-100 shadow-sm bg-white rounded-2xl">
-            <CardHeader className="px-6 py-5">
-              <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Bell className="w-5 h-5 text-blue-600" />
-                消息通知
-              </CardTitle>
-              <CardDescription>最新订单状态更新</CardDescription>
-            </CardHeader>
-            <CardContent className="px-6 pb-6">
-              <div className="space-y-4">
-                {notifications.map((notification) => (
-                  <div
-                    key={notification.id}
-                    className={`p-4 rounded-xl border transition-colors cursor-pointer ${
-                      notification.read
-                        ? "bg-slate-50/50 border-slate-100"
-                        : "bg-blue-50/50 border-blue-100"
-                    }`}
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <Badge
-                          variant="outline"
-                          className="text-xs px-2 py-0.5 bg-white"
-                        >
-                          {notification.type}
-                        </Badge>
-                        {!notification.read && (
-                          <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-1" />
-                        )}
-                      </div>
-                      <h4 className="text-sm font-semibold text-slate-900">
-                        {notification.title}
-                      </h4>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        {notification.message}
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {notification.time}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <Button variant="ghost" className="w-full mt-4 text-blue-600 hover:bg-blue-50">
-                查看全部通知
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </Button>
-            </CardContent>
-          </Card>
+          <NotificationsCard
+            limit={20}
+            showViewAll={true}
+            viewAllLink="/workspace/notifications"
+            description="最新订单和验收通知"
+            title="消息通知"
+          />
         </div>
       </div>
     </div>

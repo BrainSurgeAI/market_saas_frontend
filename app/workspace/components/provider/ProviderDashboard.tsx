@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/lib/WorkspaceContext";
 import { OrderOverview } from "@/app/workspace/types";
@@ -106,17 +106,6 @@ interface ReturnExchangeOrdersResponse {
   timestamp: string;
 }
 
-const deliveryProgressData = {
-  round1: {
-    delivered: 12,
-    pending: 8,
-    arrived: 15,
-  },
-  round2: {
-    pending: 3,
-    completed: 2,
-  }
-};
 
 
 export default function ProviderDashboard() {
@@ -158,7 +147,7 @@ export default function ProviderDashboard() {
         setError(null);
         // 获取当日日期，格式为 YYYY-MM-DD
         const today = format(new Date(), 'yyyy-MM-dd');
-        const response = await fetch(`/api/orders/dashboard-stats?deliveryDate=${today}`);
+        const response = await fetch(`/api/orders/dashboard-stats?date=${today}`);
         const result: DashboardStatsResponse = await response.json();
 
         if (result.code === 200 && result.data) {
@@ -334,14 +323,14 @@ export default function ProviderDashboard() {
     
     switch (displayStatus) {
       case "PROGRESSED":
-        return { text: "处理中", color: "bg-blue-50 text-blue-700" };
+        return { text: "已处理", color: "bg-emerald-50 text-emerald-700" };
       case "EXCHANGE_DELIVERING":
         return { text: "换货配送中", color: "bg-blue-50 text-blue-700" };
       case "COMPLETED":
       case "EXCHANGE_COMPLETED":
         return { text: "已完成", color: "bg-emerald-50 text-emerald-700" };
       case "PENDING":
-        return { text: "待处理", color: "bg-red-50 text-red-700" };
+        return { text: "未处理", color: "bg-red-50 text-red-700" };
       default:
         return { text: displayStatus, color: "bg-slate-50 text-slate-700" };
     }
@@ -369,6 +358,29 @@ export default function ProviderDashboard() {
       return newSet;
     });
   };
+
+  // 计算换货配送进度统计数据
+  const exchangeProgressStats = useMemo(() => {
+    let pendingCount = 0;
+    let progressedCount = 0;
+
+    returnExchangeOrders.forEach(order => {
+      order.items.forEach(item => {
+        if (item.operationType === "EXCHANGE") {
+          if (item.status === "PENDING") {
+            pendingCount++;
+          } else if (item.status === "PROGRESSED") {
+            progressedCount++;
+          }
+        }
+      });
+    });
+
+    return {
+      pending: pendingCount,
+      completed: progressedCount,
+    };
+  }, [returnExchangeOrders]);
 
 
   return (
@@ -527,14 +539,14 @@ export default function ProviderDashboard() {
                     <div className="grid grid-cols-2 gap-4">
                       <ProgressItem
                         label="待换货"
-                        value={deliveryProgressData.round2.pending}
+                        value={exchangeProgressStats.pending}
                         color="text-amber-600"
                         bgColor="bg-amber-50"
                         icon={RefreshCw}
                       />
                       <ProgressItem
                         label="已换货"
-                        value={deliveryProgressData.round2.completed}
+                        value={exchangeProgressStats.completed}
                         color="text-emerald-600"
                         bgColor="bg-emerald-50"
                         icon={CheckCircle2}
@@ -645,8 +657,8 @@ export default function ProviderDashboard() {
               {/* 2. 今日备货总览 */}
               <Card className="border-slate-100 shadow-sm bg-white rounded-2xl">
                 <CardHeader className="px-6 py-5">
-                  <CardTitle className="text-lg font-bold text-slate-900">今日备货总览</CardTitle>
-                  <CardDescription>按商品统计今日需求总量</CardDescription>
+                  <CardTitle className="text-lg font-bold text-slate-900">今日已备货总览</CardTitle>
+                  <CardDescription>按商品统计今日已备货总量</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {stockLoading ? (
