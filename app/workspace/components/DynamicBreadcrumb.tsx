@@ -30,6 +30,7 @@ const pathMap: Record<string, string> = {
   "invoiceSettlements": "结算单",
   "delivery_staffs": "配送员",
   "inspection": "商品验收",
+  "procurement": "采购",
   // 添加更多路径映射
 }
 
@@ -51,6 +52,7 @@ const staticSegments = new Set([
   "invoiceSettlements",
   "delivery_staffs",
   "inspection",
+  "procurement",
 ]);
 
 // 定义要跳过的动态路由段

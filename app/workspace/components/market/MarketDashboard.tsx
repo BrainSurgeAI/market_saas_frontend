@@ -36,19 +36,12 @@ import {
   Loader2,
 } from "lucide-react";
 import {
-  PieChart,
-  Pie,
-  Cell,
   ResponsiveContainer,
-  Tooltip,
-  Legend,
   AreaChart,
   Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
 } from "recharts";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { NotificationsCard } from "../NotificationsCard";
 
 // --- Type Definitions ---
 
@@ -100,13 +93,6 @@ const defaultOverviewData: OrderStatisticsData = {
 };
 
 // tasksData 将在组件内部根据 API 数据动态生成
-
-const progressData = [
-  { name: "配送中", value: 40, color: "#3b82f6" }, // blue-500
-  { name: "待验收", value: 32, color: "#6366f1" }, // indigo-500
-  { name: "已完成", value: 85, color: "#10b981" }, // emerald-500
-  { name: "异常", value: 12, color: "#f43f5e" },   // rose-500
-];
 
 const providerData = [
   {
@@ -218,7 +204,7 @@ export default function MarketDashboard() {
         setIsLoading(true);
         setError(null);
         
-        const response = await fetch('/api/orders/statistics');
+        const response = await fetch('/api/orders/dashboard-stats');
         const result: ApiResponse = await response.json();
         
         if (result.code === 200 && result.data) {
@@ -453,71 +439,8 @@ export default function MarketDashboard() {
 
         {/* Right Column: Charts */}
         <div className="space-y-8">
-          {/* 3. Progress Overview - Nexus Style: Minimalist donut chart */}
-          <Card className="border-slate-100 shadow-sm bg-white rounded-2xl h-full flex flex-col">
-            <CardHeader className="px-6 py-5">
-              <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-blue-600" />
-                今日进度
-              </CardTitle>
-              <CardDescription>实时订单流转状态概览</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col justify-center px-6 pb-6">
-              <div className="h-[280px] w-full relative">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={progressData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={80}
-                      outerRadius={110}
-                      paddingAngle={4}
-                      dataKey="value"
-                      cornerRadius={6}
-                      stroke="none"
-                    >
-                      {progressData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ 
-                        borderRadius: '12px', 
-                        border: 'none', 
-                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                        padding: '12px'
-                      }}
-                      itemStyle={{ fontWeight: 600 }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                {/* Center Text Overlay */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-4xl font-extrabold text-slate-900 tracking-tight">
-                    {progressData.reduce((acc, curr) => acc + curr.value, 0)}
-                  </span>
-                  <span className="text-sm font-medium text-slate-400 mt-1 uppercase tracking-wide">今日总单</span>
-                </div>
-              </div>
-
-              {/* Custom Legend */}
-              <div className="mt-6 space-y-4">
-                  {progressData.map((item) => (
-                      <div key={item.name} className="flex items-center justify-between p-3 rounded-xl bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                          <div className="flex items-center gap-3">
-                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                              <span className="text-sm font-medium text-slate-700">{item.name}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                              <span className="text-sm font-bold text-slate-900">{item.value}</span>
-                              <span className="text-xs text-slate-400">单</span>
-                          </div>
-                      </div>
-                  ))}
-              </div>
-            </CardContent>
-          </Card>
+          {/* 3. Notifications Card */}
+          <NotificationsCard />
         </div>
       </div>
     </div>

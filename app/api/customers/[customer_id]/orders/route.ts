@@ -43,9 +43,16 @@ export async function GET(request: NextRequest,
 	const searchParams = request.nextUrl.searchParams;
 	const page = searchParams.get('page') ?? '1';
 	const pageSize = searchParams.get('page_size') ?? '10';
+	const deliveryDate = searchParams.get('deliveryDate');
+
+	// 构建查询参数
+	let queryParams = `page=${page}&page_size=${pageSize}`;
+	if (deliveryDate) {
+		queryParams += `&deliveryDate=${deliveryDate}`;
+	}
 
 	const response = await fetchRemoteData({
-		endpoint: `/orders?page=${page}&page_size=${pageSize}`,
+		endpoint: `/orders?${queryParams}`,
 		method: 'GET',
 		needToken: true,
 		tags: [`orders-${customer_id}`]
@@ -56,5 +63,6 @@ export async function GET(request: NextRequest,
 		return NextResponse.json({ message: 'Failed to fetch orders' }, { status: response.status });
 	}
 
-	return NextResponse.json(response.data.data);
+	// 返回完整的响应格式，包括 code, message, data 等
+	return NextResponse.json(response.data);
 }

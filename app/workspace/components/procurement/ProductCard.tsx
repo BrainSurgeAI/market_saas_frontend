@@ -34,7 +34,7 @@ export function ProductCard({ product, onAddToCart, onViewDetail }: ProductCardP
 	};
 
 	const handleImageError = () => {
-		console.error(`Failed to load image: ${product.image}`);
+		
 		setHasError(true);
 		setIsLoaded(true);
 	};
